@@ -1,5 +1,7 @@
 # Node modules
 node_modules/
+backend/node_modules/
+dj-papzin-music-platform/node_modules/
 
 # Logs
 logs/
@@ -62,5 +64,3 @@ jspm_packages/
 # Env files
 .env
 .env.test
-.env
-node_modules/
