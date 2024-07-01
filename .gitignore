@@ -63,3 +63,4 @@ jspm_packages/
 .env
 .env.test
 .env
+node_modules/
