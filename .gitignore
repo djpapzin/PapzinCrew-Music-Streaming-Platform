@@ -64,3 +64,8 @@ jspm_packages/
 # Env files
 .env
 .env.test
+
+# Virtual environment directories at all levels
+**/.venv/
+**/.venv
+
