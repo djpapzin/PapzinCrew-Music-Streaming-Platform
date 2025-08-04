@@ -64,5 +64,13 @@ jspm_packages/
 # Env files
 .env
 .env.test
+<<<<<<< HEAD
 .venv/
 venv/
+=======
+
+# Virtual environment directories at all levels
+**/.venv/
+**/.venv
+
+>>>>>>> feature/integrate-ai-frontend
