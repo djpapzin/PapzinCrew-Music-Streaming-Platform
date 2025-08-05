@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { useLocation } from 'react-router-dom';
-import { Search, ChevronLeft, ChevronRight, Bell, Settings, User, Menu } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { Search, ChevronLeft, ChevronRight, Bell, Settings, User, Menu, Upload } from 'lucide-react';
 
 interface HeaderProps {
   searchQuery: string;
@@ -11,6 +11,7 @@ interface HeaderProps {
 const Header: React.FC<HeaderProps> = ({ searchQuery, setSearchQuery, onMenuClick }) => {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
 
   const getTitle = () => {
     switch (location.pathname) {
@@ -69,6 +70,18 @@ const Header: React.FC<HeaderProps> = ({ searchQuery, setSearchQuery, onMenuClic
 
         {/* Right section */}
         <div className="flex items-center space-x-2 lg:space-x-3">
+          {/* Upload button - hide when on upload page */}
+          {location.pathname !== '/upload' && (
+            <button 
+              onClick={() => navigate('/upload')}
+              className="flex w-8 h-8 lg:w-auto lg:px-3 lg:py-2 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 rounded-full lg:rounded-lg items-center justify-center lg:space-x-2 transition-all duration-200 hover:shadow-lg transform hover:scale-105"
+              title="Upload Music"
+            >
+              <Upload className="w-4 h-4 text-white" />
+              <span className="hidden lg:inline text-white text-sm font-medium">Upload</span>
+            </button>
+          )}
+
           <button className="hidden sm:flex w-8 h-8 bg-black/40 hover:bg-white/10 rounded-full items-center justify-center transition-colors duration-200">
             <Bell className="w-4 h-4 text-white" />
           </button>
