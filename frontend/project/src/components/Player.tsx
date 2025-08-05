@@ -13,6 +13,7 @@ import {
   ChevronUp
 } from 'lucide-react';
 import { PlayerState } from '../types/music';
+import { NowPlayingPopup } from './NowPlayingPopup';
 
 interface PlayerProps {
   playerState: PlayerState;
@@ -45,6 +46,7 @@ const Player: React.FC<PlayerProps> = ({
   const [isSeeking, setIsSeeking] = useState(false);
   const [seekValue, setSeekValue] = useState(0);
   const [showMobilePlayer, setShowMobilePlayer] = useState(false);
+  const [showNowPlayingPopup, setShowNowPlayingPopup] = useState(false);
 
   const { currentSong, isPlaying, volume, currentTime, duration, shuffle, repeat } = playerState;
 
@@ -368,13 +370,37 @@ const Player: React.FC<PlayerProps> = ({
                 />
               </div>
               
-              <button className="text-gray-400 hover:text-white transition-colors duration-200">
+              <button 
+                onClick={() => setShowNowPlayingPopup(true)}
+                className="text-gray-400 hover:text-white transition-colors duration-200"
+              >
                 <Maximize2 className="w-4 h-4" />
               </button>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Now Playing Popup */}
+      <NowPlayingPopup
+        track={{
+          id: currentSong.id,
+          title: currentSong.title,
+          artist: currentSong.artist,
+          coverArt: currentSong.imageUrl,
+          audioUrl: currentSong.audioUrl
+        }}
+        isVisible={showNowPlayingPopup}
+        onClose={() => setShowNowPlayingPopup(false)}
+        playerState={playerState}
+        onTogglePlay={onTogglePlay}
+        onNext={onNext}
+        onPrevious={onPrevious}
+        onVolumeChange={onVolumeChange}
+        onSeek={onSeek}
+        onToggleShuffle={onToggleShuffle}
+        onToggleRepeat={onToggleRepeat}
+      />
     </>
   );
 };
