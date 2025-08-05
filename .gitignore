@@ -74,3 +74,4 @@ venv/
 **/.venv
 
 >>>>>>> feature/integrate-ai-frontend
+backend/uploads/
