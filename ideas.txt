@@ -1,0 +1,3 @@
+- When no cover art is present in meta data, use ai to gnerate a cover image.
+- Only show music from the "backend\uploads" directory
+- How do we deal with duplicate files in the backend\uploads directory? 
