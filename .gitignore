@@ -149,3 +149,4 @@ static/
 temp/
 tmp/
 .cache/
+.windsurf/rules/server-restart.md
