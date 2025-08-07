@@ -9,10 +9,12 @@ from typing import List, Optional
 import mutagen
 from mutagen.mp3 import MP3
 from mutagen.id3 import ID3NoHeaderError
+from pathlib import Path
 
 from .. import schemas, crud
 from ..db.database import get_db
 from ..models import models
+from ..services.ai_art_generator import AIArtGenerator
 
 router = APIRouter(prefix="/upload", tags=["upload"])
 
@@ -184,6 +186,7 @@ async def upload_mix(
     age_restriction: Optional[str] = Form('all'),
     file: UploadFile = File(...),
     cover_art: Optional[UploadFile] = File(None),
+    custom_prompt: Optional[str] = Form(None),
     db: Session = Depends(get_db)
 ):
     """
@@ -238,25 +241,88 @@ async def upload_mix(
     # Handle cover art
     cover_art_filename = None
     unique_base_name = os.path.splitext(unique_filename)[0]
-
-    if cover_art:
-        cover_art_extension = os.path.splitext(cover_art.filename)[1] if cover_art.filename else '.jpg'
-        cover_art_filename = f"{unique_base_name}{cover_art_extension}"
-        cover_art_path = os.path.join(UPLOAD_DIR, cover_art_filename)
-        with open(cover_art_path, 'wb') as img:
-            shutil.copyfileobj(cover_art.file, img)
-    else:
-        # Try to extract from metadata if not uploaded
-        try:
-            audio_metadata = mutagen.File(file_path)
-            if audio_metadata and 'APIC:' in audio_metadata:
-                artwork = audio_metadata.tags['APIC:'].data
-                cover_art_filename = f"{unique_base_name}.jpg"
-                cover_art_path = os.path.join(UPLOAD_DIR, cover_art_filename)
-                with open(cover_art_path, 'wb') as img:
-                    img.write(artwork)
-        except Exception as e:
-            print(f"Could not extract cover art from metadata: {e}")
+    cover_art_dir = os.path.join(UPLOAD_DIR, 'covers')
+    os.makedirs(cover_art_dir, exist_ok=True)
+    cover_art_extension = '.jpg'  # Default extension for all generated/processed images
+    
+    try:
+        # If cover art is uploaded, save it
+        if cover_art and cover_art.filename:
+            try:
+                # Generate a safe filename with the same extension as the uploaded file
+                file_ext = os.path.splitext(cover_art.filename)[1].lower()
+                if file_ext not in ['.jpg', '.jpeg', '.png', '.webp']:
+                    file_ext = '.jpg'  # Default to jpg for unsupported formats
+                
+                cover_art_filename = f"{unique_base_name}{file_ext}"
+                cover_art_path = os.path.join(cover_art_dir, cover_art_filename)
+                
+                # Save the uploaded cover art
+                with open(cover_art_path, 'wb+') as img:
+                    shutil.copyfileobj(cover_art.file, img)
+                print(f"Uploaded cover art saved to {cover_art_path}")
+                
+            except Exception as e:
+                print(f"Error processing uploaded cover art: {e}")
+                cover_art = None  # Fall through to extract from metadata or generate
+        
+        # If no cover art uploaded or upload failed, try to extract from metadata
+        if not cover_art_filename:
+            try:
+                audio_metadata = mutagen.File(file_path)
+                if audio_metadata and hasattr(audio_metadata, 'tags'):
+                    # Look for cover art in common tag locations
+                    cover_art_data = None
+                    for tag in ['APIC:', 'APIC:cover', 'APIC:cover-front', 'APIC:cover.jpg', 'APIC:cover.png']:
+                        if tag in audio_metadata.tags:
+                            cover_art_data = audio_metadata.tags[tag].data
+                            break
+                    
+                    if cover_art_data:
+                        cover_art_filename = f"{unique_base_name}{cover_art_extension}"
+                        cover_art_path = os.path.join(cover_art_dir, cover_art_filename)
+                        
+                        with open(cover_art_path, 'wb') as img:
+                            img.write(cover_art_data)
+                        print(f"Extracted cover art from metadata to {cover_art_path}")
+                    
+            except Exception as e:
+                print(f"Could not extract cover art from metadata: {e}")
+        
+        # If still no cover art, generate one with AI
+        if not cover_art_filename:
+            try:
+                print(f"Generating AI cover art for: {title} by {artist_name} ({genre or 'no genre'})")
+                
+                # Initialize AI Art Generator with no API key needed for Pollinations
+                ai_generator = AIArtGenerator()
+                
+                # Generate cover art based on metadata and custom prompt if provided
+                cover_art_bytes = ai_generator.generate_cover_art_from_metadata(
+                    title=title,
+                    artist=artist_name,
+                    genre=genre,
+                    custom_prompt=custom_prompt  # Pass the custom prompt if provided
+                )
+                
+                if cover_art_bytes:
+                    # Use a consistent naming convention for AI-generated covers
+                    cover_art_filename = f"{unique_base_name}-ai{cover_art_extension}"
+                    cover_art_path = os.path.join(cover_art_dir, cover_art_filename)
+                    
+                    # Save the generated cover art
+                    with open(cover_art_path, 'wb') as f:
+                        f.write(cover_art_bytes)
+                    print(f"AI-generated cover art saved to {cover_art_path}")
+                else:
+                    print("Warning: AI cover art generation returned no data")
+                    
+            except Exception as e:
+                print(f"Error generating AI cover art: {e}")
+    
+    except Exception as e:
+        # Don't fail the entire upload if cover art handling fails
+        print(f"Error in cover art processing: {e}")
 
     # Create mix in database
     mix_data = schemas.MixCreate(
@@ -268,7 +334,7 @@ async def upload_mix(
         quality_kbps=quality_kbps,
         bpm=bpm,
         file_path=file_path,
-        cover_art_url=f'/{UPLOAD_DIR}/{cover_art_filename}' if cover_art_filename else None,
+        cover_art_url=f'/{UPLOAD_DIR}/covers/{cover_art_filename}' if cover_art_filename else None,
         description=description,
         tracklist=tracklist,
         tags=tags,
