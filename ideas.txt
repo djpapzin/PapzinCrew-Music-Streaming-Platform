@@ -1,0 +1,86 @@
+# PapzinCrew Music Streaming Platform - Status & Ideas
+
+## ✅ Implemented Features
+- AI-generated cover art when no cover art is present in metadata
+  - Uses Pollinations AI (free, no API key required)
+  - Genre-specific styling and prompts
+  - Optional custom prompt input for advanced users
+- Music library restricted to backend/uploads directory
+- Recent songs section showing uploaded tracks
+- Basic music player with play/pause, seek, and volume controls
+
+## 🎨 AI-Generated Cover Art (Completed ✅)
+- [x] Integrate Pollinations AI for cover art generation
+- [x] Generate art based on song metadata (title, artist, genre)
+- [x] Custom prompt input for advanced users
+- [x] Implement optimized prompt structure
+- [x] Add genre-specific styling templates
+- [x] Implement negative prompting to avoid common AI artifacts
+- [ ] Add caching for generated artwork (optional optimization)
+
+## 📤 Uploads Management (Next Priority 🚀)
+- [x] Restrict music display to backend/uploads only
+- [x] Recent uploads section
+- [ ] Show file processing status
+- [ ] Handle duplicate uploads (check existing tracks before upload)
+- [ ] Improve upload feedback (fix 100% loading issue during image generation)
+- [x] Basic file upload functionality
+- [ ] Add file validation for supported formats (MP3, WAV, etc.)
+- [ ] Track and display play history
+- [ ] Add bulk upload support
+
+## 🎛️ Smart Features
+- [ ] Auto-generated playlists by BPM/genre/mood
+- [ ] Create "Workout Mix" (high-BPM tracks)
+- [ ] Create "Chill Mix" (low-BPM tracks)
+- [ ] "Radio" mode with similar tracks
+
+## 🎵 Audio Analysis
+- [ ] Extract and store musical key
+- [ ] Calculate and store BPM
+- [ ] Enable key/BPM-based searching
+- [ ] Create automatic DJ-style transitions
+- [ ] Audio waveform visualization
+- [ ] Beat detection for visual effects
+
+## ✨ User Experience
+- [ ] Implement drag-and-drop interface
+- [x] Upload progress indicators
+- [ ] Show processing status for uploads
+- [ ] Dark/light theme toggle
+- [ ] Keyboard shortcuts for player controls
+- [ ] Responsive design improvements
+
+## 🤝 Social Features
+- [ ] Add playlist sharing
+- [ ] Create collaborative playlists
+- [ ] Implement like/favorite system
+- [ ] User profiles with listening history
+- [ ] Follow artists/users
+
+## 🔍 Search & Discovery
+- [ ] Add BPM range search
+- [ ] Enable key-based search
+- [ ] Add genre/mood filters
+- [ ] Create "Similar Tracks" feature
+- [ ] Advanced search with multiple criteria
+- [ ] Recently played/trending sections
+
+## 🚀 Future Enhancements
+- [ ] Mobile app development
+- [ ] Offline playback support
+- [ ] Podcast/audio book support
+- [ ] Integration with music production software
+- [ ] Live streaming capabilities
+
+## 📚 Research & Optimization
+- [x] Research AI image generation APIs
+- [ ] Optimize AI prompts for better results
+- [ ] Performance optimization for large libraries
+- [ ] Accessibility improvements
+when click on "publish" it says "uploading..100%" and keeps loading while its generating images, i think we can handle this better.
+- double click anywhere on the player to enlarge it. 
+
+- how are duplicates handled? I'd like to first chck if it xists, if it does, ask user to upload different track.
+
+- have an ai agent that generates prompts for images.

@@ -6,3 +6,7 @@ psycopg2-binary
 python-dotenv
 mutagen
 python-multipart
+requests
+Pillow
+huggingface-hub
+python-multipart

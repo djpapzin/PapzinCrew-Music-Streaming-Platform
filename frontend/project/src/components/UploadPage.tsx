@@ -14,8 +14,18 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
   const [extractingMetadata, setExtractingMetadata] = useState(false);
   const [coverArt, setCoverArt] = useState<string | null>(null);
   const [isPublishing, setIsPublishing] = useState(false);
+  const [showCustomPrompt, setShowCustomPrompt] = useState(false);
+  const [customPrompt, setCustomPrompt] = useState('');
+  const [uploadStatus, setUploadStatus] = useState<{
+    stage: 'idle' | 'uploading' | 'processing' | 'generating_art' | 'success' | 'error';
+    progress: number;
+    message: string;
+  }>({
+    stage: 'idle',
+    progress: 0,
+    message: ''
+  });
   const [publishStatus, setPublishStatus] = useState<'idle' | 'success' | 'error'>('idle');
-  const [uploadProgress, setUploadProgress] = useState(0);
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -106,6 +116,12 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
       return;
     }
 
+    // If custom prompt is shown but empty, show an error
+    if (showCustomPrompt && !customPrompt.trim()) {
+      alert('Please enter a custom prompt or click "Generate Automatically"');
+      return;
+    }
+
     if (!formData.title.trim()) {
       alert('Please enter a title for your track.');
       return;
@@ -117,8 +133,11 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
     }
 
     setIsPublishing(true);
-    setPublishStatus('idle');
-    setUploadProgress(0);
+    setUploadStatus({
+      stage: 'uploading',
+      progress: 0,
+      message: 'Preparing to upload your track...'
+    });
 
     try {
       const uploadFormData = new FormData();
@@ -137,6 +156,11 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
       uploadFormData.append('allow_downloads', formData.allowDownloads.toLowerCase());
       uploadFormData.append('display_embed', formData.displayEmbedCode.toLowerCase());
       uploadFormData.append('age_restriction', formData.ageRestriction.toLowerCase());
+      
+      // Add custom prompt if provided
+      if (showCustomPrompt && customPrompt.trim()) {
+        uploadFormData.append('custom_prompt', customPrompt.trim());
+      }
 
       // Create XMLHttpRequest for progress tracking
       const xhr = new XMLHttpRequest();
@@ -145,13 +169,33 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
       xhr.upload.addEventListener('progress', (event) => {
         if (event.lengthComputable) {
           const percentComplete = Math.round((event.loaded / event.total) * 100);
-          setUploadProgress(percentComplete);
+          setUploadStatus(prev => ({
+            ...prev,
+            progress: percentComplete,
+            message: `Uploading your track... ${percentComplete}%`
+          }));
         }
+      });
+      
+      // Set up load start handler
+      xhr.upload.addEventListener('loadstart', () => {
+        setUploadStatus({
+          stage: 'uploading',
+          progress: 0,
+          message: 'Starting upload...'
+        });
       });
       
       // Create promise to handle XMLHttpRequest
       const uploadPromise = new Promise<Response>((resolve, reject) => {
         xhr.onload = () => {
+          // Update status to processing before handling the response
+          setUploadStatus({
+            stage: 'processing',
+            progress: 100,
+            message: 'Processing your track...'
+          });
+          
           if (xhr.status >= 200 && xhr.status < 300) {
             // Create a Response object from XMLHttpRequest
             const response = new Response(xhr.responseText, {
@@ -163,14 +207,32 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
             });
             resolve(response);
           } else {
+            console.error('Upload failed with status:', xhr.status, xhr.statusText);
+            console.error('Response text:', xhr.responseText);
             reject(new Error(`HTTP ${xhr.status}: ${xhr.statusText}`));
           }
         };
         
-        xhr.onerror = () => reject(new Error('Network error'));
-        xhr.ontimeout = () => reject(new Error('Upload timeout'));
+        xhr.onerror = (error) => {
+          console.error('Network error during upload:', error);
+          reject(new Error('Network error'));
+        };
         
-        xhr.open('POST', 'http://localhost:8000/upload');
+        xhr.ontimeout = () => {
+          console.error('Upload timed out');
+          reject(new Error('Upload timeout'));
+        };
+        
+        xhr.open('POST', 'http://localhost:8000/upload', true);
+        // Set withCredentials to include cookies if needed
+        xhr.withCredentials = false;
+        
+        // Set headers
+        xhr.setRequestHeader('Accept', 'application/json');
+        
+        // For CORS preflight, the browser will handle the headers
+        // We don't need to manually set Content-Type for FormData, the browser will set it with the correct boundary
+        
         xhr.send(uploadFormData);
       });
       
@@ -179,7 +241,22 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
       if (response.ok) {
         const result = await response.json();
         console.log('Upload successful:', result);
-        setPublishStatus('success');
+        
+        // Update status to generating art if needed
+        if (result.generating_art) {
+          setUploadStatus({
+            stage: 'generating_art',
+            progress: 100,
+            message: 'Generating cover art...'
+          });
+        } else {
+          setUploadStatus({
+            stage: 'success',
+            progress: 100,
+            message: 'Upload complete!'
+          });
+          setPublishStatus('success');
+        }
         
         // Convert uploaded mix to Song format for player
         const uploadedSong: Song = {
@@ -205,7 +282,8 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
           setTimeout(() => {
             setUploadedFile(null);
             setCoverArt(null);
-            setUploadProgress(0);
+            setShowCustomPrompt(false);
+            setCustomPrompt('');
             setFormData({
               title: '',
               description: '',
@@ -218,24 +296,35 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
               displayEmbedCode: 'Yes',
               ageRestriction: 'All ages can listen to this stream'
             });
-            setPublishStatus('idle');
+            setUploadStatus({
+              stage: 'idle',
+              progress: 0,
+              message: ''
+            });
           }, 500);
         }, 1500);
       } else {
         const errorData = await response.json();
         console.error('Upload failed:', errorData);
+        setUploadStatus({
+          stage: 'error',
+          progress: 0,
+          message: `Upload failed: ${errorData.detail || 'Unknown error'}`
+        });
         setPublishStatus('error');
         alert(`Upload failed: ${errorData.detail || 'Unknown error'}`);
       }
     } catch (error) {
       console.error('Upload error:', error);
+      setUploadStatus({
+        stage: 'error',
+        progress: 0,
+        message: 'Upload failed. Please check your connection and try again.'
+      });
       setPublishStatus('error');
       alert('Upload failed. Please check your connection and try again.');
     } finally {
       setIsPublishing(false);
-      if (publishStatus !== 'success') {
-        setUploadProgress(0);
-      }
     }
   };
 
@@ -289,7 +378,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
         {/* Left Column - Upload Form */}
         <div className="lg:col-span-2 space-y-6">
           {/* Track Image Upload */}
-          <div className="bg-white/5 rounded-xl p-6 border border-white/10">
+          <div className="bg-white/5 rounded-xl p-6 border border-white/10 space-y-4">
             <div className="flex items-start space-x-4">
               <div className="w-24 h-24 bg-gray-700 rounded-lg border-2 border-dashed border-gray-600 flex items-center justify-center overflow-hidden">
                 {coverArt ? (
@@ -304,7 +393,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
               </div>
               <div>
                 <h3 className="text-white font-semibold mb-2">
-                  {coverArt ? 'Extracted track image' : 'Upload track image'}
+                  {coverArt ? 'Track image' : 'Upload track image'}
                 </h3>
                 <p className="text-gray-400 text-sm">
                   {coverArt 
@@ -317,6 +406,51 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
                 </p>
               </div>
             </div>
+
+            {!coverArt && !showCustomPrompt && (
+              <div className="pt-2">
+                <button
+                  onClick={() => setShowCustomPrompt(true)}
+                  className="text-purple-400 hover:text-purple-300 text-sm font-medium flex items-center"
+                >
+                  <span>Customize AI-generated cover art</span>
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                  </svg>
+                </button>
+              </div>
+            )}
+
+            {showCustomPrompt && (
+              <div className="pt-2 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-white font-medium text-sm">Customize AI Cover Art</h4>
+                  <button 
+                    onClick={() => setShowCustomPrompt(false)}
+                    className="text-gray-400 hover:text-white"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                    </svg>
+                  </button>
+                </div>
+                <textarea
+                  value={customPrompt}
+                  onChange={(e) => setCustomPrompt(e.target.value)}
+                  placeholder="Describe the cover art you'd like to generate (e.g., 'futuristic city at night with neon lights')"
+                  className="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-white placeholder-gray-400 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none h-20"
+                />
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-400 text-xs">Leave blank to generate automatically</span>
+                  <button
+                    onClick={() => setShowCustomPrompt(false)}
+                    className="text-xs text-gray-400 hover:text-white"
+                  >
+                    Generate Automatically
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Title */}
@@ -472,22 +606,49 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
             </div>
           </div>
 
-          {/* Upload Progress Bar */}
-          {isPublishing && (
+          {(uploadStatus.stage === 'uploading' || uploadStatus.stage === 'processing' || uploadStatus.stage === 'generating_art' || uploadStatus.stage === 'success' || uploadStatus.stage === 'error') && (
             <div className="pt-4">
               <div className="bg-white/5 rounded-lg p-4 border border-white/10">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-white text-sm font-medium">Uploading your track...</span>
-                  <span className="text-purple-400 text-sm font-bold">{uploadProgress}%</span>
+                  <span className="text-white text-sm font-medium">
+                    {uploadStatus.stage === 'uploading' && 'Uploading your track...'}
+                    {uploadStatus.stage === 'processing' && 'Processing your track...'}
+                    {uploadStatus.stage === 'generating_art' && 'Generating cover art...'}
+                    {uploadStatus.stage === 'success' && 'Upload complete!'}
+                    {uploadStatus.stage === 'error' && 'Upload failed'}
+                  </span>
+                  <span className="text-purple-400 text-sm font-bold">
+                    {uploadStatus.progress}%{uploadStatus.stage === 'success' && ' '}
+                  </span>
                 </div>
-                <div className="w-full bg-gray-700 rounded-full h-2">
+                <div className="w-full bg-gray-700 rounded-full h-2 mb-2">
                   <div 
-                    className="bg-gradient-to-r from-purple-500 to-pink-500 h-2 rounded-full transition-all duration-300 ease-out"
-                    style={{ width: `${uploadProgress}%` }}
+                    className={`h-2 rounded-full transition-all duration-300 ease-out ${
+                      uploadStatus.stage === 'error' 
+                        ? 'bg-red-500' 
+                        : uploadStatus.stage === 'success'
+                        ? 'bg-green-500'
+                        : 'bg-gradient-to-r from-purple-500 to-pink-500'
+                    }`}
+                    style={{ width: `${uploadStatus.progress}%` }}
                   ></div>
                 </div>
-                <div className="mt-2 text-gray-400 text-xs">
-                  {uploadProgress < 100 ? 'Please don\'t close this page while uploading...' : 'Processing your track...'}
+                <div className="text-gray-400 text-xs">
+                  {uploadStatus.stage === 'uploading' && (
+                    <span>Please don't close this page while uploading...</span>
+                  )}
+                  {uploadStatus.stage === 'processing' && (
+                    <span>Processing your track. This may take a moment...</span>
+                  )}
+                  {uploadStatus.stage === 'generating_art' && (
+                    <span>Creating beautiful cover art for your track...</span>
+                  )}
+                  {uploadStatus.stage === 'success' && (
+                    <span className="text-green-400">Your track has been successfully uploaded and is now processing.</span>
+                  )}
+                  {uploadStatus.stage === 'error' && (
+                    <span className="text-red-400">{uploadStatus.message || 'An error occurred during upload.'}</span>
+                  )}
                 </div>
               </div>
             </div>
@@ -508,17 +669,25 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
                   : 'bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 hover:shadow-lg transform hover:scale-105'
               } text-white`}
             >
-              {isPublishing && <Loader2 className="w-4 h-4 animate-spin" />}
-              <span>
-                {isPublishing
-                  ? `Uploading... ${uploadProgress}%`
-                  : publishStatus === 'success'
-                  ? 'Published Successfully!'
-                  : publishStatus === 'error'
-                  ? 'Upload Failed - Retry'
-                  : 'Publish'
-                }
-              </span>
+              {isPublishing && (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span className="ml-2">
+                    {uploadStatus.stage === 'uploading' && `Uploading...`}
+                    {uploadStatus.stage === 'processing' && 'Processing...'}
+                    {uploadStatus.stage === 'generating_art' && 'Generating Art...'}
+                  </span>
+                </>
+              )}
+              {!isPublishing && (
+                <span>
+                  {uploadStatus.stage === 'success' 
+                    ? 'Published Successfully! ' 
+                    : uploadStatus.stage === 'error'
+                    ? 'Try Again'
+                    : 'Publish'}
+                </span>
+              )}
             </button>
           </div>
         </div>
