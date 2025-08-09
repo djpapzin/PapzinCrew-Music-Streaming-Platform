@@ -58,7 +58,48 @@ export const usePlayer = () => {
 
     audio.src = song.audioUrl;
     audio.volume = playerState.volume;
-    audio.play().catch(console.error);
+    // Ensure new source is loaded
+    try { audio.load(); } catch {}
+
+    const attemptPlay = () => {
+      // Try muted autoplay first (widely allowed by browsers)
+      const targetVolume = playerState.volume;
+      audio.muted = true;
+      audio.play().then(() => {
+        // Unmute as soon as possible after playback starts
+        setTimeout(() => {
+          audio.muted = false;
+          audio.volume = targetVolume;
+        }, 0);
+      }).catch((err: any) => {
+        // Autoplay restriction
+        if (err && (err.name === 'NotAllowedError' || err.message?.toLowerCase().includes('autoplay'))) {
+          console.warn('Autoplay blocked; will resume on next user interaction');
+          const resume = () => {
+            // Ensure we unmute and restore intended volume on user interaction
+            audio.muted = false;
+            audio.volume = targetVolume;
+            audio.play().catch(console.error);
+            document.removeEventListener('click', resume);
+            document.removeEventListener('keydown', resume);
+          };
+          document.addEventListener('click', resume, { once: true });
+          document.addEventListener('keydown', resume, { once: true });
+        } else {
+          // If playback failed due to readiness/network, retry on canplay
+          console.warn('Playback failed, retrying on canplay:', err);
+          audio.addEventListener('canplay', () => {
+            audio.muted = false;
+            audio.volume = targetVolume;
+            audio.play().catch(console.error);
+          }, { once: true });
+        }
+      });
+    };
+
+    // Try to play now and also once it's ready
+    audio.addEventListener('canplay', attemptPlay, { once: true });
+    attemptPlay();
   };
 
   const togglePlay = () => {
