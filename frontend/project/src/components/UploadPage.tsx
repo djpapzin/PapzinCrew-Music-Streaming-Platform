@@ -1,7 +1,46 @@
-import React, { useState } from 'react';
-import { Upload, Image, Music, Tag, Globe, Download, Eye, Users, ChevronDown, Loader2 } from 'lucide-react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
+import { Upload, Image, Music, Tag, Globe, Download, Eye, Users, ChevronDown, Loader2, AlertCircle, CheckCircle, XCircle, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Song } from '../types/music';
+
+// Base API URL (Render/production uses VITE_API_URL; fallback to local dev)
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
+// Ensure API_BASE doesn't end with a slash
+const API_URL = API_BASE.endsWith('/') ? API_BASE.slice(0, -1) : API_BASE;
+
+// Add fade-in animation
+const fadeInKeyframes = `
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  
+  .animate-fade-in {
+    animation: fadeIn 0.3s ease-out forwards;
+  }
+`;
+
+// Create a style element for our animations
+const styleElement = document.createElement('style');
+styleElement.textContent = fadeInKeyframes;
+document.head.appendChild(styleElement);
+
+interface UploadError {
+  error: string;
+  error_code: string;
+  [key: string]: any;
+}
+
+interface FileValidationResult {
+  valid: boolean;
+  mime_type?: string;
+  file_extension?: string;
+  file_size_bytes?: number;
+  error?: string;
+  error_code?: string;
+  detected_type?: string;
+}
 
 interface UploadPageProps {
   onPlaySong?: (song: Song, queue?: Song[]) => void;
@@ -16,16 +55,42 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
   const [isPublishing, setIsPublishing] = useState(false);
   const [showCustomPrompt, setShowCustomPrompt] = useState(false);
   const [customPrompt, setCustomPrompt] = useState('');
+  const [fileValidation, setFileValidation] = useState<FileValidationResult | null>(null);
+  const [duplicateTrack, setDuplicateTrack] = useState<any>(null);
+  const [uploadError, setUploadError] = useState<UploadError | null>(null);
   const [uploadStatus, setUploadStatus] = useState<{
     stage: 'idle' | 'uploading' | 'processing' | 'generating_art' | 'success' | 'error';
     progress: number;
     message: string;
+    details?: string;
+    speed?: string;
+    timeRemaining?: string;
+    phase: 'file_upload' | 'metadata_extraction' | 'ai_generation' | 'complete' | 'none';
+    phaseProgress: number;
+    canCancel: boolean;
+    extractedMetadata?: any;
   }>({
     stage: 'idle',
     progress: 0,
-    message: ''
+    message: '',
+    details: '',
+    speed: '',
+    timeRemaining: '',
+    phase: 'none',
+    phaseProgress: 0,
+    canCancel: false,
+    extractedMetadata: null
   });
+  
+  // Track upload speed and time remaining
+  const uploadStartTime = React.useRef<number | null>(null);
+  const lastLoaded = React.useRef<number>(0);
+  const lastTime = React.useRef<number>(0);
   const [publishStatus, setPublishStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const statusModalRef = useRef<HTMLDivElement>(null);
+  const currentXhrRef = useRef<XMLHttpRequest | null>(null);
+  const artGenerationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -49,50 +114,123 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
     }
   };
 
+  const validateAndSetFile = useCallback(async (file: File) => {
+    // Reset states
+    setFileValidation(null);
+    setDuplicateTrack(null);
+    setUploadError(null);
+    
+    // Basic client-side validation
+    const maxSize = 100 * 1024 * 1024; // 100MB
+    if (file.size > maxSize) {
+      setFileValidation({
+        valid: false,
+        error: `File is too large. Maximum size is 100MB.`,
+        error_code: 'file_too_large'
+      });
+      return false;
+    }
+    
+    // Set file for metadata extraction
+    setUploadedFile(file);
+    
+    // Extract metadata which will also validate the file
+    await extractMetadata(file);
+    return true;
+  }, []);
+
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
     
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      const file = e.dataTransfer.files[0];
-      setUploadedFile(file);
-      extractMetadata(file);
+      validateAndSetFile(e.dataTransfer.files[0]);
     }
   };
 
   const extractMetadata = async (file: File) => {
     setExtractingMetadata(true);
+    setFileValidation(null);
+    
     try {
-      const formData = new FormData();
-      formData.append('file', file);
+      // Create a new File object to ensure we have a fresh copy
+      const fileCopy = new File([file], file.name, { type: file.type });
       
-      const response = await fetch('http://localhost:8000/upload/extract-metadata', {
+      const formData = new FormData();
+      formData.append('file', fileCopy);
+      
+      const response = await fetch(`${API_URL}/upload/extract-metadata`, {
         method: 'POST',
         body: formData,
       });
       
       if (response.ok) {
         const metadata = await response.json();
+        console.log('Metadata extraction response:', metadata);
+        
+        // Extract the actual metadata from the response structure
+        const extractedMetadata = metadata.metadata || metadata;
+        console.log('Extracted metadata object:', extractedMetadata);
         
         // Update form fields with extracted metadata
+        const updatedFormData = {
+          title: extractedMetadata.title || '',
+          tagArtists: extractedMetadata.artist || '',
+          genre: extractedMetadata.genre || 'Podcast Shows',
+          description: extractedMetadata.album ? `Album: ${extractedMetadata.album}${extractedMetadata.year ? ` (${extractedMetadata.year})` : ''}` : ''
+        };
+        
+        console.log('Form data updates:', updatedFormData);
+        
         setFormData(prev => ({
           ...prev,
-          title: metadata.title || prev.title,
-          tagArtists: metadata.artist || prev.tagArtists,
-          genre: metadata.genre || prev.genre,
-          description: metadata.album ? `Album: ${metadata.album}${metadata.year ? ` (${metadata.year})` : ''}` : prev.description
+          ...updatedFormData
         }));
         
         // Set cover art if available
         if (metadata.cover_art) {
           setCoverArt(metadata.cover_art);
         }
+        
+        // Set file as valid if we got this far
+        setFileValidation({
+          valid: true,
+          mime_type: file.type,
+          file_extension: file.name.split('.').pop()?.toLowerCase() || '',
+          file_size_bytes: file.size
+        });
       } else {
-        console.error('Failed to extract metadata:', response.statusText);
+        let errorData;
+        try {
+          errorData = await response.json();
+          console.error('Backend error response:', errorData);
+          setUploadError(errorData);
+          
+          if (errorData.error_code === 'file_too_large' || 
+              errorData.error_code === 'unsupported_file_type' ||
+              errorData.error_code === 'invalid_audio_file') {
+            setFileValidation({
+              valid: false,
+              error: errorData.error,
+              error_code: errorData.error_code,
+              detected_type: errorData.detected_type
+            });
+          }
+        } catch (e) {
+          console.error('Failed to parse error response:', e);
+          setUploadError({
+            error: 'Failed to process file. Please try again.',
+            error_code: 'unknown_error'
+          });
+        }
       }
     } catch (error) {
       console.error('Error extracting metadata:', error);
+      setUploadError({
+        error: 'Error processing file. Please try again.',
+        error_code: 'processing_error'
+      });
     } finally {
       setExtractingMetadata(false);
     }
@@ -100,9 +238,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      setUploadedFile(file);
-      extractMetadata(file);
+      validateAndSetFile(e.target.files[0]);
     }
   };
 
@@ -110,33 +246,192 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  const handlePublish = async () => {
+  const cancelUpload = () => {
+    // Cancel XMLHttpRequest if it exists
+    if (currentXhrRef.current) {
+      currentXhrRef.current.abort();
+      currentXhrRef.current = null;
+    }
+    
+    // Clear any art generation timeout
+    if (artGenerationTimeoutRef.current) {
+      clearTimeout(artGenerationTimeoutRef.current);
+      artGenerationTimeoutRef.current = null;
+    }
+    
+    // Reset upload state
+    setIsPublishing(false);
+    setShowStatusModal(false);
+    setUploadStatus({
+      stage: 'idle',
+      progress: 0,
+      message: '',
+      details: '',
+      speed: '',
+      timeRemaining: '',
+      phase: 'none',
+      phaseProgress: 0,
+      canCancel: false,
+      extractedMetadata: null
+    });
+    
+    console.log('Upload cancelled by user');
+  };
+
+  // Helper function to calculate file hash
+  const calculateFileHash = async (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        try {
+          const arrayBuffer = event.target?.result as ArrayBuffer;
+          const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
+          const hashArray = Array.from(new Uint8Array(hashBuffer));
+          const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+          resolve(hashHex);
+        } catch (error) {
+          reject(error);
+        }
+      };
+      reader.onerror = () => reject(new Error('Failed to read file'));
+      reader.readAsArrayBuffer(file);
+    });
+  };
+
+  const checkForDuplicateTrack = async (title: string, artist: string, fileSize: number): Promise<boolean> => {
+    try {
+      let fileHash: string | undefined;
+      let duration: number | undefined;
+      
+      // Calculate file hash if file is available
+      if (uploadedFile) {
+        try {
+          fileHash = await calculateFileHash(uploadedFile);
+        } catch (error) {
+          console.warn('Could not calculate file hash:', error);
+        }
+      }
+      
+      // Extract duration from metadata if available
+      if (formData.description && formData.description.includes('Duration:')) {
+        const durationMatch = formData.description.match(/Duration: (\d+):(\d+)/);
+        if (durationMatch) {
+          duration = parseInt(durationMatch[1]) * 60 + parseInt(durationMatch[2]);
+        }
+      }
+
+      const response = await fetch(`${API_URL}/upload/check-duplicate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          title,
+          artist_name: artist,
+          file_size: fileSize,
+          file_hash: fileHash,
+          duration_seconds: duration,
+          album: formData.description // Using description as album for now
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        console.error('Error checking for duplicates:', error);
+        return false;
+      }
+
+      const result = await response.json();
+      if (result.duplicate) {
+        setDuplicateTrack(result);
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error('Error checking for duplicates:', error);
+      return false;
+    }
+  };
+
+  const handlePublish = async (forceUpload = false) => {
     if (!uploadedFile) {
-      alert('Please select an audio file first.');
+      setUploadError({
+        error: 'Please select an audio file first.',
+        error_code: 'no_file_selected'
+      });
       return;
+    }
+
+    // If we have a duplicate and user hasn't confirmed to continue
+    if (duplicateTrack && !forceUpload) {
+      return; // The UI will show the duplicate warning
+    }
+    
+    // Check for duplicate track before starting upload
+    if (!forceUpload) {
+      setUploadStatus({
+        stage: 'processing',
+        progress: 0,
+        message: 'Checking for duplicates...',
+        details: 'Verifying if this track already exists',
+        speed: '',
+        timeRemaining: ''
+      });
+      
+      setShowStatusModal(true);
+      const isDuplicate = await checkForDuplicateTrack(
+        formData.title || uploadedFile.name.replace(/\.[^/.]+$/, ''), // Use filename without extension as fallback title
+        formData.tagArtists || 'Unknown Artist',
+        uploadedFile.size
+      );
+      
+      if (isDuplicate) {
+        // The checkForDuplicateTrack function will update the duplicateTrack state
+        // and the UI will show the duplicate warning
+        setShowStatusModal(false);
+        setUploadStatus({ stage: 'idle', progress: 0, message: '', details: '', speed: '', timeRemaining: '' });
+        return;
+      }
     }
 
     // If custom prompt is shown but empty, show an error
     if (showCustomPrompt && !customPrompt.trim()) {
-      alert('Please enter a custom prompt or click "Generate Automatically"');
+      setUploadError({
+        error: 'Please enter a custom prompt or click "Generate Automatically"',
+        error_code: 'missing_custom_prompt'
+      });
       return;
     }
 
     if (!formData.title.trim()) {
-      alert('Please enter a title for your track.');
+      setUploadError({
+        error: 'Please enter a title for your track.',
+        error_code: 'missing_title'
+      });
       return;
     }
 
     if (!formData.tagArtists.trim()) {
-      alert('Please enter the artist name.');
+      setUploadError({
+        error: 'Please enter the artist name.',
+        error_code: 'missing_artist'
+      });
       return;
     }
 
+    setShowStatusModal(true);
     setIsPublishing(true);
     setUploadStatus({
       stage: 'uploading',
       progress: 0,
-      message: 'Preparing to upload your track...'
+      message: 'Preparing to upload your track...',
+      details: 'Initializing upload process',
+      speed: '',
+      timeRemaining: '',
+      phase: 'file_upload',
+      phaseProgress: 0,
+      canCancel: true,
+      extractedMetadata: null
     });
 
     try {
@@ -164,15 +459,63 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
 
       // Create XMLHttpRequest for progress tracking
       const xhr = new XMLHttpRequest();
+      currentXhrRef.current = xhr; // Store reference for cancellation
+      
+      // Reset upload tracking
+      uploadStartTime.current = Date.now();
+      lastLoaded.current = 0;
+      lastTime.current = Date.now();
       
       // Set up progress tracking
       xhr.upload.addEventListener('progress', (event) => {
         if (event.lengthComputable) {
-          const percentComplete = Math.round((event.loaded / event.total) * 100);
+          const now = Date.now();
+          const fileUploadProgress = Math.round((event.loaded / event.total) * 100);
+          const loadedMB = event.loaded / (1024 * 1024);
+          const totalMB = event.total / (1024 * 1024);
+          
+          // Calculate upload speed
+          const timeElapsed = (now - lastTime.current) / 1000; // in seconds
+          const loadedDiff = event.loaded - lastLoaded.current;
+          const speedKbps = timeElapsed > 0 ? (loadedDiff / timeElapsed) / 1024 : 0;
+          
+          // Calculate time remaining
+          const remainingBytes = event.total - event.loaded;
+          const remainingTime = speedKbps > 0 ? (remainingBytes / 1024) / speedKbps : 0;
+          
+          // Update refs
+          lastLoaded.current = event.loaded;
+          lastTime.current = now;
+          
+          // Format time remaining
+          const formatTime = (seconds: number): string => {
+            if (seconds < 60) return `${Math.ceil(seconds)}s`;
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.ceil(seconds % 60);
+            return `${mins}m ${secs}s`;
+          };
+          
+          // Phase 1: File Upload (0-40% of total progress)
+          const overallProgress = Math.round(fileUploadProgress * 0.4);
+          
+          // Determine upload phase message
+          let phaseMessage = 'Uploading file';
+          if (fileUploadProgress < 10) phaseMessage = 'Starting upload';
+          else if (fileUploadProgress > 90) phaseMessage = 'Finalizing upload';
+          
           setUploadStatus(prev => ({
             ...prev,
-            progress: percentComplete,
-            message: `Uploading your track... ${percentComplete}%`
+            stage: 'uploading',
+            progress: overallProgress,
+            message: `${phaseMessage}: ${fileUploadProgress}%`,
+            details: `${loadedMB.toFixed(1)}MB of ${totalMB.toFixed(1)}MB uploaded`,
+            phase: 'file_upload',
+            phaseProgress: fileUploadProgress,
+            canCancel: true,
+            speed: speedKbps > 1024 
+              ? `${(speedKbps / 1024).toFixed(1)} MB/s` 
+              : `${Math.ceil(speedKbps)} KB/s`,
+            timeRemaining: remainingTime > 0 ? `About ${formatTime(remainingTime)} remaining` : 'Almost done...'
           }));
         }
       });
@@ -182,34 +525,120 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
         setUploadStatus({
           stage: 'uploading',
           progress: 0,
-          message: 'Starting upload...'
+          message: 'Preparing upload...',
+          details: 'Connecting to server',
+          speed: '0 KB/s',
+          timeRemaining: 'Starting...',
+          phase: 'file_upload',
+          phaseProgress: 0,
+          canCancel: true,
+          extractedMetadata: null
         });
+      });
+      
+      // Set up error handler
+      xhr.upload.addEventListener('error', (error) => {
+        console.error('Upload error:', error);
+        setUploadStatus({
+          stage: 'error',
+          progress: 0,
+          message: 'Upload failed',
+          details: 'Network error. Please check your connection and try again.',
+          speed: '',
+          timeRemaining: '',
+          phase: 'none',
+          phaseProgress: 0,
+          canCancel: false,
+          extractedMetadata: null
+        });
+        setIsPublishing(false);
+        currentXhrRef.current = null;
       });
       
       // Create promise to handle XMLHttpRequest
       const uploadPromise = new Promise<Response>((resolve, reject) => {
         xhr.onload = () => {
-          // Update status to processing before handling the response
-          setUploadStatus({
-            stage: 'processing',
-            progress: 100,
-            message: 'Processing your track...'
-          });
-          
           if (xhr.status >= 200 && xhr.status < 300) {
-            // Create a Response object from XMLHttpRequest
-            const response = new Response(xhr.responseText, {
-              status: xhr.status,
-              statusText: xhr.statusText,
-              headers: new Headers({
-                'Content-Type': xhr.getResponseHeader('Content-Type') || 'application/json'
-              })
-            });
-            resolve(response);
+            try {
+              const response = JSON.parse(xhr.responseText);
+              
+              // Check for duplicate track response
+              if (xhr.status === 409 && response.error_code === 'duplicate_track') {
+                setDuplicateTrack(response.duplicate_info);
+                setIsPublishing(false);
+                setUploadStatus({
+                  stage: 'idle',
+                  progress: 0,
+                  message: '',
+                  details: '',
+                  speed: '',
+                  timeRemaining: ''
+                });
+                return;
+              }
+              
+              // Phase 2: Metadata Processing (40-70% of total progress)
+              setUploadStatus({
+                stage: 'processing',
+                progress: 40,
+                message: 'Processing track...',
+                details: 'Analyzing audio and extracting metadata',
+                speed: '',
+                timeRemaining: 'This may take a moment...',
+                phase: 'metadata_extraction',
+                phaseProgress: 0,
+                canCancel: true,
+                extractedMetadata: response.metadata || null
+              });
+              
+              // Simulate metadata processing progress
+              const metadataInterval = setInterval(() => {
+                setUploadStatus(prev => {
+                  if (prev.phase === 'metadata_extraction' && prev.phaseProgress < 100) {
+                    const newPhaseProgress = Math.min(prev.phaseProgress + 20, 100);
+                    const overallProgress = 40 + (newPhaseProgress * 0.3); // 40% + up to 30%
+                    return {
+                      ...prev,
+                      progress: Math.round(overallProgress),
+                      phaseProgress: newPhaseProgress,
+                      details: newPhaseProgress < 50 ? 'Analyzing audio format...' :
+                              newPhaseProgress < 80 ? 'Extracting metadata...' :
+                              'Preparing for cover art generation...'
+                    };
+                  }
+                  return prev;
+                });
+              }, 300);
+              
+              // Clear interval after processing
+              setTimeout(() => {
+                clearInterval(metadataInterval);
+              }, 1500);
+              
+              // If we get here, the upload was successful
+              resolve(response);
+            } catch (error) {
+              console.error('Error parsing response:', error);
+              reject(new Error('Failed to parse server response'));
+            }
           } else {
+            // Handle HTTP error statuses
             console.error('Upload failed with status:', xhr.status, xhr.statusText);
             console.error('Response text:', xhr.responseText);
-            reject(new Error(`HTTP ${xhr.status}: ${xhr.statusText}`));
+            
+            // Try to parse error response if it's JSON
+            let errorMessage = `HTTP ${xhr.status}: ${xhr.statusText}`;
+            try {
+              const errorResponse = JSON.parse(xhr.responseText);
+              if (errorResponse.error) {
+                errorMessage = errorResponse.error;
+              }
+            } catch (e) {
+              // If we can't parse the error response, use the default message
+              console.error('Error parsing error response:', e);
+            }
+            
+            reject(new Error(errorMessage));
           }
         };
         
@@ -223,7 +652,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
           reject(new Error('Upload timeout'));
         };
         
-        xhr.open('POST', 'http://localhost:8000/upload', true);
+        xhr.open('POST', `${API_URL}/upload`, true);
         // Set withCredentials to include cookies if needed
         xhr.withCredentials = false;
         
@@ -236,24 +665,147 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
         xhr.send(uploadFormData);
       });
       
-      const response = await uploadPromise;
-
-      if (response.ok) {
-        const result = await response.json();
+      const result = await uploadPromise;
         console.log('Upload successful:', result);
         
-        // Update status to generating art if needed
+      // Phase 3: AI Art Generation (70-100% of total progress)
         if (result.generating_art) {
           setUploadStatus({
             stage: 'generating_art',
-            progress: 100,
-            message: 'Generating cover art...'
+            progress: 70,
+            message: '🎨 Creating cover art...',
+            details: 'Using AI to generate a unique cover image',
+            speed: '',
+            timeRemaining: 'This usually takes 10-20 seconds',
+            phase: 'ai_generation',
+            phaseProgress: 0,
+            canCancel: true,
+            extractedMetadata: result.metadata || null
           });
+          
+          // Simulate AI generation progress
+          const artInterval = setInterval(() => {
+            setUploadStatus(prev => {
+              if (prev.phase === 'ai_generation' && prev.phaseProgress < 90) {
+                const newPhaseProgress = Math.min(prev.phaseProgress + 15, 90);
+                const overallProgress = 70 + (newPhaseProgress * 0.3); // 70% + up to 27%
+                return {
+                  ...prev,
+                  progress: Math.round(overallProgress),
+                  phaseProgress: newPhaseProgress,
+                  details: newPhaseProgress < 30 ? 'Analyzing song metadata...' :
+                          newPhaseProgress < 60 ? 'Generating AI artwork...' :
+                          'Finalizing cover art...'
+                };
+              }
+              return prev;
+            });
+          }, 800);
+          
+          // Store interval reference for cleanup
+          artGenerationTimeoutRef.current = artInterval;
+          
+          // Poll for art generation status
+          const checkArtStatus = async (trackId: string, attempt = 1) => {
+            try {
+              const statusResponse = await fetch(`${API_URL}/tracks/${trackId}/art-status`);
+              if (statusResponse.ok) {
+                const status = await statusResponse.json();
+                
+                if (status.status === 'completed') {
+                  // Clear art generation interval
+                  if (artGenerationTimeoutRef.current) {
+                    clearInterval(artGenerationTimeoutRef.current);
+                    artGenerationTimeoutRef.current = null;
+                  }
+                  
+                  setUploadStatus({
+                    stage: 'success',
+                    progress: 100,
+                    message: '🎉 Upload complete!',
+                    details: 'Your track is ready to play',
+                    speed: '',
+                    timeRemaining: 'Redirecting...',
+                    phase: 'complete',
+                    phaseProgress: 100,
+                    canCancel: false,
+                    extractedMetadata: null
+                  });
+                  setPublishStatus('success');
+                  currentXhrRef.current = null;
+                  return true;
+                } else if (status.status === 'failed') {
+                  console.warn('Art generation failed, using default cover');
+                  // Clear art generation interval
+                  if (artGenerationTimeoutRef.current) {
+                    clearInterval(artGenerationTimeoutRef.current);
+                    artGenerationTimeoutRef.current = null;
+                  }
+                  
+                  setUploadStatus({
+                    stage: 'success',
+                    progress: 100,
+                    message: '✅ Upload complete!',
+                    details: 'Your track is ready (using default cover)',
+                    speed: '',
+                    timeRemaining: 'Redirecting...'
+                  });
+                  setPublishStatus('success');
+                  return true;
+                } else if (attempt < 10) { // Max 10 attempts (about 30 seconds)
+                  // Update status with progress
+                  setUploadStatus(prev => ({
+                    ...prev,
+                    details: `Generating cover art... (${attempt * 10}%)`,
+                    timeRemaining: `About ${20 - (attempt * 2)}s remaining`
+                  }));
+                  
+                  // Check again in 3 seconds
+                  setTimeout(() => checkArtStatus(trackId, attempt + 1), 3000);
+                } else {
+                  // Timeout after max attempts
+                  console.warn('Art generation timed out, using default cover');
+                  setUploadStatus({
+                    stage: 'success',
+                    progress: 100,
+                    message: '✅ Upload complete!',
+                    details: 'Your track is ready (using default cover)',
+                    speed: '',
+                    timeRemaining: 'Redirecting...'
+                  });
+                  setPublishStatus('success');
+                  return true;
+                }
+              }
+            } catch (error) {
+              console.error('Error checking art status:', error);
+              if (attempt < 3) { // Retry on network errors
+                setTimeout(() => checkArtStatus(trackId, attempt + 1), 3000);
+              } else {
+                setUploadStatus(prev => ({
+                  ...prev,
+                  message: '✅ Upload complete!',
+                  details: 'Your track is ready (skipped cover art)',
+                  timeRemaining: 'Redirecting...'
+                }));
+                setPublishStatus('success');
+              }
+            }
+            return false;
+          };
+          
+          // Start polling for art status
+          if (result.id) {
+            checkArtStatus(result.id);
+          }
         } else {
           setUploadStatus({
             stage: 'success',
             progress: 100,
-            message: 'Upload complete!'
+            message: '✅ Upload complete!',
+            details: 'Your track is now available',
+            speed: '',
+            timeRemaining: 'Redirecting...'
           });
           setPublishStatus('success');
         }
@@ -265,11 +817,17 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
           artist: result.artist.name,
           album: result.album || 'Single',
           duration: result.duration_seconds,
-          imageUrl: result.cover_art_url ? `http://localhost:8000${result.cover_art_url}` : '/default-cover.jpg',
-          audioUrl: `http://localhost:8000/${result.file_path}`,
+          imageUrl: result.cover_art_url
+            ? (result.cover_art_url.startsWith('http') ? result.cover_art_url : `${API_URL}${result.cover_art_url}`)
+            : '/default-cover.jpg',
+          audioUrl: result.stream_url
+            ? (result.stream_url.startsWith('http') ? result.stream_url : `${API_URL}${result.stream_url}`)
+            : `${API_URL}/tracks/${result.id}/stream`,
           genre: result.genre || 'Unknown',
           year: result.year || new Date().getFullYear()
         };
+        
+        console.log('Created song object for playback:', uploadedSong);
         
         // Navigate to home page and start playing the uploaded song
         setTimeout(() => {
@@ -303,17 +861,6 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
             });
           }, 500);
         }, 1500);
-      } else {
-        const errorData = await response.json();
-        console.error('Upload failed:', errorData);
-        setUploadStatus({
-          stage: 'error',
-          progress: 0,
-          message: `Upload failed: ${errorData.detail || 'Unknown error'}`
-        });
-        setPublishStatus('error');
-        alert(`Upload failed: ${errorData.detail || 'Unknown error'}`);
-      }
     } catch (error) {
       console.error('Upload error:', error);
       setUploadStatus({
@@ -329,14 +876,227 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8">
-      {/* Header */}
-      <div className="text-center">
-        <h1 className="text-2xl lg:text-3xl font-bold text-white mb-2">Upload single stream</h1>
-      </div>
+    <div className="upload-page-container">
+      <div className="min-h-screen bg-gray-900 text-white p-6">
+        <div className="max-w-4xl mx-auto space-y-8">
+        {/* Header */}
+        <div className="text-center">
+          <h1 className="text-2xl lg:text-3xl font-bold text-white mb-2">Upload single stream</h1>
+        </div>
 
-      {/* File Upload Section */}
-      <div className="bg-white/5 rounded-xl p-6 border border-white/10">
+        {/* File Upload Section */}
+        <div className="bg-white/5 rounded-xl p-6 border border-white/10 space-y-4">
+        {/* Error Message */}
+        {uploadError && (
+          <div className="bg-red-500/10 border border-red-500/50 text-red-300 px-4 py-3 rounded-lg flex items-start space-x-2">
+            <XCircle className="w-5 h-5 mt-0.5 flex-shrink-0" />
+            <div>
+              <p className="font-medium">Upload Error</p>
+              <p className="text-sm">{uploadError.error}</p>
+              {uploadError.error_code === 'unsupported_file_type' && uploadError.detected_type && (
+                <p className="text-xs mt-1">Detected type: {uploadError.detected_type}</p>
+              )}
+            </div>
+          </div>
+        )}
+        
+        {/* File Validation Status */}
+        {fileValidation && !fileValidation.valid && (
+          <div className="bg-yellow-500/10 border border-yellow-500/50 text-yellow-300 px-4 py-3 rounded-lg flex items-start space-x-2">
+            <AlertCircle className="w-5 h-5 mt-0.5 flex-shrink-0" />
+            <div>
+              <p className="font-medium">File Issue</p>
+              <p className="text-sm">{fileValidation.error}</p>
+              {fileValidation.error_code === 'unsupported_file_type' && fileValidation.detected_type && (
+                <p className="text-xs mt-1">Detected type: {fileValidation.detected_type}</p>
+              )}
+            </div>
+          </div>
+        )}
+        
+        {fileValidation?.valid && (
+          <div className="bg-green-500/10 border border-green-500/50 text-green-300 px-4 py-3 rounded-lg flex items-start space-x-2">
+            <CheckCircle className="w-5 h-5 mt-0.5 flex-shrink-0" />
+            <div>
+              <p className="font-medium">File Validated</p>
+              <p className="text-sm">
+                {fileValidation.file_size_bytes && `Size: ${(fileValidation.file_size_bytes / (1024 * 1024)).toFixed(1)}MB`}
+                {fileValidation.mime_type && ` • Type: ${fileValidation.mime_type}`}
+              </p>
+            </div>
+          </div>
+        )}
+        
+        {/* Enhanced Duplicate Track Warning */}
+        {duplicateTrack && (
+          <div className={`border px-4 py-3 rounded-lg animate-fade-in ${
+            duplicateTrack.match_type === 'exact_file' 
+              ? 'bg-red-500/10 border-red-500/50 text-red-300'
+              : duplicateTrack.confidence >= 0.9
+              ? 'bg-orange-500/10 border-orange-500/50 text-orange-300'
+              : 'bg-yellow-500/10 border-yellow-500/50 text-yellow-300'
+          }`}>
+            <div className="flex items-start space-x-3">
+              <AlertCircle className={`w-5 h-5 mt-0.5 flex-shrink-0 ${
+                duplicateTrack.match_type === 'exact_file' ? 'text-red-400'
+                : duplicateTrack.confidence >= 0.9 ? 'text-orange-400'
+                : 'text-yellow-400'
+              }`} />
+              <div className="flex-1">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <p className={`font-medium ${
+                      duplicateTrack.match_type === 'exact_file' ? 'text-red-200'
+                      : duplicateTrack.confidence >= 0.9 ? 'text-orange-200'
+                      : 'text-yellow-200'
+                    }`}>
+                      {duplicateTrack.match_type === 'exact_file' ? 'Exact Duplicate Detected' 
+                       : duplicateTrack.confidence >= 0.9 ? 'Very Similar Track Found'
+                       : 'Possible Duplicate Track'}
+                    </p>
+                    {duplicateTrack.confidence && (
+                      <div className="flex items-center space-x-2 mt-1">
+                        <span className="text-xs opacity-80">Confidence:</span>
+                        <div className="flex items-center space-x-1">
+                          <div className="w-16 h-1.5 bg-gray-700 rounded-full overflow-hidden">
+                            <div 
+                              className={`h-full rounded-full ${
+                                duplicateTrack.confidence >= 0.9 ? 'bg-red-400'
+                                : duplicateTrack.confidence >= 0.8 ? 'bg-orange-400'
+                                : 'bg-yellow-400'
+                              }`}
+                              style={{ width: `${duplicateTrack.confidence * 100}%` }}
+                            />
+                          </div>
+                          <span className="text-xs font-mono">{(duplicateTrack.confidence * 100).toFixed(0)}%</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <button 
+                    onClick={() => setDuplicateTrack(null)}
+                    className={`hover:opacity-75 transition-colors ${
+                      duplicateTrack.match_type === 'exact_file' ? 'text-red-400'
+                      : duplicateTrack.confidence >= 0.9 ? 'text-orange-400'
+                      : 'text-yellow-400'
+                    }`}
+                  >
+                    <XCircle className="w-5 h-5" />
+                  </button>
+                </div>
+                <p className="text-sm mt-2 opacity-90">
+                  {duplicateTrack.reason || 'A similar track was found in the library:'}
+                </p>
+                <div className={`mt-3 bg-black/20 p-4 rounded-lg border ${
+                  duplicateTrack.match_type === 'exact_file' ? 'border-red-500/20'
+                  : duplicateTrack.confidence >= 0.9 ? 'border-orange-500/20'
+                  : 'border-yellow-500/20'
+                }`}>
+                  <div className="flex items-start space-x-3">
+                    <div className={`w-12 h-12 rounded flex items-center justify-center flex-shrink-0 ${
+                      duplicateTrack.match_type === 'exact_file' ? 'bg-red-500/10'
+                      : duplicateTrack.confidence >= 0.9 ? 'bg-orange-500/10'
+                      : 'bg-yellow-500/10'
+                    }`}>
+                      <Music className={`w-5 h-5 ${
+                        duplicateTrack.match_type === 'exact_file' ? 'text-red-400'
+                        : duplicateTrack.confidence >= 0.9 ? 'text-orange-400'
+                        : 'text-yellow-400'
+                      }`} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className={`font-medium truncate ${
+                        duplicateTrack.match_type === 'exact_file' ? 'text-red-100'
+                        : duplicateTrack.confidence >= 0.9 ? 'text-orange-100'
+                        : 'text-yellow-100'
+                      }`}>{duplicateTrack.title}</p>
+                      <p className={`text-sm truncate ${
+                        duplicateTrack.match_type === 'exact_file' ? 'text-red-300/80'
+                        : duplicateTrack.confidence >= 0.9 ? 'text-orange-300/80'
+                        : 'text-yellow-300/80'
+                      }`}>{duplicateTrack.artist_name}</p>
+                      
+                      {/* Basic Info */}
+                      <div className={`flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs ${
+                        duplicateTrack.match_type === 'exact_file' ? 'text-red-400/80'
+                        : duplicateTrack.confidence >= 0.9 ? 'text-orange-400/80'
+                        : 'text-yellow-400/80'
+                      }`}>
+                        <span>Size: {duplicateTrack.file_size_mb?.toFixed(1)}MB</span>
+                        <span>Uploaded: {new Date(duplicateTrack.uploaded_at).toLocaleDateString()}</span>
+                        {duplicateTrack.size_difference_pct && (
+                          <span>Size difference: {duplicateTrack.size_difference_pct}%</span>
+                        )}
+                      </div>
+                      
+                      {/* Similarity Metrics */}
+                      {(duplicateTrack.title_similarity || duplicateTrack.artist_similarity || duplicateTrack.duration_similarity) && (
+                        <div className="mt-3 space-y-2">
+                          <p className="text-xs font-medium opacity-80">Similarity Breakdown:</p>
+                          <div className="grid grid-cols-2 gap-2 text-xs">
+                            {duplicateTrack.title_similarity && (
+                              <div className="flex justify-between">
+                                <span>Title:</span>
+                                <span className="font-mono">{(duplicateTrack.title_similarity * 100).toFixed(0)}%</span>
+                    </div>
+                            )}
+                            {duplicateTrack.artist_similarity && (
+                              <div className="flex justify-between">
+                                <span>Artist:</span>
+                                <span className="font-mono">{(duplicateTrack.artist_similarity * 100).toFixed(0)}%</span>
+                              </div>
+                            )}
+                            {duplicateTrack.duration_similarity && (
+                              <div className="flex justify-between">
+                                <span>Duration:</span>
+                                <span className="font-mono">{(duplicateTrack.duration_similarity * 100).toFixed(0)}%</span>
+                              </div>
+                            )}
+                            {duplicateTrack.album_similarity && (
+                              <div className="flex justify-between">
+                                <span>Album:</span>
+                                <span className="font-mono">{(duplicateTrack.album_similarity * 100).toFixed(0)}%</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-4 flex flex-wrap gap-3">
+                  <button
+                    onClick={() => handlePublish(true)}
+                    className="px-4 py-2 bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-300 rounded-lg text-sm font-medium transition-colors border border-yellow-500/30 hover:border-yellow-500/50 flex items-center space-x-2"
+                  >
+                    <Upload className="w-4 h-4" />
+                    <span>Upload Anyway</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setDuplicateTrack(null);
+                      setUploadStatus({
+                        stage: 'idle',
+                        progress: 0,
+                        message: '',
+                        details: '',
+                        speed: '',
+                        timeRemaining: ''
+                      });
+                    }}
+                    className="px-4 py-2 bg-white/5 hover:bg-white/10 text-white rounded-lg text-sm font-medium transition-colors border border-white/10 hover:border-white/20 flex items-center space-x-2"
+                  >
+                    <XCircle className="w-4 h-4" />
+                    <span>Cancel</span>
+                  </button>
+                </div>
+                <p className="text-xs mt-3 text-yellow-400/70">
+                  If this is a different version or remix, consider updating the title to reflect the difference.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
         <div
           className={`relative border-2 border-dashed rounded-xl p-12 text-center transition-all duration-200 ${
             dragActive 
@@ -606,53 +1366,169 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
             </div>
           </div>
 
-          {(uploadStatus.stage === 'uploading' || uploadStatus.stage === 'processing' || uploadStatus.stage === 'generating_art' || uploadStatus.stage === 'success' || uploadStatus.stage === 'error') && (
-            <div className="pt-4">
-              <div className="bg-white/5 rounded-lg p-4 border border-white/10">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-white text-sm font-medium">
-                    {uploadStatus.stage === 'uploading' && 'Uploading your track...'}
-                    {uploadStatus.stage === 'processing' && 'Processing your track...'}
-                    {uploadStatus.stage === 'generating_art' && 'Generating cover art...'}
-                    {uploadStatus.stage === 'success' && 'Upload complete!'}
-                    {uploadStatus.stage === 'error' && 'Upload failed'}
-                  </span>
-                  <span className="text-purple-400 text-sm font-bold">
-                    {uploadStatus.progress}%{uploadStatus.stage === 'success' && ' '}
-                  </span>
-                </div>
-                <div className="w-full bg-gray-700 rounded-full h-2 mb-2">
-                  <div 
-                    className={`h-2 rounded-full transition-all duration-300 ease-out ${
-                      uploadStatus.stage === 'error' 
-                        ? 'bg-red-500' 
-                        : uploadStatus.stage === 'success'
-                        ? 'bg-green-500'
-                        : 'bg-gradient-to-r from-purple-500 to-pink-500'
-                    }`}
-                    style={{ width: `${uploadStatus.progress}%` }}
-                  ></div>
-                </div>
-                <div className="text-gray-400 text-xs">
-                  {uploadStatus.stage === 'uploading' && (
-                    <span>Please don't close this page while uploading...</span>
-                  )}
-                  {uploadStatus.stage === 'processing' && (
-                    <span>Processing your track. This may take a moment...</span>
-                  )}
-                  {uploadStatus.stage === 'generating_art' && (
-                    <span>Creating beautiful cover art for your track...</span>
-                  )}
-                  {uploadStatus.stage === 'success' && (
-                    <span className="text-green-400">Your track has been successfully uploaded and is now processing.</span>
-                  )}
+          {showStatusModal && (
+            <div 
+              className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+              onClick={(e) => {
+                if (e.target === e.currentTarget && uploadStatus.stage !== 'uploading' && uploadStatus.stage !== 'processing' && uploadStatus.stage !== 'generating_art') {
+                  setShowStatusModal(false);
+                }
+              }}
+            >
+              <div 
+                ref={statusModalRef}
+                className="bg-gray-900/95 rounded-2xl p-6 max-w-lg w-full mx-4 border border-white/10 shadow-2xl shadow-black/50 transform transition-all duration-300 animate-fade-in relative"
+              >
+                <button 
+                  onClick={() => {
+                    if (uploadStatus.stage !== 'uploading' && uploadStatus.stage !== 'processing' && uploadStatus.stage !== 'generating_art') {
+                      setShowStatusModal(false);
+                    }
+                  }}
+                  className={`absolute top-4 right-4 p-1 rounded-full ${uploadStatus.stage === 'uploading' || uploadStatus.stage === 'processing' || uploadStatus.stage === 'generating_art' 
+                    ? 'text-gray-500 cursor-not-allowed' 
+                    : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}
+                  disabled={uploadStatus.stage === 'uploading' || uploadStatus.stage === 'processing' || uploadStatus.stage === 'generating_art'}
+                  aria-label="Close"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+                <div className="space-y-6">
+                  <div className="flex items-start space-x-4">
+                    <div className="flex-shrink-0">
+                      {uploadStatus.stage === 'uploading' && (
+                        <div className="relative">
+                          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500/20 to-blue-500/20 flex items-center justify-center">
+                            <Loader2 className="w-6 h-6 text-purple-400 animate-spin" />
+                          </div>
+                          <div className="absolute -inset-1 bg-gradient-to-br from-purple-500/30 to-blue-500/30 rounded-full animate-pulse blur-sm"></div>
+                        </div>
+                      )}
+                      {uploadStatus.stage === 'processing' && (
+                        <div className="relative">
+                          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500/20 to-cyan-500/20 flex items-center justify-center">
+                            <Loader2 className="w-6 h-6 text-blue-400 animate-spin" />
+                          </div>
+                          <div className="absolute -inset-1 bg-gradient-to-br from-blue-500/30 to-cyan-500/30 rounded-full animate-pulse blur-sm"></div>
+                        </div>
+                      )}
+                      {uploadStatus.stage === 'generating_art' && (
+                        <div className="relative">
+                          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-pink-500/20 to-rose-500/20 flex items-center justify-center">
+                            <Loader2 className="w-6 h-6 text-pink-400 animate-spin" />
+                          </div>
+                          <div className="absolute -inset-1 bg-gradient-to-br from-pink-500/30 to-rose-500/30 rounded-full animate-pulse blur-sm"></div>
+                        </div>
+                      )}
+                      {uploadStatus.stage === 'success' && (
+                        <div className="relative">
+                          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-green-500/20 to-emerald-500/20 flex items-center justify-center">
+                            <CheckCircle className="w-6 h-6 text-green-400" />
+                          </div>
+                          <div className="absolute -inset-1 bg-gradient-to-br from-green-500/30 to-emerald-500/30 rounded-full animate-ping opacity-20"></div>
+                        </div>
+                      )}
+                      {uploadStatus.stage === 'error' && (
+                        <div className="relative">
+                          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-red-500/20 to-rose-500/20 flex items-center justify-center">
+                            <XCircle className="w-6 h-6 text-red-400" />
+                          </div>
+                          <div className="absolute -inset-1 bg-gradient-to-br from-red-500/30 to-rose-500/30 rounded-full animate-pulse"></div>
+                        </div>
+                      )}
+                    </div>
+                    
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-xl font-bold text-white leading-tight">
+                        {uploadStatus.message}
+                      </h3>
+                      {uploadStatus.details && (
+                        <p className="text-gray-300 text-sm mt-1">{uploadStatus.details}</p>
+                      )}
+                      
+                      {uploadStatus.timeRemaining && (
+                        <p className="text-xs text-gray-400 mt-2">
+                          {uploadStatus.timeRemaining}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  
+                  {(uploadStatus.stage === 'uploading' || uploadStatus.stage === 'processing' || uploadStatus.stage === 'generating_art') && (
+                    <div className="space-y-3">
+                      <div className="w-full bg-gray-800/50 rounded-full h-2.5 overflow-hidden">
+                        <div 
+                          className={`h-full rounded-full transition-all duration-500 ease-out ${
+                            uploadStatus.stage === 'uploading' 
+                              ? 'bg-gradient-to-r from-purple-500 to-blue-500' 
+                              : uploadStatus.stage === 'processing'
+                                ? 'bg-gradient-to-r from-blue-500 to-cyan-500'
+                                : 'bg-gradient-to-r from-pink-500 to-rose-500'
+                          }`}
+                          style={{ 
+                            width: `${uploadStatus.progress}%`,
+                            transitionProperty: 'width',
+                            transitionTimingFunction: 'cubic-bezier(0.4, 0, 0.2, 1)'
+                          }}
+                        />
+                      </div>
+                      
+                      {(uploadStatus.speed || uploadStatus.progress) && (
+                        <div className="flex justify-between items-center text-xs">
+                          {uploadStatus.speed && (
+                            <div className="flex items-center space-x-1 text-gray-400">
+                              <span>Speed:</span>
+                              <span className="font-mono text-white">{uploadStatus.speed}</span>
+                            </div>
+                          )}
+                          
+                          <div className="flex items-center space-x-1">
+                            <span className="text-gray-400">Progress:</span>
+                            <span className="font-mono text-white">
+                              {Math.round(uploadStatus.progress)}%
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {uploadStatus.stage === 'uploading' && uploadStatus.details && (
+                        <div className="text-xs text-gray-400 mt-1">
+                          {uploadStatus.details}
+                        </div>
+                          )}
+                          {uploadStatus.timeRemaining && (
+                            <div className="space-y-1">
+                              <span className="text-gray-400">Time Remaining</span>
+                              <div className="font-mono text-white">{uploadStatus.timeRemaining}</div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  
                   {uploadStatus.stage === 'error' && (
-                    <span className="text-red-400">{uploadStatus.message || 'An error occurred during upload.'}</span>
+                    <div className="pt-2">
+                      <button
+                        onClick={() => {
+                          setUploadStatus({ 
+                            stage: 'idle', 
+                            progress: 0, 
+                            message: '',
+                            details: '',
+                            speed: '',
+                            timeRemaining: ''
+                          });
+                          setIsPublishing(false);
+                        }}
+                        className="w-full px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors"
+                      >
+                        Close
+                      </button>
+                    </div>
                   )}
                 </div>
               </div>
-            </div>
-          )}
+            )}
 
           {/* Publish Button */}
           <div className="pt-4">
@@ -746,9 +1622,12 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
             </p>
           </div>
         </div>
+          </div>
+        </div>
       </div>
     </div>
   );
 };
 
 export default UploadPage;
+

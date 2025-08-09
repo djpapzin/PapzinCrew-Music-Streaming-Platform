@@ -36,7 +36,7 @@ function App() {
   return (
     <div className="h-screen bg-black text-white flex flex-col">
       {/* Hidden audio element */}
-      <audio ref={audioRef} />
+      <audio ref={audioRef} preload="auto" playsInline />
       
       <div className="flex flex-1 overflow-hidden">
         {/* Desktop Sidebar */}
