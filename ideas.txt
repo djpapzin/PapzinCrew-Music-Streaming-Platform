@@ -229,3 +229,15 @@ Artist Style: Classical → "Elegant orchestral instruments, concert hall"
 - Extend `/health` or add `/storage/health` to expose: b2_configured, bucket name, and optional write test.
 - Log uploaded location (B2 key or local path) in success response and admin logs.
 - Admin setting to force local storage for development/testing.
+
+## 2025-08-09 Updates
+- Repo hygiene:
+  - Standardized SQLite to single DB at `backend/papzin_crew.db` (removed duplicate root `papzin_crew.db`).
+  - Updated Alembic `sqlalchemy.url` to match backend DB path.
+  - Ensured Git ignores: `__pycache__/`, `.venv/`, `venv/`, and both `backend/papzin_crew.db` and root `papzin_crew.db`.
+- Git history cleanup: removed tracked `__pycache__` files from repo.
+- Branches: merged `feature/uploads-management` into `main` and deleted the feature branch (local + remote).
+- Next small tasks:
+  - Verify DB migrations run cleanly against `backend/papzin_crew.db`.
+  - Add `/storage/health` endpoint (or extend `/health`) to report B2 configuration and optional write test.
+  - Confirm backend success responses log and return uploaded storage location (B2 key vs local path).
