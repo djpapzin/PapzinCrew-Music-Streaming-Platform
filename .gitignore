@@ -10,6 +10,7 @@ __pycache__/
 
 # FastAPI/SQLite
 backend/papzin_crew.db
+papzin_crew.db
 backend/uploads/
 
 # Env
