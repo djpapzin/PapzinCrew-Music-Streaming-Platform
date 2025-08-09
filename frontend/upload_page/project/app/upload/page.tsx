@@ -176,6 +176,8 @@ function HomeContent() {
     }
   };
 
+  const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+
   const handlePublish = async (formData: any) => {
     setIsUploading(true);
     setUploadProgress(0);
@@ -207,7 +209,7 @@ function HomeContent() {
     }
 
     try {
-      const response = await axios.post('http://localhost:8000/upload', publishData, {
+      const response = await axios.post(`${API_BASE}/upload`, publishData, {
         onUploadProgress: (progressEvent) => {
           const percentCompleted = Math.round(
             (progressEvent.loaded * 100) / (progressEvent.total ?? 1)
