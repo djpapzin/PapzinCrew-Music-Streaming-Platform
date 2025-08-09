@@ -2,7 +2,12 @@ from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
-SQLALCHEMY_DATABASE_URL = "sqlite:///./papzin_crew.db"
+import os
+from pathlib import Path
+
+# Get the absolute path to the backend directory
+backend_dir = Path(__file__).parent.parent.parent
+SQLALCHEMY_DATABASE_URL = f"sqlite:///{backend_dir}/papzin_crew.db"
 
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}

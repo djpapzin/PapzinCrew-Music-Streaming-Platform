@@ -7,9 +7,12 @@ __pycache__/
 *.egg-info/
 .pytest_cache/
 .mypy_cache/
+.venv/
+venv/
 
 # FastAPI/SQLite
 backend/papzin_crew.db
+papzin_crew.db
 backend/uploads/
 
 # Env

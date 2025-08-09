@@ -2,11 +2,19 @@ fastapi
 uvicorn[standard]
 sqlalchemy
 alembic
-psycopg2-binary
 python-dotenv
+python-multipart
 mutagen
+httpx
+boto3
+python-magic-bin
+psycopg2-binary
 python-multipart
 requests
 Pillow
 huggingface-hub
 python-multipart
+python-magic-bin; platform_system == "Windows"
+python-magic; platform_system != "Windows"
+boto3
+b2
