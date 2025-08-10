@@ -354,6 +354,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
   };
 
   const handlePublish = async (forceUpload = false) => {
+    console.log('[Upload] handlePublish called', { forceUpload, hasDuplicate: !!duplicateTrack });
     if (!uploadedFile) {
       setUploadError({
         error: 'Please select an audio file first.',
@@ -364,6 +365,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
 
     // If we have a duplicate and user hasn't confirmed to continue
     if (duplicateTrack && !forceUpload) {
+      console.log('[Upload] Duplicate present. Waiting for user to confirm overwrite.');
       return; // The UI will show the duplicate warning
     }
     
@@ -394,13 +396,9 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
       }
     }
 
-    // If custom prompt is shown but empty, show an error
-    if (showCustomPrompt && !customPrompt.trim()) {
-      setUploadError({
-        error: 'Please enter a custom prompt or click "Generate Automatically"',
-        error_code: 'missing_custom_prompt'
-      });
-      return;
+    // Custom prompt is optional; if blank, we'll generate automatically
+    if (showCustomPrompt) {
+      console.log('[Upload] Custom prompt state:', { provided: !!customPrompt.trim() });
     }
 
     if (!formData.title.trim()) {
@@ -433,6 +431,12 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
       canCancel: true,
       extractedMetadata: null
     });
+    
+    // If user chose to force upload, clear duplicate warning UI
+    if (forceUpload) {
+      console.log('[Upload] Forcing upload. Clearing duplicate banner and setting skip_duplicate_check.');
+      setDuplicateTrack(null);
+    }
 
     try {
       const uploadFormData = new FormData();
@@ -452,7 +456,13 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
       uploadFormData.append('display_embed', formData.displayEmbedCode.toLowerCase());
       uploadFormData.append('age_restriction', formData.ageRestriction.toLowerCase());
       
-      // Add custom prompt if provided
+      // When forcing upload, instruct backend to skip duplicate detection
+      if (forceUpload) {
+        console.log('[Upload] Appending skip_duplicate_check=true to FormData');
+        uploadFormData.append('skip_duplicate_check', 'true');
+      }
+      
+      // Add custom prompt only if provided
       if (showCustomPrompt && customPrompt.trim()) {
         uploadFormData.append('custom_prompt', customPrompt.trim());
       }
@@ -503,20 +513,26 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
           if (fileUploadProgress < 10) phaseMessage = 'Starting upload';
           else if (fileUploadProgress > 90) phaseMessage = 'Finalizing upload';
           
-          setUploadStatus(prev => ({
-            ...prev,
-            stage: 'uploading',
-            progress: overallProgress,
-            message: `${phaseMessage}: ${fileUploadProgress}%`,
-            details: `${loadedMB.toFixed(1)}MB of ${totalMB.toFixed(1)}MB uploaded`,
-            phase: 'file_upload',
-            phaseProgress: fileUploadProgress,
-            canCancel: true,
-            speed: speedKbps > 1024 
-              ? `${(speedKbps / 1024).toFixed(1)} MB/s` 
-              : `${Math.ceil(speedKbps)} KB/s`,
-            timeRemaining: remainingTime > 0 ? `About ${formatTime(remainingTime)} remaining` : 'Almost done...'
-          }));
+          setUploadStatus(prev => {
+            // Only update during the initial file upload phase. Once we
+            // transition to processing/AI phases, ignore late upload events
+            // that could incorrectly reset progress back to 40%.
+            if (prev.phase !== 'file_upload') return prev;
+            return {
+              ...prev,
+              stage: 'uploading',
+              progress: overallProgress,
+              message: `${phaseMessage}: ${fileUploadProgress}%`,
+              details: `${loadedMB.toFixed(1)}MB of ${totalMB.toFixed(1)}MB uploaded`,
+              phase: 'file_upload',
+              phaseProgress: fileUploadProgress,
+              canCancel: true,
+              speed: speedKbps > 1024 
+                ? `${(speedKbps / 1024).toFixed(1)} MB/s` 
+                : `${Math.ceil(speedKbps)} KB/s`,
+              timeRemaining: remainingTime > 0 ? `About ${formatTime(remainingTime)} remaining` : 'Almost done...'
+            };
+          });
         }
       });
       
@@ -558,24 +574,33 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
       // Create promise to handle XMLHttpRequest
       const uploadPromise = new Promise<Response>((resolve, reject) => {
         xhr.onload = () => {
+          // Parse response JSON once if possible
+          let parsed: any = null;
+          try { parsed = JSON.parse(xhr.responseText); } catch (_) {}
+
+          // FastAPI nests payload under `detail` for HTTPException
+          const detail = parsed?.detail || parsed;
+
+          // Handle duplicate conflict (409) BEFORE 2xx branch
+          if (xhr.status === 409 && (detail?.error_code === 'duplicate_track' || parsed?.error_code === 'duplicate_track')) {
+            const dupInfo = detail?.duplicate_info || parsed?.duplicate_info || null;
+            setDuplicateTrack(dupInfo || { match_type: 'db_unique_constraint', reason: 'Duplicate found' });
+            setIsPublishing(false);
+            setShowStatusModal(false);
+            setUploadStatus({
+              stage: 'idle',
+              progress: 0,
+              message: '',
+              details: '',
+              speed: '',
+              timeRemaining: ''
+            });
+            return;
+          }
+
           if (xhr.status >= 200 && xhr.status < 300) {
             try {
-              const response = JSON.parse(xhr.responseText);
-              
-              // Check for duplicate track response
-              if (xhr.status === 409 && response.error_code === 'duplicate_track') {
-                setDuplicateTrack(response.duplicate_info);
-                setIsPublishing(false);
-                setUploadStatus({
-                  stage: 'idle',
-                  progress: 0,
-                  message: '',
-                  details: '',
-                  speed: '',
-                  timeRemaining: ''
-                });
-                return;
-              }
+              const response = parsed || {};
               
               // Phase 2: Metadata Processing (40-70% of total progress)
               setUploadStatus({
@@ -626,19 +651,22 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
             console.error('Upload failed with status:', xhr.status, xhr.statusText);
             console.error('Response text:', xhr.responseText);
             
-            // Try to parse error response if it's JSON
-            let errorMessage = `HTTP ${xhr.status}: ${xhr.statusText}`;
-            try {
-              const errorResponse = JSON.parse(xhr.responseText);
-              if (errorResponse.error) {
-                errorMessage = errorResponse.error;
-              }
-            } catch (e) {
-              // If we can't parse the error response, use the default message
-              console.error('Error parsing error response:', e);
-            }
+            // Prefer server-provided message when available
+            const serverMsg = detail?.error || parsed?.error || detail?.message || xhr.statusText;
+            setUploadStatus(prev => ({
+              ...prev,
+              stage: 'error',
+              progress: 0,
+              message: 'Upload failed',
+              details: serverMsg,
+              canCancel: false,
+              phase: 'none',
+              phaseProgress: 0,
+              speed: '',
+              timeRemaining: ''
+            }));
             
-            reject(new Error(errorMessage));
+            reject(new Error(`HTTP ${xhr.status}: ${serverMsg}`));
           }
         };
         
@@ -652,6 +680,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
           reject(new Error('Upload timeout'));
         };
         
+        console.log('[Upload] Opening XHR to /upload');
         xhr.open('POST', `${API_URL}/upload`, true);
         // Set withCredentials to include cookies if needed
         xhr.withCredentials = false;
@@ -662,6 +691,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
         // For CORS preflight, the browser will handle the headers
         // We don't need to manually set Content-Type for FormData, the browser will set it with the correct boundary
         
+        console.log('[Upload] Sending XHR with form data (forced? ', forceUpload, ')');
         xhr.send(uploadFormData);
       });
       
@@ -1066,8 +1096,9 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
                 </div>
                 <div className="mt-4 flex flex-wrap gap-3">
                   <button
-                    onClick={() => handlePublish(true)}
-                    className="px-4 py-2 bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-300 rounded-lg text-sm font-medium transition-colors border border-yellow-500/30 hover:border-yellow-500/50 flex items-center space-x-2"
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); console.log('[Upload] Upload Anyway clicked'); handlePublish(true); }}
+                    disabled={isPublishing}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors border flex items-center space-x-2 ${isPublishing ? 'opacity-50 cursor-not-allowed bg-yellow-500/10 border-yellow-500/20 text-yellow-400/70' : 'bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-300 border-yellow-500/30 hover:border-yellow-500/50'}`}
                   >
                     <Upload className="w-4 h-4" />
                     <span>Upload Anyway</span>
@@ -1366,7 +1397,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
             </div>
           </div>
 
-          {showStatusModal && (
+          {showStatusModal ? (
             <div 
               className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center z-50 p-4"
               onClick={(e) => {
@@ -1454,6 +1485,53 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
                     </div>
                   </div>
                   
+                  {/* Phase stepper and per-phase progress */}
+                  {(uploadStatus.stage === 'uploading' || uploadStatus.stage === 'processing' || uploadStatus.stage === 'generating_art') && (
+                    <div className="mt-2 space-y-2">
+                      <div className="flex items-center justify-between text-[11px] text-gray-400">
+                        <div className={`flex-1 flex items-center ${uploadStatus.progress >= 1 ? 'text-white' : ''}`}>
+                          <div className={`w-6 h-6 rounded-full flex items-center justify-center border ${uploadStatus.progress >= 1 ? 'bg-purple-500/30 border-purple-400 text-white' : 'bg-gray-800 border-gray-700 text-gray-400'}`}>1</div>
+                          <span className="ml-2 truncate">Upload</span>
+                        </div>
+                        <div className="w-8 h-px bg-gray-700 mx-2" />
+                        <div className={`flex-1 flex items-center ${uploadStatus.progress >= 40 ? 'text-white' : ''}`}>
+                          <div className={`w-6 h-6 rounded-full flex items-center justify-center border ${uploadStatus.progress >= 40 ? 'bg-blue-500/30 border-blue-400 text-white' : 'bg-gray-800 border-gray-700 text-gray-400'}`}>2</div>
+                          <span className="ml-2 truncate">Process</span>
+                        </div>
+                        <div className="w-8 h-px bg-gray-700 mx-2" />
+                        <div className={`flex-1 flex items-center ${uploadStatus.progress >= 70 ? 'text-white' : ''}`}>
+                          <div className={`w-6 h-6 rounded-full flex items-center justify-center border ${uploadStatus.progress >= 70 ? 'bg-pink-500/30 border-pink-400 text-white' : 'bg-gray-800 border-gray-700 text-gray-400'}`}>3</div>
+                          <span className="ml-2 truncate">Cover Art</span>
+                        </div>
+                      </div>
+                      <div className="text-xs text-gray-300">
+                        <span>Current phase: </span>
+                        <span className="font-medium text-white">
+                          {uploadStatus.phase === 'file_upload' ? 'File Upload' : uploadStatus.phase === 'metadata_extraction' ? 'Metadata Processing' : uploadStatus.phase === 'ai_generation' ? 'AI Cover Art' : uploadStatus.phase === 'complete' ? 'Complete' : 'Preparing'}
+                        </span>
+                      </div>
+                      <div>
+                        <div className="w-full bg-gray-800/50 rounded-full h-1.5 overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all duration-500 ease-out ${
+                              uploadStatus.phase === 'file_upload'
+                                ? 'bg-gradient-to-r from-purple-500 to-blue-500'
+                                : uploadStatus.phase === 'metadata_extraction'
+                                  ? 'bg-gradient-to-r from-blue-500 to-cyan-500'
+                                  : 'bg-gradient-to-r from-pink-500 to-rose-500'
+                            }`}
+                            style={{ width: `${Math.max(0, Math.min(100, uploadStatus.phaseProgress || 0))}%` }}
+                          />
+                        </div>
+                        <div className="mt-1 text-[11px] text-gray-400">
+                          {uploadStatus.phase === 'file_upload' && (uploadStatus.phaseProgress < 10 ? 'Starting upload...' : uploadStatus.phaseProgress < 90 ? 'Uploading audio...' : 'Finalizing upload...')}
+                          {uploadStatus.phase === 'metadata_extraction' && (uploadStatus.phaseProgress < 50 ? 'Analyzing audio format...' : uploadStatus.phaseProgress < 80 ? 'Extracting metadata...' : 'Preparing for cover art generation...')}
+                          {uploadStatus.phase === 'ai_generation' && (uploadStatus.phaseProgress < 30 ? 'Analyzing song metadata...' : uploadStatus.phaseProgress < 60 ? 'Generating AI artwork...' : 'Finalizing cover art...')}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  
                   {(uploadStatus.stage === 'uploading' || uploadStatus.stage === 'processing' || uploadStatus.stage === 'generating_art') && (
                     <div className="space-y-3">
                       <div className="w-full bg-gray-800/50 rounded-full h-2.5 overflow-hidden">
@@ -1495,16 +1573,26 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
                         <div className="text-xs text-gray-400 mt-1">
                           {uploadStatus.details}
                         </div>
-                          )}
-                          {uploadStatus.timeRemaining && (
-                            <div className="space-y-1">
-                              <span className="text-gray-400">Time Remaining</span>
-                              <div className="font-mono text-white">{uploadStatus.timeRemaining}</div>
-                            </div>
-                          )}
+                      )}
+                      {uploadStatus.timeRemaining && (
+                        <div className="space-y-1">
+                          <span className="text-gray-400">Time Remaining</span>
+                          <div className="font-mono text-white">{uploadStatus.timeRemaining}</div>
                         </div>
                       )}
                     </div>
+                  )}
+                  
+                  {uploadStatus.canCancel && (
+                    <div className="pt-2 flex justify-end">
+                      <button
+                        onClick={cancelUpload}
+                        className="px-3 py-2 text-sm rounded-lg bg-white/5 hover:bg-white/10 text-gray-200 border border-white/10 transition-colors"
+                      >
+                        Cancel upload
+                      </button>
+                    </div>
+                  )}
                   
                   {uploadStatus.stage === 'error' && (
                     <div className="pt-2">
@@ -1528,7 +1616,8 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
                   )}
                 </div>
               </div>
-            )}
+              </div>
+            ) : null}
 
           {/* Publish Button */}
           <div className="pt-4">
