@@ -241,3 +241,31 @@ Artist Style: Classical → "Elegant orchestral instruments, concert hall"
   - Verify DB migrations run cleanly against `backend/papzin_crew.db`.
   - Add `/storage/health` endpoint (or extend `/health`) to report B2 configuration and optional write test.
   - Confirm backend success responses log and return uploaded storage location (B2 key vs local path).
+
+  - remove hard coded songs and only show uploaded songs
+
+  - creat dashboard to manage uploads.
+
+## 2025-08-10 Updates
+
+- Frontend build fix:
+  - Resolved JSX syntax error in `frontend/project/src/components/UploadPage.tsx` upload status modal.
+  - Switched conditional render from `&&` to a ternary and added a missing closing `</div>` for the overlay container.
+  - Verified build passes: `npm run build` succeeds.
+
+- Documentation updates:
+  - `README.md`: Updated stack to React + Vite, corrected repo URL, frontend path (`frontend/project`) and dev port (5173), clarified storage defaults (Backblaze B2 by default, local fallback), and added Environment notes (`VITE_API_URL`, backend `.env`).
+  - `QUICKSTART.md`: Refreshed features to reflect multi-phase upload progress, cancel upload, environment configuration, and storage notes.
+
+- Duplicate/Overwrite flow hardening:
+  - Frontend duplicate banner: "Upload Anyway" now prevents default/bubbling, disables while publishing, and logs clicks.
+  - `handlePublish(true)`: clears duplicate UI, appends `skip_duplicate_check=true`, logs force path, and sends XHR.
+  - Backend: when `skip_duplicate_check` is true and B2 is configured, generate a unique audio key to avoid DB unique constraint conflicts; still returns 409 when not forced.
+  - Custom prompt is optional; blank means generate automatically (no blocking validation).
+  - Progress bar bug fixed: upload progress events only update during `file_upload` phase so overall progress advances 0–40–70–100 correctly.
+
+- Next steps:
+  - Run dev servers and test upload flow across phases and error states; verify cancel resets all state.
+  - Verify B2 default + local fallback behavior and surface storage location in success responses/logs.
+  - Remove hard-coded songs and only show uploaded songs.
+  - Create an uploads management dashboard.

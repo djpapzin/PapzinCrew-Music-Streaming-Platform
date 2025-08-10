@@ -33,10 +33,10 @@ npm run dev
 
 Once both servers are running, you'll have access to:
 
-- **AI-Assisted Upload**: Automatic metadata extraction from audio files
-- **Real-time Progress**: Visual upload progress tracking
-- **Auto-play Integration**: Uploaded tracks automatically start playing
-- **Cover Art Display**: Extracted album artwork from audio files
+- **AI-Assisted Upload**: Automatic metadata extraction; optional AI-generated cover art when missing
+- **Multi-phase Progress**: Uploading (0–40%), Processing metadata (40–70%), AI cover art (70–100%), with speed and ETA
+- **Cancel Upload**: Cancel during active phases
+- **Auto-play Integration**: Uploaded tracks can start playing after publish
 - **Seamless Navigation**: Smooth transition from upload to now playing
 
 ## 📍 Access Points
@@ -44,6 +44,11 @@ Once both servers are running, you'll have access to:
 - **Frontend**: http://localhost:5173 (or the port shown in terminal)
 - **Backend API**: http://localhost:8000
 - **Upload Page**: http://localhost:5173/upload
+
+## 🔐 Environment
+
+- Frontend: set `VITE_API_URL` (e.g., `http://localhost:8000`). If unset, defaults to `http://localhost:8000`.
+- Backend: copy `backend/.env.example` to `backend/.env` and configure Backblaze B2 credentials if available. When B2 is not configured or fails, uploads fall back to local storage.
 
 ## 🛠️ Troubleshooting
 
@@ -57,6 +62,11 @@ Once both servers are running, you'll have access to:
 - Clear node_modules if needed: `rm -rf node_modules && npm install`
 - Check if port 5173 is available
 
+### 409 Conflict during upload
+- Cause: duplicate detected by backend when not forcing overwrite.
+- Fix: Click "Upload Anyway" on the duplicate banner to resend with `skip_duplicate_check=true`.
+- Verify in browser DevTools → Network → POST /upload → Form Data contains `skip_duplicate_check: true`.
+
 ## 🎯 Testing the Upload Feature
 
 1. Navigate to http://localhost:5173/upload
@@ -66,13 +76,21 @@ Once both servers are running, you'll have access to:
 5. Click "Publish" to upload
 6. The track will automatically start playing after upload
 
+## 🔁 Duplicate / Overwrite Flow
+
+- The app checks for duplicates before uploading. If detected, a banner appears with track details.
+- Click "Upload Anyway" to force upload; the request includes `skip_duplicate_check=true`.
+- When forced and B2 is configured, the backend creates a unique B2 key to avoid DB unique constraint issues.
+- If you still see 409, confirm the flag is present in the Network tab and retry.
+- Custom cover art prompt is optional; leave blank to generate automatically.
+
 ## 📝 Notes
 
 - The backend uses FastAPI with automatic metadata extraction
 - The frontend uses React with Vite for fast development
-- Upload progress is tracked in real-time
-- Cover art is automatically extracted from audio files
-- All uploaded tracks are stored locally in the `uploads` directory
+- Upload progress is tracked with a multi-phase UI and detailed status
+- Cover art is extracted from files when present; AI-generated when missing (no API key required)
+- Storage: Backblaze B2 by default (when configured); local `uploads` used as fallback
 
 ---
 
