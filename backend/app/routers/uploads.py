@@ -8,7 +8,8 @@ import hashlib
 from io import BytesIO
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status, Request
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, or_
+from sqlalchemy.exc import IntegrityError
 from typing import List, Optional, Dict, Any, Tuple
 import mutagen
 from mutagen.mp3 import MP3, HeaderNotFoundError
@@ -323,28 +324,86 @@ def get_unique_filepath(db: Session, directory: str, filename:str) -> str:
     """
     Generates a unique file path by checking both the filesystem and the database,
     and appending a number if the file already exists.
+
+    IMPORTANT: DB stores public paths like "/uploads/<name>" while the filesystem
+    uses "uploads/<name>". We must check for both to avoid UNIQUE violations.
     """
     base_name, extension = os.path.splitext(filename)
     counter = 1
     new_filename = filename
-    
+
+    # Normalize directory for public URL comparison
+    public_dir = "/" + directory.replace("\\", "/").strip("/\\")
+
     while True:
-        file_path = os.path.join(directory, new_filename)
-        # Check if file exists in filesystem
-        if not os.path.exists(file_path):
-            # Also check if this path is already in the database
-            existing_in_db = db.query(models.Mix).filter(models.Mix.file_path == file_path).first()
-            if not existing_in_db:
-                return file_path
-        
+        file_path = os.path.join(directory, new_filename)  # local filesystem style
+        public_url_path = f"{public_dir}/{new_filename}"  # how it's stored in DB for local
+
+        # Check if file exists in filesystem OR already referenced in DB
+        exists_on_disk = os.path.exists(file_path)
+        exists_in_db = db.query(models.Mix).filter(
+            or_(
+                models.Mix.file_path == file_path,       # historical/local-style path (if any)
+                models.Mix.file_path == public_url_path  # public URL style stored by app
+            )
+        ).first() is not None
+
+        if not exists_on_disk and not exists_in_db:
+            return file_path
+
         # Generate new filename with counter
         new_filename = f"{base_name}_{counter}{extension}"
         counter += 1
         # Add safety limit to prevent infinite loop
         if counter > 1000:
             break
-    
+
     return file_path
+
+@router.post("/extract-metadata")
+async def extract_metadata(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+    """
+    Extract metadata from an audio file.
+    Used by the frontend to pre-fill the upload form.
+    """
+    try:
+        # Validate the file
+        is_valid, validation_result = validate_audio_file(file, lightweight=True)
+        if not is_valid:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=validation_result.get('message', 'Invalid audio file')
+            )
+        
+        # Extract metadata with timeout; fall back to filename stem
+        try:
+            metadata = await asyncio.wait_for(asyncio.to_thread(extract_metadata_from_file, file), timeout=3.0)
+        except asyncio.TimeoutError:
+            metadata = {'title': Path(file.filename).stem}
+        except Exception as e:
+            print(f"Metadata extraction error (fast path): {e}")
+            metadata = {'title': Path(file.filename).stem}
+        
+        # Reset file position for potential further processing
+        await file.seek(0)
+        
+        return {
+            'success': True,
+            'metadata': metadata,
+            'filename': file.filename
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error in extract_metadata: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to extract metadata: {str(e)}"
+        )
 
 @router.post("/upload-mix")
 async def upload_mix(file: UploadFile = File(...), tracklist: Optional[List[Dict[str, Any]]] = None):
@@ -453,7 +512,7 @@ async def upload_mix(file: UploadFile = File(...), tracklist: Optional[List[Dict
                 # Extract cover art
                 try:
                     if audio.tags:
-                        # Try different cover art tag formats
+                        # Look for cover art in common tag locations
                         cover_art_data = None
                         
                         # For MP3 files (ID3 tags)
@@ -505,7 +564,8 @@ def check_for_duplicate_track(db: Session, title: str, artist_name: str, file_si
     """
     
     # Method 1: Exact file hash match (highest priority)
-    if file_hash:
+    # Only run if the Mix model exposes a file_hash attribute/column
+    if file_hash and hasattr(models.Mix, "file_hash"):
         hash_match = db.query(models.Mix).filter(models.Mix.file_hash == file_hash).first()
         if hash_match:
             return {
@@ -513,7 +573,7 @@ def check_for_duplicate_track(db: Session, title: str, artist_name: str, file_si
                 "title": hash_match.title,
                 "artist_name": hash_match.artist.name if hash_match.artist else "",
                 "file_size_mb": hash_match.file_size_mb,
-                "uploaded_at": hash_match.release_date,
+                "uploaded_at": hash_match.release_date.isoformat() if getattr(hash_match, "release_date", None) else None,
                 "match_type": "exact_file",
                 "confidence": 1.0,
                 "reason": "Identical file content detected"
@@ -591,7 +651,7 @@ def check_for_duplicate_track(db: Session, title: str, artist_name: str, file_si
                 "title": track.title,
                 "artist_name": track.artist.name if track.artist else "",
                 "file_size_mb": track.file_size_mb,
-                "uploaded_at": track.release_date,
+                "uploaded_at": track.release_date.isoformat() if getattr(track, "release_date", None) else None,
                 "match_type": "metadata",
                 "confidence": round(total_confidence, 3),
                 "reason": "; ".join(match_reasons) if match_reasons else "Metadata similarity",
@@ -771,7 +831,11 @@ async def upload_mix(
                     if b2.is_configured():
                         cover_key = f"covers/{base_name}{file_ext}"
                         content_type = mimetypes.guess_type(f"x{file_ext}")[0] or 'image/jpeg'
-                        public_cover_url = b2.put_bytes(cover_key, cover_bytes, content_type=content_type)
+                        _res = b2.put_bytes_safe(cover_key, cover_bytes, content_type=content_type)
+                        if _res.get("ok"):
+                            public_cover_url = _res.get("url")
+                        else:
+                            logger.warning("[upload] B2 cover upload error code=%s detail=%s", _res.get("error_code"), _res.get("detail"))
                 except Exception as e:
                     logger.warning("[upload] B2 cover upload error: %s", e)
                 # Local fallback for cover art if B2 failed or not configured
@@ -804,10 +868,18 @@ async def upload_mix(
                 if audio_metadata and hasattr(audio_metadata, 'tags'):
                     # Look for cover art in common tag locations
                     cover_art_data = None
-                    for tag in ['APIC:', 'APIC:cover', 'APIC:cover-front', 'APIC:cover.jpg', 'APIC:cover.png']:
-                        if tag in audio_metadata.tags:
-                            cover_art_data = audio_metadata.tags[tag].data
-                            break
+                    
+                    # For MP3 files (ID3 tags)
+                    if 'APIC:' in audio_metadata.tags:
+                        cover_art_data = audio_metadata.tags['APIC:'].data
+                    elif 'APIC' in audio_metadata.tags:
+                        cover_art_data = audio_metadata.tags['APIC'].data
+                    # For MP4/M4A files
+                    elif 'covr' in audio_metadata.tags:
+                        cover_art_data = audio_metadata.tags['covr'][0]
+                    # For FLAC files
+                    elif hasattr(audio_metadata, 'pictures') and audio_metadata.pictures:
+                        cover_art_data = audio_metadata.pictures[0].data
                     
                     if cover_art_data:
                         # B2-first for extracted cover art
@@ -815,7 +887,11 @@ async def upload_mix(
                             b2 = B2Storage()
                             if b2.is_configured():
                                 cover_key = f"covers/{base_name}{cover_art_extension}"
-                                public_cover_url = b2.put_bytes(cover_key, cover_art_data, content_type='image/jpeg')
+                                _res = b2.put_bytes_safe(cover_key, cover_art_data, content_type='image/jpeg')
+                                if _res.get("ok"):
+                                    public_cover_url = _res.get("url")
+                                else:
+                                    logger.warning("[upload] B2 cover upload (extracted) error code=%s detail=%s", _res.get("error_code"), _res.get("detail"))
                         except Exception as e:
                             logger.warning("[upload] B2 cover upload (extracted) error: %s", e)
                         # Local fallback for extracted cover art
@@ -870,7 +946,11 @@ async def upload_mix(
                         b2 = B2Storage()
                         if b2.is_configured():
                             cover_key = f"covers/{base_name}-ai{cover_art_extension}"
-                            public_cover_url = b2.put_bytes(cover_key, cover_art_bytes, content_type='image/jpeg')
+                            _res = b2.put_bytes_safe(cover_key, cover_art_bytes, content_type='image/jpeg')
+                            if _res.get("ok"):
+                                public_cover_url = _res.get("url")
+                            else:
+                                logger.warning("[upload] B2 cover upload (AI) error code=%s detail=%s", _res.get("error_code"), _res.get("detail"))
                     except Exception as e:
                         logger.warning("[upload] B2 cover upload (AI) error: %s", e)
                     # Local fallback for AI cover art
@@ -903,33 +983,52 @@ async def upload_mix(
 
     # B2-first: upload audio bytes directly when configured
     public_audio_url = None
+    storage_provider = None  # "b2" | "local"
+    storage_location = None  # url or local path
+    fallback_from_b2 = False
+    b2_error_code = None
     # public_cover_url was set during cover art handling above
     try:
         b2 = B2Storage()
         if b2.is_configured():
-            audio_key = f"audio/{descriptive_filename}"
+            # Use a unique key when forcing upload to bypass duplicate checks and avoid
+            # database UNIQUE(file_path) collisions. Otherwise, keep the descriptive name.
+            if skip_duplicate_check:
+                safe_hash = (file_hash or str(int(time.time()))).replace("/", "")[:16]
+                audio_key = f"audio/{base_name}-{safe_hash}{file_extension}"
+            else:
+                audio_key = f"audio/{descriptive_filename}"
             logger.info("[upload] B2 audio upload start key=%s size=%dB", audio_key, len(audio_bytes))
             termprint(f"[upload] B2 audio upload start key={audio_key} size={len(audio_bytes)}B")
             b2_timeout = float(os.getenv('B2_PUT_TIMEOUT', '20'))
             start = time.perf_counter()
             try:
-                public_audio_url = await asyncio.wait_for(
+                _res = await asyncio.wait_for(
                     asyncio.to_thread(
-                        b2.put_bytes,
+                        b2.put_bytes_safe,
                         audio_key,
                         audio_bytes,
                         validation_result.get('mime_type', 'audio/mpeg')
                     ),
                     timeout=b2_timeout
                 )
+                if _res.get("ok"):
+                    public_audio_url = _res.get("url")
+                    storage_provider = "b2"
+                    storage_location = _res.get("key") or _res.get("url")
+                else:
+                    b2_error_code = _res.get("error_code")
+                    logger.warning("[upload] B2 audio upload failed code=%s detail=%s", _res.get("error_code"), _res.get("detail"))
             except asyncio.TimeoutError:
                 logger.warning("[upload] B2 audio upload timed out after %ss", b2_timeout)
                 public_audio_url = None
+                b2_error_code = "timeout"
                 termprint(f"[upload] B2 audio upload timed out after {b2_timeout}s")
             else:
                 elapsed = (time.perf_counter() - start)
-                logger.info("[upload] B2 audio upload done in %.2fs url=%s", elapsed, public_audio_url)
-                termprint(f"[upload] B2 audio upload done in {elapsed:.2f}s url={public_audio_url}")
+                if public_audio_url:
+                    logger.info("[upload] B2 audio upload done in %.2fs url=%s", elapsed, public_audio_url)
+                    termprint(f"[upload] B2 audio upload done in {elapsed:.2f}s url={public_audio_url}")
     except Exception as e:
         logger.error("[upload] B2 audio upload error: %s", e)
         termprint(f"[upload] B2 audio upload error: {e}")
@@ -941,6 +1040,9 @@ async def upload_mix(
             with open(local_file_path, "wb") as f:
                 f.write(audio_bytes)
             public_audio_url = f"/uploads/{unique_filename}"
+            storage_provider = "local"
+            storage_location = local_file_path
+            fallback_from_b2 = True if b2_error_code else False
             logger.info("[upload] local audio save done path=%s url=%s", local_file_path, public_audio_url)
             termprint(f"[upload] local audio save done path={local_file_path} url={public_audio_url}")
         except Exception as le:
@@ -995,10 +1097,50 @@ async def upload_mix(
                 }
             )
 
+    # Guard against duplicate by exact file_path before DB insert
+    # If a mix already exists with the same stored file_path, return 409 and clean up uploaded blobs
+    try:
+        existing_by_path = (
+            db.query(models.Mix)
+            .filter(models.Mix.file_path == public_audio_url)
+            .first()
+        )
+    except Exception:
+        existing_by_path = None
+    if existing_by_path is not None and not skip_duplicate_check:
+        try:
+            b2 = B2Storage()
+            if b2.is_configured() and public_audio_url:
+                audio_key = b2.extract_key_from_url(public_audio_url)
+                if audio_key:
+                    b2.delete_file(audio_key)
+            if public_cover_url:
+                b2 = B2Storage()
+                if b2.is_configured():
+                    cover_key = b2.extract_key_from_url(public_cover_url)
+                    if cover_key:
+                        b2.delete_file(cover_key)
+        except Exception:
+            pass
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "error": "Duplicate detected: identical file path already exists",
+                "error_code": "duplicate_track",
+                "duplicate_info": {
+                    "id": existing_by_path.id,
+                    "title": existing_by_path.title,
+                    "artist_name": existing_by_path.artist.name if existing_by_path.artist else "",
+                    "match_type": "file_path_unique",
+                    "reason": "Same storage path (file_path)"
+                }
+            }
+        )
+
     # Create mix in database using B2 URLs only
     final_audio_path = public_audio_url
     final_cover_url = public_cover_url if public_cover_url else None
-    
+
     try:
         logger.info("[upload] DB save start")
         termprint("[upload] DB save start")
@@ -1011,7 +1153,6 @@ async def upload_mix(
             quality_kbps=quality_kbps,
             bpm=bpm,
             file_path=final_audio_path,
-            file_hash=file_hash,
             cover_art_url=final_cover_url,
             description=description,
             tracklist=tracklist,
@@ -1030,13 +1171,47 @@ async def upload_mix(
         db.refresh(db_mix)
         from ..schemas import Mix
         response_model = Mix.from_orm(db_mix)
-        # Use model_dump with mode='json' to properly serialize datetime objects
-        response_content = response_model.model_dump(mode='json')
+        # Use model_dump and then jsonable_encoder to ensure JSON-serializable types
+        response_content = response_model.model_dump()
         response_content['stream_url'] = f'/tracks/{db_mix.id}/stream'
+        # Include storage details in response for observability
+        if storage_provider:
+            response_content['storage'] = storage_provider
+        if storage_location:
+            response_content['location'] = storage_location
+        if fallback_from_b2:
+            response_content['fallback_from_b2'] = True
         logger.info("[upload] success mix_id=%s", db_mix.id)
         termprint(f"[upload] success mix_id={db_mix.id}")
-        return JSONResponse(status_code=status.HTTP_201_CREATED, content=response_content)
+        from fastapi.encoders import jsonable_encoder
+        return JSONResponse(status_code=status.HTTP_201_CREATED, content=jsonable_encoder(response_content))
         
+    except IntegrityError as e:
+        # Unique constraint (e.g., file_path) violation -> map to 409 duplicate
+        db.rollback()
+        try:
+            b2 = B2Storage()
+            if b2.is_configured() and public_audio_url:
+                audio_key = b2.extract_key_from_url(public_audio_url)
+                if audio_key:
+                    b2.delete_file(audio_key)
+            if public_cover_url:
+                cover_key = b2.extract_key_from_url(public_cover_url)
+                if cover_key:
+                    b2.delete_file(cover_key)
+        except Exception:
+            pass
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "error": "Duplicate detected during save (unique constraint)",
+                "error_code": "duplicate_track",
+                "duplicate_info": {
+                    "match_type": "db_unique_constraint",
+                    "reason": "Database unique constraint violated (likely file_path)"
+                }
+            }
+        )
     except Exception as e:
         # Clean up B2 uploads if database operation fails
         try:

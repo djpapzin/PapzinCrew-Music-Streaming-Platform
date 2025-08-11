@@ -9,6 +9,19 @@ interface SongRowProps {
   onPlay: () => void;
 }
 
+const PLACEHOLDER =
+  "data:image/svg+xml;utf8,\
+<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'>\
+  <defs>\
+    <linearGradient id='g' x1='0' x2='1' y1='0' y2='1'>\
+      <stop offset='0%' stop-color='%235b21b6'/>\
+      <stop offset='100%' stop-color='%23db2777'/>\
+    </linearGradient>\
+  </defs>\
+  <rect width='100%' height='100%' fill='url(%23g)'/>\
+  <text x='50%' y='52%' font-size='48' text-anchor='middle' dominant-baseline='middle' fill='white'>♪</text>\
+</svg>";
+
 const formatDuration = (seconds: number): string => {
   const mins = Math.floor(seconds / 60);
   const secs = seconds % 60;
@@ -38,9 +51,13 @@ const SongRow: React.FC<SongRowProps> = ({ song, index, isPlaying, onPlay }) => 
         {/* Song info */}
         <div className="col-span-5 flex items-center space-x-3">
           <img
-            src={song.imageUrl}
+            src={song.imageUrl && song.imageUrl.trim().length > 0 ? song.imageUrl : PLACEHOLDER}
             alt={song.album}
             className="w-10 h-10 rounded object-cover"
+            onError={(e) => {
+              const el = e.currentTarget as HTMLImageElement;
+              if (el.src !== PLACEHOLDER) el.src = PLACEHOLDER;
+            }}
           />
           <div className="min-w-0">
             <p className={`font-medium truncate ${isPlaying ? 'text-green-400' : 'text-white'}`}>
@@ -76,9 +93,13 @@ const SongRow: React.FC<SongRowProps> = ({ song, index, isPlaying, onPlay }) => 
       <div className="lg:hidden group flex items-center space-x-3 px-4 py-3 hover:bg-white/5 rounded-lg transition-colors duration-200">
         <div className="relative">
           <img
-            src={song.imageUrl}
+            src={song.imageUrl && song.imageUrl.trim().length > 0 ? song.imageUrl : PLACEHOLDER}
             alt={song.album}
             className="w-12 h-12 rounded object-cover"
+            onError={(e) => {
+              const el = e.currentTarget as HTMLImageElement;
+              if (el.src !== PLACEHOLDER) el.src = PLACEHOLDER;
+            }}
           />
           <button
             onClick={onPlay}

@@ -91,6 +91,13 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
   const statusModalRef = useRef<HTMLDivElement>(null);
   const currentXhrRef = useRef<XMLHttpRequest | null>(null);
   const artGenerationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const refreshLibrary = useCallback(() => {
+    try {
+      window.dispatchEvent(new Event('library:refresh'));
+    } catch (e) {
+      console.debug('Failed to dispatch library:refresh', e);
+    }
+  }, []);
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -763,6 +770,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
                   });
                   setPublishStatus('success');
                   currentXhrRef.current = null;
+                  refreshLibrary();
                   return true;
                 } else if (status.status === 'failed') {
                   console.warn('Art generation failed, using default cover');
@@ -781,6 +789,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
                     timeRemaining: 'Redirecting...'
                   });
                   setPublishStatus('success');
+                  refreshLibrary();
                   return true;
                 } else if (attempt < 10) { // Max 10 attempts (about 30 seconds)
                   // Update status with progress
@@ -804,6 +813,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
                     timeRemaining: 'Redirecting...'
                   });
                   setPublishStatus('success');
+                  refreshLibrary();
                   return true;
                 }
               }
@@ -819,6 +829,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
                   timeRemaining: 'Redirecting...'
                 }));
                 setPublishStatus('success');
+                refreshLibrary();
               }
             }
             return false;
@@ -838,6 +849,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
             timeRemaining: 'Redirecting...'
           });
           setPublishStatus('success');
+          refreshLibrary();
         }
         
         // Convert uploaded mix to Song format for player

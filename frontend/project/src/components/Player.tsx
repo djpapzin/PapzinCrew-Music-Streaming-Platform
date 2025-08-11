@@ -10,7 +10,9 @@ import {
   VolumeX,
   Heart,
   Maximize2,
-  ChevronUp
+  ChevronUp,
+  Minimize2,
+  MoreHorizontal
 } from 'lucide-react';
 import { PlayerState } from '../types/music';
 import { NowPlayingPopup } from './NowPlayingPopup';
@@ -132,7 +134,8 @@ const Player: React.FC<PlayerProps> = ({
               onClick={() => setShowMobilePlayer(false)}
               className="text-white"
             >
-              <ChevronUp className="w-6 h-6" />
+              {/* Minimize to mini-player */}
+              <Minimize2 className="w-6 h-6" />
             </button>
             <h2 className="text-white font-medium">Now Playing</h2>
             <button className="text-gray-400">

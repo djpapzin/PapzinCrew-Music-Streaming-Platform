@@ -67,6 +67,7 @@ class MixBase(BaseModel):
     duration_seconds: int
     file_size_mb: float
     quality_kbps: int
+    bpm: Optional[int] = None
     file_path: str
     cover_art_url: Optional[str] = None
     description: Optional[str] = None

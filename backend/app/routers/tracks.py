@@ -35,13 +35,26 @@ async def stream_track(track_id: int, db: Session = Depends(get_db)):
     if db_track is None:
         raise HTTPException(status_code=404, detail="Track not found")
     
-    file_path = db_track.file_path
+    file_path = (db_track.file_path or "").strip()
+    if not file_path:
+        raise HTTPException(status_code=404, detail="Audio file not found")
+    
+    # If the stored path is a public URL (e.g., B2), redirect the client
+    if file_path.startswith("http://") or file_path.startswith("https://"):
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(url=file_path, status_code=307)
+    
+    # If the stored path is a static app path (served by FastAPI at /uploads), redirect
+    if file_path.startswith("/uploads/"):
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(url=file_path, status_code=307)
+    
+    # Otherwise, treat as a local filesystem path
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="Audio file not found")
     
-    # This is a simplified version - in production, you'd want to:
-    # 1. Support range requests for seeking
-    # 2. Set proper content headers
-    # 3. Implement proper file streaming
+    # Basic file response (note: for production, implement HTTP Range support)
     from fastapi.responses import FileResponse
-    return FileResponse(path=file_path, media_type="audio/mpeg")
+    import mimetypes
+    media_type = mimetypes.guess_type(file_path)[0] or "audio/mpeg"
+    return FileResponse(path=file_path, media_type=media_type)

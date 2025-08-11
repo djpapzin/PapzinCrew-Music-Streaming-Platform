@@ -1,8 +1,8 @@
 import os
-from typing import Optional, Dict
+from typing import Optional, Dict, Any
 import boto3
 from botocore.client import Config
-from botocore.exceptions import ClientError
+from botocore.exceptions import ClientError, EndpointConnectionError, BotoCoreError
 
 
 class B2Storage:
@@ -51,6 +51,52 @@ class B2Storage:
         )
         return f"{self.endpoint_url}/{self.bucket}/{key}"
 
+    def put_bytes_safe(self, key: str, data: bytes, content_type: str, cache_control: str = "public, max-age=31536000") -> Dict[str, Any]:
+        """
+        Upload bytes to B2 and return a structured result instead of raising.
+        Result shape:
+          { ok: bool, url?: str, key?: str, error_code?: str, detail?: str }
+        """
+        if not self.enabled or self.s3 is None:
+            return {"ok": False, "error_code": "not_configured", "detail": "B2 storage not configured"}
+
+        try:
+            self.s3.put_object(
+                Bucket=self.bucket,
+                Key=key,
+                Body=data,
+                ContentType=content_type,
+                CacheControl=cache_control,
+            )
+            return {"ok": True, "url": f"{self.endpoint_url}/{self.bucket}/{key}", "key": key}
+        except ClientError as e:
+            code = self._map_client_error(e)
+            detail = str(e)
+            return {"ok": False, "error_code": code, "detail": detail}
+        except EndpointConnectionError as e:
+            return {"ok": False, "error_code": "network_error", "detail": str(e)}
+        except BotoCoreError as e:
+            return {"ok": False, "error_code": "boto_error", "detail": str(e)}
+        except Exception as e:
+            return {"ok": False, "error_code": "unknown_error", "detail": str(e)}
+
+    def _map_client_error(self, e: ClientError) -> str:
+        """Map boto3 ClientError to a stable error_code string."""
+        try:
+            err = e.response.get("Error", {})
+            code = (err.get("Code") or "").lower()
+            if code in {"invalidaccesskeyid", "signaturedoesnotmatch", "accessdenied", "invalidtoken"}:
+                return "auth_error"
+            if code in {"nosuchbucket", "bucketnotfound"}:
+                return "bucket_not_found"
+            if code in {"requesttimeout", "requesttimedout"}:
+                return "timeout"
+            if code in {"slowdown", "throttling", "toomanyrequests"}:
+                return "rate_limited"
+            return code or "client_error"
+        except Exception:
+            return "client_error"
+
     def put_file(self, key: str, file_path: str, content_type: str, cache_control: str = "public, max-age=31536000") -> str:
         assert self.enabled and self.s3 is not None
         with open(file_path, "rb") as f:
@@ -90,5 +136,29 @@ class B2Storage:
         except Exception:
             pass
         return None
+
+    def check_health(self) -> Dict[str, Any]:
+        """Check B2 configuration and bucket accessibility."""
+        if not self.enabled or self.s3 is None:
+            return {"configured": False, "ok": False, "error_code": "not_configured"}
+        try:
+            # HEAD the bucket to validate connectivity, auth and bucket existence
+            self.s3.head_bucket(Bucket=self.bucket)
+            return {
+                "configured": True,
+                "ok": True,
+                "endpoint": self.endpoint_url,
+                "bucket": self.bucket,
+                "region": self.region_name,
+            }
+        except ClientError as e:
+            code = self._map_client_error(e)
+            return {"configured": True, "ok": False, "error_code": code, "detail": str(e)}
+        except EndpointConnectionError as e:
+            return {"configured": True, "ok": False, "error_code": "network_error", "detail": str(e)}
+        except BotoCoreError as e:
+            return {"configured": True, "ok": False, "error_code": "boto_error", "detail": str(e)}
+        except Exception as e:
+            return {"configured": True, "ok": False, "error_code": "unknown_error", "detail": str(e)}
 
 

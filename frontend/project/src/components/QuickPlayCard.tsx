@@ -8,6 +8,19 @@ interface QuickPlayCardProps {
   onPlay: () => void;
 }
 
+const PLACEHOLDER =
+  "data:image/svg+xml;utf8,\
+<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'>\
+  <defs>\
+    <linearGradient id='g' x1='0' x2='1' y1='0' y2='1'>\
+      <stop offset='0%' stop-color='%235b21b6'/>\
+      <stop offset='100%' stop-color='%23db2777'/>\
+    </linearGradient>\
+  </defs>\
+  <rect width='100%' height='100%' fill='url(%23g)'/>\
+  <text x='50%' y='52%' font-size='48' text-anchor='middle' dominant-baseline='middle' fill='white'>♪</text>\
+</svg>";
+
 const QuickPlayCard: React.FC<QuickPlayCardProps> = ({ item, type, onPlay }) => {
   const getTitle = () => {
     if (type === 'song') {
@@ -30,10 +43,8 @@ const QuickPlayCard: React.FC<QuickPlayCardProps> = ({ item, type, onPlay }) => 
   };
 
   const getImageUrl = () => {
-    if (type === 'song') {
-      return (item as Song).imageUrl;
-    }
-    return item.imageUrl;
+    const src = type === 'song' ? (item as Song).imageUrl : item.imageUrl;
+    return src && src.trim().length > 0 ? src : PLACEHOLDER;
   };
 
   return (
@@ -46,7 +57,12 @@ const QuickPlayCard: React.FC<QuickPlayCardProps> = ({ item, type, onPlay }) => 
           src={getImageUrl()}
           alt={getTitle()}
           className="w-10 lg:w-12 h-10 lg:h-12 rounded object-cover shadow-lg"
+          onError={(e) => {
+            const el = e.currentTarget as HTMLImageElement;
+            if (el.src !== PLACEHOLDER) el.src = PLACEHOLDER;
+          }}
         />
+
         <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-200 rounded flex items-center justify-center">
           <Play className="w-4 lg:w-5 h-4 lg:h-5 text-white" fill="currentColor" />
         </div>

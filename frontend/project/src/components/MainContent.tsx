@@ -85,6 +85,13 @@ const MainContent: React.FC<MainContentProps> = ({
         onPlayPlaylist={onPlayPlaylist}
       />
 
+      {songs.length === 0 && (
+        <div className="bg-white/5 rounded-xl p-6 border border-white/10">
+          <h2 className="text-xl lg:text-2xl font-bold text-white mb-2">No uploads yet</h2>
+          <p className="text-gray-300">Go to the Upload page to add your first track.</p>
+        </div>
+      )}
+
       {/* Featured Content Section */}
       <div className="bg-gradient-to-br from-purple-900/50 to-pink-900/50 rounded-xl p-6 lg:p-8 border border-white/10">
         <h2 className="text-2xl lg:text-3xl font-bold text-white mb-4">Featured Content</h2>
@@ -479,24 +486,30 @@ const MainContent: React.FC<MainContentProps> = ({
 
       <div>
         <h2 className="text-xl lg:text-2xl font-bold text-white mb-6">Recently Added</h2>
-        <div className="bg-white/5 rounded-lg overflow-hidden">
-          <div className="hidden lg:grid grid-cols-12 gap-4 px-4 py-3 border-b border-white/10 text-gray-400 text-sm">
-            <div className="col-span-1">#</div>
-            <div className="col-span-5">TITLE</div>
-            <div className="col-span-3">ALBUM</div>
-            <div className="col-span-2">GENRE</div>
-            <div className="col-span-1 flex justify-end"><Clock className="w-4 h-4" /></div>
+        {songs.length === 0 ? (
+          <div className="bg-white/5 rounded-lg p-6 text-gray-300">
+            No recent songs yet. Upload a track to get started.
           </div>
-          {songs.slice(0, 10).map((song, index) => (
-            <SongRow
-              key={song.id}
-              song={song}
-              index={index}
-              isPlaying={currentSong?.id === song.id && isPlaying}
-              onPlay={() => onPlaySong(song, songs)}
-            />
-          ))}
-        </div>
+        ) : (
+          <div className="bg-white/5 rounded-lg overflow-hidden">
+            <div className="hidden lg:grid grid-cols-12 gap-4 px-4 py-3 border-b border-white/10 text-gray-400 text-sm">
+              <div className="col-span-1">#</div>
+              <div className="col-span-5">TITLE</div>
+              <div className="col-span-3">ALBUM</div>
+              <div className="col-span-2">GENRE</div>
+              <div className="col-span-1 flex justify-end"><Clock className="w-4 h-4" /></div>
+            </div>
+            {songs.slice(0, 10).map((song, index) => (
+              <SongRow
+                key={song.id}
+                song={song}
+                index={index}
+                isPlaying={currentSong?.id === song.id && isPlaying}
+                onPlay={() => onPlaySong(song, songs)}
+              />
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

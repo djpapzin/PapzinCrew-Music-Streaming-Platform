@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from .db.database import engine
 from .models import models
-from .routers import tracks, categories, artists, uploads
+from .routers import tracks, categories, artists, uploads, storage
 
 # Configure logging early
 log_level = os.getenv("LOG_LEVEL", "INFO").upper()
@@ -70,6 +70,7 @@ app.include_router(tracks.router)
 app.include_router(categories.router)
 app.include_router(artists.router)
 app.include_router(uploads.router)
+app.include_router(storage.router)
 
 # Determine upload directory from environment and ensure it exists
 UPLOAD_DIR = os.getenv("UPLOAD_DIR", "uploads")

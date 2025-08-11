@@ -19,6 +19,12 @@ export const usePlayer = () => {
     const audio = audioRef.current;
     if (!audio) return;
 
+    // Ensure CORS-safe playback for redirected/static resources
+    try {
+      audio.crossOrigin = 'anonymous';
+      audio.preload = 'auto';
+    } catch {}
+
     const updateTime = () => {
       setPlayerState(prev => ({
         ...prev,
@@ -31,14 +37,45 @@ export const usePlayer = () => {
       handleNext();
     };
 
+    const onError = () => {
+      const err = (audio as any).error as MediaError | undefined;
+      console.error('Audio error', {
+        code: err?.code,
+        message: (err as any)?.message,
+        src: audio.currentSrc,
+        networkState: audio.networkState,
+        readyState: audio.readyState,
+      });
+    };
+
+    const onStalled = () => {
+      console.warn('Audio stalled', { src: audio.currentSrc, networkState: audio.networkState, readyState: audio.readyState });
+    };
+
+    const onAbort = () => {
+      console.warn('Audio load aborted', { src: audio.currentSrc });
+    };
+
+    const onWaiting = () => {
+      console.info('Audio waiting for data', { src: audio.currentSrc, readyState: audio.readyState });
+    };
+
     audio.addEventListener('timeupdate', updateTime);
     audio.addEventListener('ended', onEnded);
     audio.addEventListener('loadedmetadata', updateTime);
+    audio.addEventListener('error', onError);
+    audio.addEventListener('stalled', onStalled);
+    audio.addEventListener('abort', onAbort);
+    audio.addEventListener('waiting', onWaiting);
 
     return () => {
       audio.removeEventListener('timeupdate', updateTime);
       audio.removeEventListener('ended', onEnded);
       audio.removeEventListener('loadedmetadata', updateTime);
+      audio.removeEventListener('error', onError);
+      audio.removeEventListener('stalled', onStalled);
+      audio.removeEventListener('abort', onAbort);
+      audio.removeEventListener('waiting', onWaiting);
     };
   }, []);
 
@@ -56,6 +93,7 @@ export const usePlayer = () => {
       isPlaying: true
     }));
 
+    console.debug('Setting audio src', { url: song.audioUrl, id: song.id, title: song.title });
     audio.src = song.audioUrl;
     audio.volume = playerState.volume;
     // Ensure new source is loaded

@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   Play, 
   Pause, 
@@ -10,7 +10,9 @@ import {
   Repeat, 
   Volume2, 
   VolumeX,
-  Heart
+  Heart,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { PlayerState } from '../types/music';
 
@@ -56,6 +58,7 @@ export function NowPlayingPopup({
   onToggleShuffle,
   onToggleRepeat
 }: NowPlayingPopupProps) {
+  const [isMinimized, setIsMinimized] = useState(false);
   const { isPlaying, volume, currentTime, duration, shuffle, repeat } = playerState;
 
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -66,6 +69,52 @@ export function NowPlayingPopup({
   const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   if (!isVisible || !track) return null;
+
+  // Minimized compact player (dock)
+  if (isMinimized) {
+    return (
+      <div className="fixed bottom-4 right-4 bg-black/90 backdrop-blur-xl border border-white/20 rounded-xl shadow-2xl p-3 z-50 flex items-center space-x-3 w-80">
+        <div className="w-10 h-10 rounded overflow-hidden flex-shrink-0">
+          {track.coverArt ? (
+            <img src={track.coverArt} alt={`${track.title} cover`} className="w-full h-full object-cover" />
+          ) : (
+            <div className="w-full h-full bg-gradient-to-br from-gray-800 to-gray-900" />
+          )}
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-white text-sm font-medium truncate">{track.title}</p>
+          <p className="text-gray-400 text-xs truncate">{track.artist}</p>
+        </div>
+        <button
+          onClick={onTogglePlay}
+          className="w-8 h-8 bg-white hover:bg-gray-200 rounded-full flex items-center justify-center transition-colors"
+          aria-label={isPlaying ? 'Pause' : 'Play'}
+        >
+          {isPlaying ? (
+            <Pause className="w-4 h-4 text-black" />
+          ) : (
+            <Play className="w-4 h-4 text-black ml-0.5" fill="currentColor" />
+          )}
+        </button>
+        <button
+          onClick={() => setIsMinimized(false)}
+          className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-gray-300 hover:text-white flex items-center justify-center transition-colors"
+          aria-label="Restore player"
+        >
+          <ChevronUp className="w-5 h-5" />
+        </button>
+        <button
+          onClick={onClose}
+          className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-gray-300 hover:text-white flex items-center justify-center transition-colors"
+          aria-label="Close player"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-50 flex items-center justify-center p-4">
@@ -78,6 +127,15 @@ export function NowPlayingPopup({
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
           </svg>
+        </button>
+
+        {/* Minimize Button */}
+        <button
+          onClick={() => setIsMinimized(true)}
+          className="absolute top-4 right-14 z-10 w-8 h-8 rounded-full bg-white/10 backdrop-blur-sm flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/20 transition-all"
+          aria-label="Minimize player"
+        >
+          <ChevronDown className="w-5 h-5" />
         </button>
 
         {/* More Options Button */}
