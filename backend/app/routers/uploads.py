@@ -945,7 +945,13 @@ async def upload_mix(
                     try:
                         b2 = B2Storage()
                         if b2.is_configured():
-                            cover_key = f"covers/{base_name}-ai{cover_art_extension}"
+                            # Upload to B2 if configured - use a unique key with timestamp
+                            import uuid
+                            timestamp = int(time.time())
+                            random_str = str(uuid.uuid4())[:6]
+                            clean_base = re.sub(r'[^a-zA-Z0-9\-]', '-', base_name.lower())
+                            clean_base = re.sub(r'-+', '-', clean_base).strip('-')
+                            cover_key = f"covers/{clean_base}-ai-{timestamp}-{random_str}{cover_art_extension}"
                             _res = b2.put_bytes_safe(cover_key, cover_art_bytes, content_type='image/jpeg')
                             if _res.get("ok"):
                                 public_cover_url = _res.get("url")
@@ -991,13 +997,22 @@ async def upload_mix(
     try:
         b2 = B2Storage()
         if b2.is_configured():
-            # Use a unique key when forcing upload to bypass duplicate checks and avoid
-            # database UNIQUE(file_path) collisions. Otherwise, keep the descriptive name.
+            # Clean the base name to remove problematic characters
+            import re
+            import uuid
+            clean_base = re.sub(r'[^a-zA-Z0-9\-]', '-', base_name.lower())
+            clean_base = re.sub(r'-+', '-', clean_base).strip('-')
+            
             if skip_duplicate_check:
-                safe_hash = (file_hash or str(int(time.time()))).replace("/", "")[:16]
-                audio_key = f"audio/{base_name}-{safe_hash}{file_extension}"
+                # Generate a more unique key with timestamp and random component
+                timestamp = int(time.time())
+                random_str = str(uuid.uuid4())[:8]
+                safe_hash = (file_hash or f"{timestamp}-{random_str}").replace("/", "_")[:32]
+                audio_key = f"audio/{clean_base}-{safe_hash}{file_extension}"
+                logger.info("[upload] Using unique key for forced upload: %s", audio_key)
             else:
-                audio_key = f"audio/{descriptive_filename}"
+                # Use descriptive filename for normal uploads
+                audio_key = f"audio/{clean_base}{file_extension}"
             logger.info("[upload] B2 audio upload start key=%s size=%dB", audio_key, len(audio_bytes))
             termprint(f"[upload] B2 audio upload start key={audio_key} size={len(audio_bytes)}B")
             b2_timeout = float(os.getenv('B2_PUT_TIMEOUT', '20'))

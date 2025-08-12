@@ -88,6 +88,8 @@ class MixCreate(MixBase):
 
 class Mix(MixBase):
     id: int
+    # Some legacy records may have null file_path; allow None in responses
+    file_path: Optional[str] = None
     artist: ArtistSimple
 
     class Config:
@@ -95,6 +97,8 @@ class Mix(MixBase):
 
 class MixDetailed(MixBase):
     id: int
+    # Allow None in responses
+    file_path: Optional[str] = None
     artist: Artist
 
     class Config:

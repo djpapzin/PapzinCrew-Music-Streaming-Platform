@@ -122,6 +122,60 @@ class B2Storage:
                 print(f"Error deleting file from B2: {e}")
                 return False
 
+    def build_url(self, key: str) -> Optional[str]:
+        """Build a public URL to an object key."""
+        if not self.enabled:
+            return None
+        return f"{self.endpoint_url}/{self.bucket}/{key}"
+
+    def head_object(self, key: str) -> Dict[str, Any]:
+        """HEAD an object and return metadata; returns {ok: bool, status: int, exists: bool}."""
+        if not self.enabled or self.s3 is None:
+            return {"ok": False, "exists": False, "status": 0}
+        try:
+            resp = self.s3.head_object(Bucket=self.bucket, Key=key)
+            return {"ok": True, "exists": True, "status": 200, "meta": resp}
+        except ClientError as e:
+            code = e.response.get("Error", {}).get("Code")
+            if code in ("404", "NoSuchKey"):
+                return {"ok": True, "exists": False, "status": 404}
+            return {"ok": False, "exists": False, "status": int(e.response.get("ResponseMetadata", {}).get("HTTPStatusCode", 500) or 500), "error": str(e)}
+        except Exception as e:
+            return {"ok": False, "exists": False, "status": 0, "error": str(e)}
+
+    def object_exists(self, key: str) -> bool:
+        res = self.head_object(key)
+        return bool(res.get("ok") and res.get("exists"))
+
+    def list_objects(self, prefix: str, max_keys: int = 1000) -> Dict[str, Any]:
+        """List objects under a prefix. Returns {ok, items:[{Key, Size, LastModified}], error?}."""
+        if not self.enabled or self.s3 is None:
+            return {"ok": False, "items": [], "error": "not_configured"}
+        try:
+            items: list[Dict[str, Any]] = []
+            continuation_token: Optional[str] = None
+            while True:
+                kwargs: Dict[str, Any] = {"Bucket": self.bucket, "Prefix": prefix, "MaxKeys": max_keys}
+                if continuation_token:
+                    kwargs["ContinuationToken"] = continuation_token
+                resp = self.s3.list_objects_v2(**kwargs)
+                for obj in resp.get("Contents", []) or []:
+                    items.append({
+                        "Key": obj.get("Key"),
+                        "Size": obj.get("Size"),
+                        "LastModified": obj.get("LastModified"),
+                    })
+                if not resp.get("IsTruncated"):
+                    break
+                continuation_token = resp.get("NextContinuationToken")
+                if not continuation_token:
+                    break
+            return {"ok": True, "items": items}
+        except ClientError as e:
+            return {"ok": False, "items": [], "error": str(e)}
+        except Exception as e:
+            return {"ok": False, "items": [], "error": str(e)}
+
     def extract_key_from_url(self, url: str) -> Optional[str]:
         """Extract the object key from a B2 URL."""
         if not url or not self.enabled:

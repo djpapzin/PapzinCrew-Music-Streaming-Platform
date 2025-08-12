@@ -8,6 +8,7 @@ export interface Song {
   audioUrl: string;
   genre: string;
   year: number;
+  playable?: boolean;
 }
 
 export interface Album {

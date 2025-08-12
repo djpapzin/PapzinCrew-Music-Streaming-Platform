@@ -15,19 +15,25 @@ const QuickPlay: React.FC<QuickPlayProps> = ({
   onPlaySong,
   onPlayPlaylist
 }) => {
+  const hasSongs = Array.isArray(songs) && songs.length > 0;
+  const hasPlaylists = Array.isArray(playlists) && playlists.length > 0;
+
   const handleQuickPlay = () => {
+    if (!hasSongs) return;
     // Play a random song from all available songs
     const randomSong = songs[Math.floor(Math.random() * songs.length)];
     onPlaySong(randomSong, songs);
   };
 
   const handleShufflePlay = () => {
+    if (!hasSongs) return;
     // Create a shuffled queue and start playing
     const shuffledSongs = [...songs].sort(() => Math.random() - 0.5);
     onPlaySong(shuffledSongs[0], shuffledSongs);
   };
 
   const handleRadioPlay = () => {
+    if (!hasPlaylists) return;
     // Play from a random playlist (simulating radio mode)
     const randomPlaylist = playlists[Math.floor(Math.random() * playlists.length)];
     onPlayPlaylist(randomPlaylist);
@@ -46,7 +52,8 @@ const QuickPlay: React.FC<QuickPlayProps> = ({
         <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3">
           <button
             onClick={handleQuickPlay}
-            className="flex items-center justify-center space-x-2 bg-white hover:bg-gray-200 text-black px-4 py-2 rounded-full font-medium transition-all duration-200 hover:scale-105"
+            disabled={!hasSongs}
+            className={`flex items-center justify-center space-x-2 bg-white text-black px-4 py-2 rounded-full font-medium transition-all duration-200 ${hasSongs ? 'hover:bg-gray-200 hover:scale-105' : 'opacity-50 cursor-not-allowed'}`}
           >
             <Play className="w-4 h-4" fill="currentColor" />
             <span>Play</span>
@@ -54,7 +61,8 @@ const QuickPlay: React.FC<QuickPlayProps> = ({
           
           <button
             onClick={handleShufflePlay}
-            className="flex items-center justify-center space-x-2 bg-green-500 hover:bg-green-400 text-white px-4 py-2 rounded-full font-medium transition-all duration-200 hover:scale-105"
+            disabled={!hasSongs}
+            className={`flex items-center justify-center space-x-2 bg-green-500 text-white px-4 py-2 rounded-full font-medium transition-all duration-200 ${hasSongs ? 'hover:bg-green-400 hover:scale-105' : 'opacity-50 cursor-not-allowed'}`}
           >
             <Shuffle className="w-4 h-4" />
             <span>Shuffle</span>
@@ -62,7 +70,8 @@ const QuickPlay: React.FC<QuickPlayProps> = ({
           
           <button
             onClick={handleRadioPlay}
-            className="flex items-center justify-center space-x-2 bg-purple-500 hover:bg-purple-400 text-white px-4 py-2 rounded-full font-medium transition-all duration-200 hover:scale-105"
+            disabled={!hasPlaylists}
+            className={`flex items-center justify-center space-x-2 bg-purple-500 text-white px-4 py-2 rounded-full font-medium transition-all duration-200 ${hasPlaylists ? 'hover:bg-purple-400 hover:scale-105' : 'opacity-50 cursor-not-allowed'}`}
           >
             <Radio className="w-4 h-4" />
             <span>Radio</span>

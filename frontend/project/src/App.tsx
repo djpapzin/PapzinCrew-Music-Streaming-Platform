@@ -7,6 +7,7 @@ import MobileNav from './components/MobileNav';
 import { usePlayer } from './hooks/usePlayer';
 import { Routes, Route } from 'react-router-dom';
 import { Song, Playlist, Album, Artist } from './types/music';
+import Toast from './components/Toast';
 
 function App() {
   const [searchQuery, setSearchQuery] = useState('');
@@ -49,9 +50,10 @@ function App() {
         album: mix.album || '',
         duration: mix.duration_seconds || 0,
         imageUrl: toAbsoluteUrl(mix.cover_art_url) || '',
-        audioUrl: `${API_BASE}/tracks/${mix.id}/stream`,
+        audioUrl: mix.file_path ? `${API_BASE}/tracks/${mix.id}/stream` : '',
         genre: mix.genre || '',
         year: mix.year || 0,
+        playable: Boolean(mix.file_path),
       }));
       setSongs(mapped);
     } catch (err) {
@@ -82,6 +84,8 @@ function App() {
 
   return (
     <div className="h-screen bg-black text-white flex flex-col">
+      {/* Global toast notifications */}
+      <Toast />
       {/* Hidden audio element */}
       <audio ref={audioRef} preload="auto" playsInline crossOrigin="anonymous" />
       

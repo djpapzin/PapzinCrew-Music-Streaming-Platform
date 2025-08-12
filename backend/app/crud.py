@@ -9,7 +9,13 @@ def get_mix_by_filepath(db: Session, file_path: str):
     return db.query(models.Mix).filter(models.Mix.file_path == file_path).first()
 
 def get_mixes(db: Session, skip: int = 0, limit: int = 100):
-    return db.query(models.Mix).offset(skip).limit(limit).all()
+    return (
+        db.query(models.Mix)
+        .order_by(models.Mix.id.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
 
 def create_mix(db: Session, mix: schemas.MixCreate):
     db_mix = models.Mix(

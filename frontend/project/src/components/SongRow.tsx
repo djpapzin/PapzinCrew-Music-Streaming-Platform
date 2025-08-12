@@ -1,5 +1,5 @@
 import React from 'react';
-import { Play, Heart, MoreHorizontal } from 'lucide-react';
+import { Play, Heart, MoreHorizontal, AlertCircle } from 'lucide-react';
 import { Song } from '../types/music';
 
 interface SongRowProps {
@@ -29,19 +29,23 @@ const formatDuration = (seconds: number): string => {
 };
 
 const SongRow: React.FC<SongRowProps> = ({ song, index, isPlaying, onPlay }) => {
+  const disabled = song.playable === false || !song.audioUrl;
   return (
     <>
       {/* Desktop Layout */}
       <div className="hidden lg:grid group grid-cols-12 gap-4 px-4 py-2 hover:bg-white/5 rounded-lg transition-colors duration-200">
         {/* Index/Play button */}
-        <div className="col-span-1 flex items-center">
+        <div className={`col-span-1 flex items-center ${disabled ? 'opacity-50' : ''}`}>
           <div className="relative w-4">
             <span className={`text-gray-400 group-hover:hidden ${isPlaying ? 'text-green-400' : ''}`}>
               {index + 1}
             </span>
             <button
-              onClick={onPlay}
-              className="hidden group-hover:block w-4 h-4 text-white hover:text-green-400 transition-colors duration-200"
+              onClick={() => { if (!disabled) onPlay(); }}
+              disabled={disabled}
+              aria-disabled={disabled}
+              title={disabled ? 'Unavailable (missing file)' : 'Play'}
+              className={`hidden group-hover:block w-4 h-4 ${disabled ? 'text-gray-600 cursor-not-allowed' : 'text-white hover:text-green-400'} transition-colors duration-200`}
             >
               <Play className="w-4 h-4" fill="currentColor" />
             </button>
@@ -64,6 +68,14 @@ const SongRow: React.FC<SongRowProps> = ({ song, index, isPlaying, onPlay }) => 
               {song.title}
             </p>
             <p className="text-gray-400 text-sm truncate">{song.artist}</p>
+            {disabled && (
+              <p className="mt-0.5">
+                <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-red-500/15 text-red-300 border border-red-500/30">
+                  <AlertCircle className="w-3 h-3" />
+                  Unavailable
+                </span>
+              </p>
+            )}
           </div>
         </div>
 
@@ -101,9 +113,18 @@ const SongRow: React.FC<SongRowProps> = ({ song, index, isPlaying, onPlay }) => 
               if (el.src !== PLACEHOLDER) el.src = PLACEHOLDER;
             }}
           />
+          {disabled && (
+            <span className="absolute top-1 left-1 z-10 inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-red-500/80 text-white shadow">
+              <AlertCircle className="w-3 h-3" />
+              Unavailable
+            </span>
+          )}
           <button
-            onClick={onPlay}
-            className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-200 rounded flex items-center justify-center"
+            onClick={() => { if (!disabled) onPlay(); }}
+            disabled={disabled}
+            aria-disabled={disabled}
+            title={disabled ? 'Unavailable (missing file)' : 'Play'}
+            className={`absolute inset-0 ${disabled ? 'bg-black/20 cursor-not-allowed' : 'bg-black/40'} opacity-0 group-hover:opacity-100 transition-opacity duration-200 rounded flex items-center justify-center`}
           >
             <Play className="w-5 h-5 text-white" fill="currentColor" />
           </button>
