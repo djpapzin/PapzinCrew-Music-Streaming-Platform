@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { Song } from '../types/music';
 
 // Base API URL (Render/production uses VITE_API_URL; fallback to local dev)
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_BASE = import.meta.env.VITE_API_URL || (window.location.origin.includes('netlify') ? '/api' : 'http://localhost:8000');
 
 // Ensure API_BASE doesn't end with a slash
 const API_URL = API_BASE.endsWith('/') ? API_BASE.slice(0, -1) : API_BASE;
