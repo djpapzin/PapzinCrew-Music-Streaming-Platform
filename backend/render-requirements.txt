@@ -7,6 +7,7 @@ python-multipart
 mutagen
 httpx
 boto3
+requests  # Required for AI art generator
 python-magic>=0.4.27  # Linux-compatible version
 python-magic-bin; platform_system == "Windows"  # Only install on Windows
 
