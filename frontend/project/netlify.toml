@@ -2,10 +2,10 @@
   command = "npm ci && npm run build"
   publish = "dist"
 
-# Proxy API requests to ngrok backend
+# Proxy API requests to Render backend
 [[redirects]]
   from = "/api/*"
-  to = "https://REPLACE_WITH_NGROK_URL.ngrok-free.app/:splat"
+  to = "https://papzincrew-backend.onrender.com/:splat"
   status = 200
   force = true
 
