@@ -1,16 +1,21 @@
 # PapzinCrew Music Streaming Platform - Quick Start Guide
 
-## 🚀 Getting Started
+## 🚀 Live Platform
 
-This guide will help you quickly start both the backend and frontend servers for the PapzinCrew Music Streaming Platform with AI-assisted upload functionality.
+**🎵 Try the live platform now:**
+- **Frontend**: https://papzincrew.netlify.app/
+- **Backend API**: https://papzincrew-backend.onrender.com
+- **Upload Music**: https://papzincrew.netlify.app/upload
 
-## Prerequisites
+## 🔧 Local Development
+
+For local development, follow these steps:
+
+### Prerequisites
 
 - Python 3.8+ installed
 - Node.js 16+ installed
 - Git installed
-
-## 🔧 Quick Start Commands
 
 ### 1. Start Python FastAPI Backend
 
@@ -41,12 +46,24 @@ Once both servers are running, you'll have access to:
 
 ## 📍 Access Points
 
+### Live Production
+- **Frontend**: https://papzincrew.netlify.app/
+- **Backend API**: https://papzincrew-backend.onrender.com
+- **Upload Page**: https://papzincrew.netlify.app/upload
+
+### Local Development
 - **Frontend**: http://localhost:5173 (or the port shown in terminal)
 - **Backend API**: http://localhost:8000
 - **Upload Page**: http://localhost:5173/upload
 
 ## 🔐 Environment
 
+### Production Deployment
+- **Frontend**: Deployed on Netlify with automatic builds from GitHub
+- **Backend**: Deployed on Render with Backblaze B2 storage configured
+- **Storage**: Backblaze B2 bucket `papzincrew-music-djpapzin` in us-east-005 region
+
+### Local Development
 - Frontend: set `VITE_API_URL` (e.g., `http://localhost:8000`). If unset, defaults to `http://localhost:8000`.
 - Backend: copy `backend/.env.example` to `backend/.env` and configure Backblaze B2 credentials if available. When B2 is not configured or fails, uploads fall back to local storage.
 
@@ -69,12 +86,17 @@ Once both servers are running, you'll have access to:
 
 ## 🎯 Testing the Upload Feature
 
-1. Navigate to http://localhost:5173/upload
+### Live Platform
+1. Navigate to https://papzincrew.netlify.app/upload
 2. Drag and drop an audio file or click to select
 3. Watch as metadata is automatically extracted
 4. Fill in any additional details
 5. Click "Publish" to upload
 6. The track will automatically start playing after upload
+
+### Local Development
+1. Navigate to http://localhost:5173/upload
+2. Follow the same steps as above
 
 ## 🔁 Duplicate / Overwrite Flow
 
@@ -83,6 +105,20 @@ Once both servers are running, you'll have access to:
 - When forced and B2 is configured, the backend creates a unique B2 key to avoid DB unique constraint issues.
 - If you still see 409, confirm the flag is present in the Network tab and retry.
 - Custom cover art prompt is optional; leave blank to generate automatically.
+
+## 🌐 Deployment Status
+
+### Current Live Deployment
+- ✅ **Frontend**: Netlify (auto-deploys from GitHub main branch)
+- ✅ **Backend**: Render (connected to GitHub, auto-deploys)
+- ✅ **Storage**: Backblaze B2 cloud storage configured
+- ✅ **CORS**: Proxy streaming enabled for cross-origin audio playback
+- ✅ **Features**: Full upload, metadata extraction, AI cover art generation
+
+### Recent Fixes Applied
+- Fixed CORS issues with B2 storage by enabling proxy streaming
+- Configured frontend to use production backend URL
+- All uploaded tracks now stream successfully
 
 ## 📝 Notes
 
