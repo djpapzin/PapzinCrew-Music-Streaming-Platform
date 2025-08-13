@@ -349,7 +349,7 @@ def get_unique_filepath(db: Session, directory: str, filename:str) -> str:
         ).first() is not None
 
         if not exists_on_disk and not exists_in_db:
-            return file_path
+            return new_filename
 
         # Generate new filename with counter
         new_filename = f"{base_name}_{counter}{extension}"
@@ -358,7 +358,7 @@ def get_unique_filepath(db: Session, directory: str, filename:str) -> str:
         if counter > 1000:
             break
 
-    return file_path
+    return new_filename
 
 @router.post("/extract-metadata")
 async def extract_metadata(
@@ -810,182 +810,119 @@ async def upload_mix(
         quality_kbps = 0
         bpm = None
     
-    # Handle cover art (B2 only)
+    # --- Cover Art Handling (B2-First) ---
     public_cover_url = None
-    cover_art_extension = '.jpg'  # Default extension for all generated/processed images
-    
     try:
-        # If cover art is uploaded, save it
+        # 1. Check for user-uploaded cover art first
         if cover_art and cover_art.filename:
-            try:
-                # Generate a safe filename with the same extension as the uploaded file
-                file_ext = os.path.splitext(cover_art.filename)[1].lower()
-                if file_ext not in ['.jpg', '.jpeg', '.png', '.webp']:
-                    file_ext = '.jpg'  # Default to jpg for unsupported formats
-                # Read cover bytes
-                cover_art.file.seek(0)
-                cover_bytes = cover_art.file.read()
-                # Try B2-first for cover
-                try:
-                    b2 = B2Storage()
-                    if b2.is_configured():
-                        cover_key = f"covers/{base_name}{file_ext}"
-                        content_type = mimetypes.guess_type(f"x{file_ext}")[0] or 'image/jpeg'
-                        _res = b2.put_bytes_safe(cover_key, cover_bytes, content_type=content_type)
-                        if _res.get("ok"):
-                            public_cover_url = _res.get("url")
-                        else:
-                            logger.warning("[upload] B2 cover upload error code=%s detail=%s", _res.get("error_code"), _res.get("detail"))
-                except Exception as e:
-                    logger.warning("[upload] B2 cover upload error: %s", e)
-                # Local fallback for cover art if B2 failed or not configured
-                if not public_cover_url:
-                    try:
-                        cover_dir = os.path.join(UPLOAD_DIR, "covers")
-                        os.makedirs(cover_dir, exist_ok=True)
-                        cover_filename = f"{base_name}{file_ext}"
-                        cover_path = os.path.join(cover_dir, cover_filename)
-                        counter = 1
-                        while os.path.exists(cover_path) and counter <= 1000:
-                            cover_filename = f"{base_name}_{counter}{file_ext}"
-                            cover_path = os.path.join(cover_dir, cover_filename)
-                            counter += 1
-                        with open(cover_path, "wb") as cf:
-                            cf.write(cover_bytes)
-                        public_cover_url = f"/uploads/covers/{cover_filename}"
-                        logger.info("[upload] local cover save done path=%s url=%s", cover_path, public_cover_url)
-                    except Exception as le:
-                        logger.warning("[upload] local cover save failed: %s", le)
-                
-            except Exception as e:
-                logger.debug("[upload] error processing uploaded cover art: %s", e)
-                cover_art = None  # Fall through to extract from metadata or generate
-        
-        # If no cover art uploaded or upload failed, try to extract from metadata
+            logger.info("[upload] processing uploaded cover art: %s", cover_art.filename)
+            cover_art.file.seek(0)
+            cover_bytes = cover_art.file.read()
+            if cover_bytes:
+                public_cover_url = await _save_cover_art(cover_bytes, base_name, UPLOAD_DIR, source="uploaded")
+
+        # 2. If no uploaded cover, try to extract from audio metadata
         if not public_cover_url:
+            logger.info("[upload] no uploaded cover, checking metadata")
+            cover_art_data = None
             try:
-                audio_metadata = mutagen.File(BytesIO(audio_bytes))
-                if audio_metadata and hasattr(audio_metadata, 'tags'):
-                    # Look for cover art in common tag locations
-                    cover_art_data = None
-                    
-                    # For MP3 files (ID3 tags)
-                    if 'APIC:' in audio_metadata.tags:
-                        cover_art_data = audio_metadata.tags['APIC:'].data
-                    elif 'APIC' in audio_metadata.tags:
-                        cover_art_data = audio_metadata.tags['APIC'].data
-                    # For MP4/M4A files
-                    elif 'covr' in audio_metadata.tags:
-                        cover_art_data = audio_metadata.tags['covr'][0]
-                    # For FLAC files
-                    elif hasattr(audio_metadata, 'pictures') and audio_metadata.pictures:
-                        cover_art_data = audio_metadata.pictures[0].data
-                    
-                    if cover_art_data:
-                        # B2-first for extracted cover art
-                        try:
-                            b2 = B2Storage()
-                            if b2.is_configured():
-                                cover_key = f"covers/{base_name}{cover_art_extension}"
-                                _res = b2.put_bytes_safe(cover_key, cover_art_data, content_type='image/jpeg')
-                                if _res.get("ok"):
-                                    public_cover_url = _res.get("url")
-                                else:
-                                    logger.warning("[upload] B2 cover upload (extracted) error code=%s detail=%s", _res.get("error_code"), _res.get("detail"))
-                        except Exception as e:
-                            logger.warning("[upload] B2 cover upload (extracted) error: %s", e)
-                        # Local fallback for extracted cover art
-                        if not public_cover_url:
-                            try:
-                                cover_dir = os.path.join(UPLOAD_DIR, "covers")
-                                os.makedirs(cover_dir, exist_ok=True)
-                                cover_filename = f"{base_name}{cover_art_extension}"
-                                cover_path = os.path.join(cover_dir, cover_filename)
-                                counter = 1
-                                while os.path.exists(cover_path) and counter <= 1000:
-                                    cover_filename = f"{base_name}_{counter}{cover_art_extension}"
-                                    cover_path = os.path.join(cover_dir, cover_filename)
-                                    counter += 1
-                                with open(cover_path, "wb") as cf:
-                                    cf.write(cover_art_data)
-                                public_cover_url = f"/uploads/covers/{cover_filename}"
-                                logger.info("[upload] local extracted cover save done path=%s url=%s", cover_path, public_cover_url)
-                            except Exception as le:
-                                logger.warning("[upload] local extracted cover save failed: %s", le)
-                    
-            except Exception as e:
-                logger.debug("[upload] cover art not found in metadata: %s", e)
-        
-        # If still no cover art, generate one with AI
-        if not public_cover_url:
-            try:
-                logger.info("[upload] AI cover generate start title='%s' artist='%s' genre='%s'", title, artist_name, genre or 'none')
+                tags = getattr(tags_source, 'tags', None)
+                if tags:
+                    if 'APIC:' in tags: cover_art_data = tags['APIC:'].data
+                    elif 'APIC' in tags: cover_art_data = tags['APIC'].data
+                    elif 'covr' in tags: cover_art_data = tags['covr'][0]
+                elif hasattr(tags_source, 'pictures') and tags_source.pictures:
+                    cover_art_data = tags_source.pictures[0].data
                 
-                # Initialize AI Art Generator with no API key needed for Pollinations
+                if cover_art_data:
+                    logger.info("[upload] found extracted cover art in metadata (%d bytes)", len(cover_art_data))
+                    public_cover_url = await _save_cover_art(cover_art_data, base_name, UPLOAD_DIR, source="extracted")
+            except Exception as e:
+                logger.debug("[upload] could not extract cover from metadata: %s", e)
+
+        # 3. If still no cover art, generate one with AI
+        if not public_cover_url:
+            logger.info("[upload] no cover found, generating with AI")
+            try:
                 ai_generator = AIArtGenerator()
-                
-                # Generate cover art based on metadata and custom prompt if provided
-                try:
-                    cover_art_bytes = await asyncio.wait_for(
-                        asyncio.to_thread(
-                            ai_generator.generate_cover_art_from_metadata,
-                            title=title,
-                            artist=artist_name,
-                            genre=genre,
-                            custom_prompt=custom_prompt
-                        ),
-                        timeout=float(os.getenv('AI_COVER_TIMEOUT_SECONDS', '45.0'))
-                    )
-                except asyncio.TimeoutError:
-                    cover_art_bytes = None
-                    logger.warning("[upload] AI cover generation timed out (AI_COVER_TIMEOUT_SECONDS=%s)", os.getenv('AI_COVER_TIMEOUT_SECONDS', '45.0'))
-                
+                ai_timeout = float(os.getenv('AI_COVER_TIMEOUT_SECONDS', '45.0'))
+                cover_art_bytes = await asyncio.wait_for(
+                    asyncio.to_thread(
+                        ai_generator.generate_cover_art_from_metadata,
+                        title=title, artist=artist_name, genre=genre, custom_prompt=custom_prompt
+                    ),
+                    timeout=ai_timeout
+                )
                 if cover_art_bytes:
-                    # B2-first for AI cover art
-                    try:
-                        b2 = B2Storage()
-                        if b2.is_configured():
-                            # Upload to B2 if configured - use a unique key with timestamp
-                            import uuid
-                            timestamp = int(time.time())
-                            random_str = str(uuid.uuid4())[:6]
-                            clean_base = re.sub(r'[^a-zA-Z0-9\-]', '-', base_name.lower())
-                            clean_base = re.sub(r'-+', '-', clean_base).strip('-')
-                            cover_key = f"covers/{clean_base}-ai-{timestamp}-{random_str}{cover_art_extension}"
-                            _res = b2.put_bytes_safe(cover_key, cover_art_bytes, content_type='image/jpeg')
-                            if _res.get("ok"):
-                                public_cover_url = _res.get("url")
-                            else:
-                                logger.warning("[upload] B2 cover upload (AI) error code=%s detail=%s", _res.get("error_code"), _res.get("detail"))
-                    except Exception as e:
-                        logger.warning("[upload] B2 cover upload (AI) error: %s", e)
-                    # Local fallback for AI cover art
-                    if not public_cover_url:
-                        try:
-                            cover_dir = os.path.join(UPLOAD_DIR, "covers")
-                            os.makedirs(cover_dir, exist_ok=True)
-                            cover_filename = f"{base_name}-ai{cover_art_extension}"
-                            cover_path = os.path.join(cover_dir, cover_filename)
-                            counter = 1
-                            while os.path.exists(cover_path) and counter <= 1000:
-                                cover_filename = f"{base_name}-ai_{counter}{cover_art_extension}"
-                                cover_path = os.path.join(cover_dir, cover_filename)
-                                counter += 1
-                            with open(cover_path, "wb") as cf:
-                                cf.write(cover_art_bytes)
-                            public_cover_url = f"/uploads/covers/{cover_filename}"
-                            logger.info("[upload] local AI cover save done path=%s url=%s", cover_path, public_cover_url)
-                        except Exception as le:
-                            logger.warning("[upload] local AI cover save failed: %s", le)
+                    logger.info("[upload] AI generation successful (%d bytes)", len(cover_art_bytes))
+                    public_cover_url = await _save_cover_art(cover_art_bytes, base_name, UPLOAD_DIR, source="ai")
                 else:
-                    logger.info("[upload] AI cover generation returned no data")
-                    
+                    logger.warning("[upload] AI generation returned no data")
+            except asyncio.TimeoutError:
+                logger.warning("[upload] AI cover generation timed out after %ss", ai_timeout)
             except Exception as e:
-                logger.debug("[upload] AI cover generation error: %s", e)
-    
+                logger.error("[upload] AI cover generation failed: %s", e)
+
     except Exception as e:
         # Don't fail the entire upload if cover art handling fails
         logger.warning("[upload] cover art processing error: %s", e)
+
+async def _save_cover_art(
+    cover_bytes: bytes,
+    base_name: str,
+    upload_dir: str,
+    source: str = "uploaded"
+) -> Optional[str]:
+    """Helper to save cover art bytes (B2-first with local fallback)."""
+    public_cover_url = None
+    cover_art_extension = '.jpg'  # Standardize to jpg
+    b2 = B2Storage()
+
+    # 1. Try B2 Upload
+    if b2.is_configured():
+        try:
+            # Create a unique key for B2
+            timestamp = int(time.time())
+            random_str = hashlib.sha1(cover_bytes).hexdigest()[:8]
+            clean_base = re.sub(r'[^a-zA-Z0-9\-]', '-', base_name.lower())
+            clean_base = re.sub(r'-+', '-', clean_base).strip('-')
+            cover_key = f"covers/{clean_base}-{source}-{timestamp}-{random_str}{cover_art_extension}"
+            
+            _res = b2.put_bytes_safe(cover_key, cover_bytes, content_type='image/jpeg')
+            if _res.get("ok"):
+                public_cover_url = _res.get("url")
+                logger.info("[upload] B2 cover save (%s) done url=%s", source, public_cover_url)
+                return public_cover_url
+            else:
+                logger.warning("[upload] B2 cover save (%s) failed: %s", source, _res.get("detail"))
+        except Exception as e:
+            logger.warning("[upload] B2 cover save (%s) error: %s", source, e)
+
+    # 2. Local Fallback
+    logger.warning("[upload] B2 cover save failed, falling back to local for source: %s", source)
+    try:
+        cover_dir = os.path.join(upload_dir, "covers")
+        os.makedirs(cover_dir, exist_ok=True)
+        
+        # Create a unique local filename
+        local_filename = f"{base_name}-{source}{cover_art_extension}"
+        local_path = os.path.join(cover_dir, local_filename)
+        counter = 1
+        while os.path.exists(local_path) and counter <= 100:
+            local_filename = f"{base_name}-{source}_{counter}{cover_art_extension}"
+            local_path = os.path.join(cover_dir, local_filename)
+            counter += 1
+
+        with open(local_path, "wb") as cf:
+            cf.write(cover_bytes)
+        
+        public_cover_url = f"/uploads/covers/{local_filename}"
+        logger.info("[upload] Local cover save (%s) done url=%s", source, public_cover_url)
+        return public_cover_url
+    except Exception as le:
+        logger.error("[upload] Local cover save (%s) failed: %s", source, le)
+
+    return None
 
     # B2-first: upload audio bytes directly when configured
     public_audio_url = None
@@ -1043,38 +980,38 @@ async def upload_mix(
                 elapsed = (time.perf_counter() - start)
                 if public_audio_url:
                     logger.info("[upload] B2 audio upload done in %.2fs url=%s", elapsed, public_audio_url)
-                    termprint(f"[upload] B2 audio upload done in {elapsed:.2f}s url={public_audio_url}")
     except Exception as e:
         logger.error("[upload] B2 audio upload error: %s", e)
-        termprint(f"[upload] B2 audio upload error: {e}")
-    
-    # If B2 failed or not configured, save locally as fallback
+    # Fallback to local storage if B2 is not configured or fails
     if not public_audio_url:
+        storage_provider = "local_filesystem"
+        fallback_from_b2 = True if b2.is_configured() else False
+        logger.warning("[upload] B2 upload failed or not configured, falling back to local storage.")
+        termprint("[upload] B2 upload failed or not configured, falling back to local storage.")
         try:
-            os.makedirs(UPLOAD_DIR, exist_ok=True)
-            with open(local_file_path, "wb") as f:
-                f.write(audio_bytes)
-            public_audio_url = f"/uploads/{unique_filename}"
-            storage_provider = "local"
-            storage_location = local_file_path
-            fallback_from_b2 = True if b2_error_code else False
-            logger.info("[upload] local audio save done path=%s url=%s", local_file_path, public_audio_url)
-            termprint(f"[upload] local audio save done path={local_file_path} url={public_audio_url}")
-        except Exception as le:
-            logger.error("[upload] local audio save failed: %s", le)
-            termprint(f"[upload] local audio save failed: {le}")
-    if not public_audio_url:
-        logger.error("[upload] failing: no storage available (B2/local)")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={
-                "error": "No storage available: B2 upload failed or not configured, and local save failed.",
-                "error_code": "storage_unavailable"
-            }
-        )
+            # Ensure the local uploads directory exists
+            if not os.path.exists(UPLOAD_DIR):
+                os.makedirs(UPLOAD_DIR)
+            # Sanitize filename and get a unique path
+            sanitized_filename = sanitize_filename(file.filename or "untitled.mp3")
+            unique_filename = get_unique_filepath(db, UPLOAD_DIR, sanitized_filename)
+            local_audio_path = os.path.join(UPLOAD_DIR, unique_filename)
+            # Save the file to the local filesystem
+            with open(local_audio_path, "wb") as buffer:
+                buffer.write(audio_bytes)
+            public_audio_url = f"/uploads/{unique_filename}"  # This is a relative path for local fallback
+            storage_location = local_audio_path
+            logger.info("[upload] saved to local fallback: %s", public_audio_url)
+            termprint(f"[upload] saved to local fallback: {public_audio_url}")
+        except Exception as e:
+            logger.error("[upload] local save failed: %s", e)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail={"error": f"Failed to save file locally: {e}", "error_code": "local_save_failed"}
+            )
 
     # Enhanced duplicate detection with file hash and metadata
-    if not skip_duplicate_check:
+    # ... (rest of the code remains the same)
         duplicate_info = check_for_duplicate_track(
             db=db,
             title=title,
@@ -1152,7 +1089,7 @@ async def upload_mix(
             }
         )
 
-    # Create mix in database using B2 URLs only
+    # Use the B2 URL if available, otherwise use the local path
     final_audio_path = public_audio_url
     final_cover_url = public_cover_url if public_cover_url else None
 
@@ -1199,7 +1136,15 @@ async def upload_mix(
         logger.info("[upload] success mix_id=%s", db_mix.id)
         termprint(f"[upload] success mix_id={db_mix.id}")
         from fastapi.encoders import jsonable_encoder
-        return JSONResponse(status_code=status.HTTP_201_CREATED, content=jsonable_encoder(response_content))
+        resp = JSONResponse(status_code=status.HTTP_201_CREATED, content=jsonable_encoder(response_content))
+        # Surface storage details to clients (for UI warnings/telemetry)
+        if storage_provider:
+            resp.headers['X-Storage-Provider'] = str(storage_provider)
+        if storage_location:
+            resp.headers['X-Storage-Location'] = str(storage_location)
+        if fallback_from_b2:
+            resp.headers['X-Local-Fallback'] = '1'
+        return resp
         
     except IntegrityError as e:
         # Unique constraint (e.g., file_path) violation -> map to 409 duplicate
