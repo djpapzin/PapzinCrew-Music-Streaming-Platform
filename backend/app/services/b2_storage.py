@@ -3,12 +3,16 @@ from typing import Optional, Dict, Any
 import boto3
 from botocore.client import Config
 from botocore.exceptions import ClientError, EndpointConnectionError, BotoCoreError
+from dotenv import load_dotenv
 
 
 class B2Storage:
     """Thin wrapper around S3-compatible Backblaze B2 uploads."""
 
     def __init__(self) -> None:
+        # Ensure .env is loaded (fallback if not loaded by main.py)
+        load_dotenv('.env')
+        
         self.endpoint_url: Optional[str] = os.getenv("B2_ENDPOINT")
         self.region_name: Optional[str] = os.getenv("B2_REGION") or "us-west-002"
         self.bucket: Optional[str] = os.getenv("B2_BUCKET")
