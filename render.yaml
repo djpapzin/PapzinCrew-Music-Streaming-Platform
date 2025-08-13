@@ -1,0 +1,35 @@
+services:
+  - type: web
+    name: papzincrew-api
+    env: python
+    rootDir: backend
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      # Set these in Render dashboard after creating the service, or edit this blueprint with real values
+      - key: SQLALCHEMY_DATABASE_URL
+        value: ""  # e.g. postgres://USER:PASSWORD@HOST:PORT/DBNAME
+      - key: B2_ACCESS_KEY_ID
+        value: ""
+      - key: B2_SECRET_ACCESS_KEY
+        value: ""
+      - key: B2_BUCKET
+        value: ""
+      - key: ALLOWED_ORIGINS
+        value: "https://<your-frontend-domain>"
+      # Optional regex for additional origins; defaults to localhost
+      - key: ALLOWED_ORIGIN_REGEX
+        value: ""
+
+  - type: static
+    name: papzincrew-frontend
+    rootDir: frontend/project
+    plan: free
+    buildCommand: npm ci && npm run build
+    publishPath: dist
+    envVars:
+      - key: VITE_API_URL
+        value: "https://<your-backend-domain>"  # Set this to the Render backend URL once created
