@@ -28,3 +28,7 @@
 - [ ] Search/filter (artist, title, BPM, tags).
 - [ ] Shareable links; social previews.
 - [ ] Now playing mini-player and background audio on mobile.
+
+
+- add upload date to the file and show it in the main page.
+
