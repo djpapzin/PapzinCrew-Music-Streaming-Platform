@@ -92,6 +92,24 @@ Once both servers are running, you'll have access to:
 - Cover art is extracted from files when present; AI-generated when missing (no API key required)
 - Storage: Backblaze B2 by default (when configured); local `uploads` used as fallback
 
+## Maintenance: Scan and prune unplayable tracks
+
+- Tool: `backend/tools/scan_prune_tracks.py`
+- Purpose: Detects tracks that won’t play and optionally deletes their DB rows.
+- Playable criteria:
+  - Remote: `file_path` starting with `http://` or `https://` (B2/remote) → OK
+  - Local: resolves `/uploads/...` or `uploads/...` to your `UPLOAD_DIR` and checks existence; also tries the basename and numbered variants like `name_1.mp3`.
+- Usage (run from `backend/`):
+  - Scan only:
+    - `python tools/scan_prune_tracks.py`
+  - Scan with explicit upload dir:
+    - `python tools/scan_prune_tracks.py --upload-dir uploads`
+  - Delete unplayable (destructive):
+    - `python tools/scan_prune_tracks.py --delete`
+- Notes:
+  - Make a DB backup before using `--delete`.
+  - This script does not restart or affect the running server.
+
 ---
 
 **Happy streaming! 🎶**
