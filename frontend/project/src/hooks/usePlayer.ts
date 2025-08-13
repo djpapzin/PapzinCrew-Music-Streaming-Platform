@@ -56,16 +56,16 @@ export const usePlayer = () => {
         readyState: audio.readyState,
       });
 
-      // Dev fallback: if we failed loading a redirected B2 URL due to CORS or format, retry once via backend proxy
+      // Fallback: if we failed loading a redirected B2 URL due to CORS or format, retry once via backend proxy
       try {
         const src = audio.currentSrc || audio.src;
         // Match /tracks/{id}/stream but not already /proxy
         const m = src && src.match(/\/tracks\/(\d+)\/stream(?!\/proxy)/);
         const trackIdStr = m ? String(parseInt(m[1], 10)) : undefined;
-        if (isDevHost && trackIdStr && !proxyTriedRef.current.has(trackIdStr)) {
+        if (trackIdStr && !proxyTriedRef.current.has(trackIdStr)) {
           proxyTriedRef.current.add(trackIdStr);
           const proxyUrl = src.replace('/stream', '/stream/proxy');
-          console.info('Falling back to proxy for dev', { trackId: trackIdStr, proxyUrl });
+          console.info('Falling back to proxy', { trackId: trackIdStr, proxyUrl });
           audio.src = proxyUrl;
           try { audio.load(); } catch {}
           // Retry playback now and also once ready
@@ -80,7 +80,7 @@ export const usePlayer = () => {
         }
         // If we are already on proxy (or retry already happened), skip to next track
         const onProxy = src.includes('/stream/proxy');
-        if (isDevHost && (onProxy || (trackIdStr && proxyTriedRef.current.has(trackIdStr)))) {
+        if (onProxy || (trackIdStr && proxyTriedRef.current.has(trackIdStr))) {
           console.warn('Proxy also failed; skipping to next track');
           toast('Skipped: playback failed for this track');
           handleNext();
@@ -148,10 +148,9 @@ export const usePlayer = () => {
     // Build preferred source: always use proxy in development to avoid B2 CORS
     const buildPreferredSrc = (url: string) => {
       if (!url) return url;
-      if (isDevHost) {
-        if (url.includes('/stream/proxy')) return url; // already proxy
-        if (url.includes('/tracks/') && url.includes('/stream')) return url.replace('/stream', '/stream/proxy');
-      }
+      // Always use proxy for streaming to avoid CORS issues with B2 storage
+      if (url.includes('/stream/proxy')) return url; // already proxy
+      if (url.includes('/tracks/') && url.includes('/stream')) return url.replace('/stream', '/stream/proxy');
       return url;
     };
 
