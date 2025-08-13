@@ -30,7 +30,7 @@ function App() {
     toggleRepeat
   } = usePlayer();
 
-  const API_BASE = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8000';
+  const API_BASE = (import.meta as any).env?.VITE_API_URL || (window.location.origin.includes('netlify') ? '/api' : 'http://localhost:8000');
   const toAbsoluteUrl = (url?: string | null): string => {
     if (!url) return '';
     if (/^https?:\/\//i.test(url)) return url;
