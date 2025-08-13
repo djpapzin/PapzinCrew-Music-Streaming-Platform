@@ -16,11 +16,16 @@ from .routers import tracks, categories, artists, uploads, storage, cleanup, fil
 log_level = os.getenv("LOG_LEVEL", "INFO").upper()
 logging.basicConfig(
     level=getattr(logging, log_level, logging.INFO),
-    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+    format="%(levelname)s:%(name)s: %(message)s",
 )
+# App logger
+logger = logging.getLogger("app")
+
 # Tame very chatty libraries
 logging.getLogger("botocore").setLevel(logging.WARNING)
 logging.getLogger("urllib3").setLevel(logging.WARNING)
+# Reduce uvicorn access noise (HTTP request lines)
+logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
 
 # Load environment variables from .env files
 # 1) Project root .env
@@ -35,8 +40,11 @@ else:
     load_dotenv('.env')
 
 # Print environment variables for debugging (remove in production)
-print("B2_ENABLED:", 'B2_ACCESS_KEY_ID' in os.environ and 'B2_SECRET_ACCESS_KEY' in os.environ)
-print("B2_BUCKET:", os.getenv('B2_BUCKET'))
+logger.info(
+    "B2 configured=%s bucket=%s",
+    'B2_ACCESS_KEY_ID' in os.environ and 'B2_SECRET_ACCESS_KEY' in os.environ,
+    os.getenv('B2_BUCKET'),
+)
 
 # Create database tables
 models.Base.metadata.create_all(bind=engine)
@@ -110,7 +118,7 @@ async def catch_exceptions_middleware(request: Request, call_next):
         # Let FastAPI handle HTTPException with its original detail/status
         if isinstance(e, HTTPException):
             raise e
-        print(f"Unhandled exception: {str(e)}", file=sys.stderr)
+        logger.exception("Unhandled exception")
         # Ensure CORS headers are present even on error responses so the
         # frontend can read the error details instead of a CORS block.
         error_payload = {

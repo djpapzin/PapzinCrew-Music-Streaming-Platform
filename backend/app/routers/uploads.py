@@ -24,11 +24,11 @@ import logging
 logger = logging.getLogger(__name__)
 
 # Simple terminal print helper (toggle with ENABLE_UPLOAD_PRINTS=1/0)
-ENABLE_UPLOAD_PRINTS = os.getenv("ENABLE_UPLOAD_PRINTS", "1").lower() in ("1", "true", "yes")
+ENABLE_UPLOAD_PRINTS = os.getenv("ENABLE_UPLOAD_PRINTS", "0").lower() in ("1", "true", "yes")
 def termprint(msg: str) -> None:
     if ENABLE_UPLOAD_PRINTS:
         try:
-            print(msg, flush=True)
+            logger.info(msg)
         except Exception:
             pass
 
@@ -48,6 +48,69 @@ from ..services.b2_storage import B2Storage
 
 router = APIRouter(prefix="/upload", tags=["upload"])
 
+async def _save_cover_art(cover_bytes: bytes, base_name: str, upload_dir: str, source: str = "unknown") -> str:
+    """
+    Save cover art to B2 storage first, with local fallback.
+    Returns the public URL of the saved cover art.
+    """
+    try:
+        # Generate unique cover art filename
+        cover_extension = ".jpg"  # Default to JPG for cover art
+        cover_filename = f"{base_name}-cover{cover_extension}"
+        cover_key = f"covers/{cover_filename}"
+        
+        # Try B2 upload first
+        b2 = B2Storage()
+        public_cover_url = None
+        
+        if b2.is_configured():
+            logger.info("🎨 Uploading cover art to B2 storage (%s, %d bytes)", source, len(cover_bytes))
+            try:
+                b2_timeout = float(os.getenv('B2_PUT_TIMEOUT', '20'))
+                result = await asyncio.wait_for(
+                    asyncio.to_thread(
+                        b2.put_bytes_safe,
+                        cover_key,
+                        cover_bytes,
+                        "image/jpeg"
+                    ),
+                    timeout=b2_timeout
+                )
+                if result.get("ok"):
+                    public_cover_url = result.get("url")
+                    logger.info("✅ Cover art uploaded to B2: %s", public_cover_url)
+                else:
+                    logger.warning("⚠️ B2 cover upload failed: %s", result.get("detail"))
+            except asyncio.TimeoutError:
+                logger.warning("⚠️ B2 cover upload timed out")
+            except Exception as e:
+                logger.warning("⚠️ B2 cover upload error: %s", e)
+        
+        # Fallback to local storage if B2 fails
+        if not public_cover_url:
+            logger.info("📁 Saving cover art locally (%s, %d bytes)", source, len(cover_bytes))
+            try:
+                # Ensure upload directory exists
+                if not os.path.exists(upload_dir):
+                    os.makedirs(upload_dir)
+                
+                # Save to local filesystem
+                local_cover_path = os.path.join(upload_dir, cover_filename)
+                with open(local_cover_path, "wb") as f:
+                    f.write(cover_bytes)
+                
+                public_cover_url = f"/uploads/{cover_filename}"
+                logger.info("✅ Cover art saved locally: %s", public_cover_url)
+            except Exception as e:
+                logger.error("🚨 Failed to save cover art locally: %s", e)
+                return None
+        
+        return public_cover_url
+        
+    except Exception as e:
+        logger.error("🚨 Error in _save_cover_art: %s", e)
+        return None
+
 def extract_metadata_from_file(file: UploadFile) -> dict:
     """
     Extract metadata from an audio file using mutagen (in-memory, no temp files).
@@ -59,7 +122,7 @@ def extract_metadata_from_file(file: UploadFile) -> dict:
         data = file.file.read()
         file.file.seek(0)
     except Exception as e:
-        print(f"Failed reading upload bytes for metadata: {e}")
+        logger.warning("Failed reading upload bytes for metadata: %s", e)
         data = b""
 
     metadata = {}
@@ -78,12 +141,21 @@ def extract_metadata_from_file(file: UploadFile) -> dict:
             # Clean up metadata (remove empty values)
             metadata = {k: v for k, v in metadata.items() if v}
     except Exception as e:
-        print(f"Error extracting metadata: {str(e)}")
+        logger.warning("Error extracting metadata: %s", e)
         metadata = {}
 
-    # Ensure title fallback
+    # Fallbacks: derive missing artist/title from filename
+    stem = Path(file.filename).stem
+    if not metadata.get('artist'):
+        name_clean = re.sub(r'\s*[\[\(].*?[\]\)]\s*', ' ', stem).strip()
+        for sep in [' - ', ' – ', '-', '–', '—', '|', '•']:
+            if sep in name_clean:
+                parts = name_clean.split(sep)
+                if len(parts) >= 2 and parts[0].strip():
+                    metadata['artist'] = parts[0].strip()
+                    break
     if not metadata.get('title'):
-        metadata['title'] = Path(file.filename).stem
+        metadata['title'] = stem
 
     return metadata
 
@@ -111,7 +183,8 @@ async def extract_metadata(
         except asyncio.TimeoutError:
             metadata = {'title': Path(file.filename).stem}
         except Exception as e:
-            print(f"Metadata extraction error (fast path): {e}")
+            logger.info("✅ Metadata extracted successfully")
+            logger.warning("Metadata extraction error (fast path): %s", e)
             metadata = {'title': Path(file.filename).stem}
         
         # Reset file position for potential further processing
@@ -126,7 +199,8 @@ async def extract_metadata(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"Error in extract_metadata: {str(e)}")
+        logger.info("✅ Metadata extracted successfully")
+        logger.exception("Error in extract_metadata")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to extract metadata: {str(e)}"
@@ -384,7 +458,8 @@ async def extract_metadata(
         except asyncio.TimeoutError:
             metadata = {'title': Path(file.filename).stem}
         except Exception as e:
-            print(f"Metadata extraction error (fast path): {e}")
+            logger.info("✅ Metadata extracted successfully")
+            logger.warning("Metadata extraction error (fast path): %s", e)
             metadata = {'title': Path(file.filename).stem}
         
         # Reset file position for potential further processing
@@ -399,7 +474,8 @@ async def extract_metadata(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"Error in extract_metadata: {str(e)}")
+        logger.info("✅ Metadata extracted successfully")
+        logger.exception("Error in extract_metadata")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to extract metadata: {str(e)}"
@@ -533,8 +609,9 @@ async def upload_mix(file: UploadFile = File(...), tracklist: Optional[List[Dict
                             metadata["cover_art"] = f"data:image/jpeg;base64,{cover_art_base64}"
                             
                 except Exception as e:
-                    print(f"Could not extract cover art: {e}")
-                
+                    logger.info("🎵 Processing track: %s", file.filename)
+                    logger.debug("[upload] could not extract cover from metadata: %s", e)
+
                 # If no title found, use filename without extension
                 if not metadata["title"]:
                     metadata["title"] = os.path.splitext(file.filename)[0]
@@ -698,16 +775,35 @@ async def api_check_duplicate(
     )
     
     if duplicate_info:
-        return {
-            "duplicate": True, 
-            "match_type": duplicate_info.get("match_type", "unknown"),
-            "confidence": duplicate_info.get("confidence", 0.0),
-            "reason": duplicate_info.get("reason", "Potential duplicate detected"),
-            **duplicate_info
-        }
-    return {"duplicate": False}
+        logger.info("[upload] duplicate detected: %s", duplicate_info.get('reason'))
+        # Attempt to remove uploaded objects from B2 on duplicate
+        try:
+            b2 = B2Storage()
+            if b2.is_configured():
+                if public_audio_url:
+                    audio_key = b2.extract_key_from_url(public_audio_url)
+                    if audio_key:
+                        b2.delete_file(audio_key)
+                if locals().get('public_cover_url'):
+                    cover_key = b2.extract_key_from_url(locals().get('public_cover_url'))
+                    if cover_key:
+                        b2.delete_file(cover_key)
+        except Exception:
+            pass
+
+        # Return 409 Conflict with enhanced duplicate information
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "error": f"Duplicate detected: {duplicate_info.get('reason', 'Similar track found')}",
+                "error_code": "duplicate_track",
+                "duplicate_info": duplicate_info
+            }
+        )
 
 @router.post("", status_code=201)
+@router.post("/", status_code=201)
+@router.post("/upload-mix")
 async def upload_mix(
     title: str = Form(...),
     artist_name: str = Form(...),
@@ -741,15 +837,36 @@ async def upload_mix(
     # Validate the file first
     is_valid, validation_result = validate_audio_file(file)
     if not is_valid:
+        logger.warning("[upload] validation failed: %s", validation_result)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=validation_result
+        )
+    else:
+        logger.info(
+            "[upload] validation ok ext=%s mime=%s size_bytes=%s",
+            validation_result.get('file_extension'),
+            validation_result.get('mime_type'),
+            validation_result.get('file_size_bytes'),
         )
     
     # Enhanced duplicate check after file processing (moved after file hash calculation)
     # This will be done after metadata extraction for more accurate detection
     
     # Check if artist exists or create a new one
+    # Fallback: derive artist from filename if not provided or blank
+    if not artist_name or not artist_name.strip():
+        stem = Path(file.filename).stem
+        name_clean = re.sub(r'\s*[\[\(].*?[\]\)]\s*', ' ', stem).strip()
+        for sep in [' - ', ' – ', '-', '–', '—', '|', '•']:
+            if sep in name_clean:
+                parts = name_clean.split(sep)
+                if len(parts) >= 2 and parts[0].strip():
+                    artist_name = parts[0].strip()
+                    logger.info("[upload] artist fallback from filename: %s", artist_name)
+                    break
+        if not artist_name:
+            artist_name = "Unknown Artist"
     db_artist = crud.get_artist_by_name(db, name=artist_name)
     if db_artist is None:
         artist_data = schemas.ArtistCreate(name=artist_name)
@@ -802,7 +919,7 @@ async def upload_mix(
                 logger.info("[upload] extracted BPM=%s", bpm)
         except Exception as e:
             logger.debug("[upload] BPM parse error: %s", e)
-        logger.info("[upload] metadata duration=%ss bitrate_kbps=%s size_mb=%.2f", duration_seconds, quality_kbps, file_size_mb)
+        logger.info("🔍 Extracted track metadata: %ss, %s kbps, %.2f MB", duration_seconds, quality_kbps, file_size_mb)
     except Exception as e:
         logger.warning("[upload] metadata extraction error: %s", e)
         duration_seconds = 0
@@ -815,7 +932,7 @@ async def upload_mix(
     try:
         # 1. Check for user-uploaded cover art first
         if cover_art and cover_art.filename:
-            logger.info("[upload] processing uploaded cover art: %s", cover_art.filename)
+            logger.info("🎵 Processing track: %s", file.filename)
             cover_art.file.seek(0)
             cover_bytes = cover_art.file.read()
             if cover_bytes:
@@ -823,7 +940,7 @@ async def upload_mix(
 
         # 2. If no uploaded cover, try to extract from audio metadata
         if not public_cover_url:
-            logger.info("[upload] no uploaded cover, checking metadata")
+            logger.info("🎨 No cover art found in metadata, checking for AI generation...")
             cover_art_data = None
             try:
                 tags = getattr(tags_source, 'tags', None)
@@ -842,7 +959,7 @@ async def upload_mix(
 
         # 3. If still no cover art, generate one with AI
         if not public_cover_url:
-            logger.info("[upload] no cover found, generating with AI")
+            logger.info("🎨 No cover art found in metadata, checking for AI generation...")
             try:
                 ai_generator = AIArtGenerator()
                 ai_timeout = float(os.getenv('AI_COVER_TIMEOUT_SECONDS', '45.0'))
@@ -866,63 +983,6 @@ async def upload_mix(
     except Exception as e:
         # Don't fail the entire upload if cover art handling fails
         logger.warning("[upload] cover art processing error: %s", e)
-
-async def _save_cover_art(
-    cover_bytes: bytes,
-    base_name: str,
-    upload_dir: str,
-    source: str = "uploaded"
-) -> Optional[str]:
-    """Helper to save cover art bytes (B2-first with local fallback)."""
-    public_cover_url = None
-    cover_art_extension = '.jpg'  # Standardize to jpg
-    b2 = B2Storage()
-
-    # 1. Try B2 Upload
-    if b2.is_configured():
-        try:
-            # Create a unique key for B2
-            timestamp = int(time.time())
-            random_str = hashlib.sha1(cover_bytes).hexdigest()[:8]
-            clean_base = re.sub(r'[^a-zA-Z0-9\-]', '-', base_name.lower())
-            clean_base = re.sub(r'-+', '-', clean_base).strip('-')
-            cover_key = f"covers/{clean_base}-{source}-{timestamp}-{random_str}{cover_art_extension}"
-            
-            _res = b2.put_bytes_safe(cover_key, cover_bytes, content_type='image/jpeg')
-            if _res.get("ok"):
-                public_cover_url = _res.get("url")
-                logger.info("[upload] B2 cover save (%s) done url=%s", source, public_cover_url)
-                return public_cover_url
-            else:
-                logger.warning("[upload] B2 cover save (%s) failed: %s", source, _res.get("detail"))
-        except Exception as e:
-            logger.warning("[upload] B2 cover save (%s) error: %s", source, e)
-
-    # 2. Local Fallback
-    logger.warning("[upload] B2 cover save failed, falling back to local for source: %s", source)
-    try:
-        cover_dir = os.path.join(upload_dir, "covers")
-        os.makedirs(cover_dir, exist_ok=True)
-        
-        # Create a unique local filename
-        local_filename = f"{base_name}-{source}{cover_art_extension}"
-        local_path = os.path.join(cover_dir, local_filename)
-        counter = 1
-        while os.path.exists(local_path) and counter <= 100:
-            local_filename = f"{base_name}-{source}_{counter}{cover_art_extension}"
-            local_path = os.path.join(cover_dir, local_filename)
-            counter += 1
-
-        with open(local_path, "wb") as cf:
-            cf.write(cover_bytes)
-        
-        public_cover_url = f"/uploads/covers/{local_filename}"
-        logger.info("[upload] Local cover save (%s) done url=%s", source, public_cover_url)
-        return public_cover_url
-    except Exception as le:
-        logger.error("[upload] Local cover save (%s) failed: %s", source, le)
-
-    return None
 
     # B2-first: upload audio bytes directly when configured
     public_audio_url = None
@@ -1001,10 +1061,10 @@ async def _save_cover_art(
                 buffer.write(audio_bytes)
             public_audio_url = f"/uploads/{unique_filename}"  # This is a relative path for local fallback
             storage_location = local_audio_path
-            logger.info("[upload] saved to local fallback: %s", public_audio_url)
+            logger.info("✅ Upload complete! 📁 Access at: %s", public_audio_url)
             termprint(f"[upload] saved to local fallback: {public_audio_url}")
         except Exception as e:
-            logger.error("[upload] local save failed: %s", e)
+            logger.error("🚨 [upload] local save failed: %s", e)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail={"error": f"Failed to save file locally: {e}", "error_code": "local_save_failed"}
@@ -1012,42 +1072,42 @@ async def _save_cover_art(
 
     # Enhanced duplicate detection with file hash and metadata
     # ... (rest of the code remains the same)
-        duplicate_info = check_for_duplicate_track(
-            db=db,
-            title=title,
-            artist_name=artist_name,
-            file_size=validation_result['file_size_bytes'],
-            file_hash=file_hash,
-            duration_seconds=duration_seconds,
-            album=album
-        )
-        
-        if duplicate_info:
-            logger.info("[upload] duplicate detected: %s", duplicate_info.get('reason'))
-            # Attempt to remove uploaded objects from B2 on duplicate
-            try:
-                b2 = B2Storage()
-                if b2.is_configured():
-                    if public_audio_url:
-                        audio_key = b2.extract_key_from_url(public_audio_url)
-                        if audio_key:
-                            b2.delete_file(audio_key)
-                    if locals().get('public_cover_url'):
-                        cover_key = b2.extract_key_from_url(locals().get('public_cover_url'))
-                        if cover_key:
-                            b2.delete_file(cover_key)
-            except Exception:
-                pass
+    duplicate_info = check_for_duplicate_track(
+        db=db,
+        title=title,
+        artist_name=artist_name,
+        file_size=validation_result['file_size_bytes'],
+        file_hash=file_hash,
+        duration_seconds=duration_seconds,
+        album=album
+    )
+    
+    if duplicate_info:
+        logger.info("[upload] duplicate detected: %s", duplicate_info.get('reason'))
+        # Attempt to remove uploaded objects from B2 on duplicate
+        try:
+            b2 = B2Storage()
+            if b2.is_configured():
+                if public_audio_url:
+                    audio_key = b2.extract_key_from_url(public_audio_url)
+                    if audio_key:
+                        b2.delete_file(audio_key)
+                if locals().get('public_cover_url'):
+                    cover_key = b2.extract_key_from_url(locals().get('public_cover_url'))
+                    if cover_key:
+                        b2.delete_file(cover_key)
+        except Exception:
+            pass
 
-            # Return 409 Conflict with enhanced duplicate information
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail={
-                    "error": f"Duplicate detected: {duplicate_info.get('reason', 'Similar track found')}",
-                    "error_code": "duplicate_track",
-                    "duplicate_info": duplicate_info
-                }
-            )
+        # Return 409 Conflict with enhanced duplicate information
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "error": f"Duplicate detected: {duplicate_info.get('reason', 'Similar track found')}",
+                "error_code": "duplicate_track",
+                "duplicate_info": duplicate_info
+            }
+        )
 
     # Guard against duplicate by exact file_path before DB insert
     # If a mix already exists with the same stored file_path, return 409 and clean up uploaded blobs
@@ -1094,8 +1154,7 @@ async def _save_cover_art(
     final_cover_url = public_cover_url if public_cover_url else None
 
     try:
-        logger.info("[upload] DB save start")
-        termprint("[upload] DB save start")
+        logger.info("💾 Saving track to database...")
         mix_data = schemas.MixCreate(
             title=title,
             original_filename=file.filename,
@@ -1108,7 +1167,7 @@ async def _save_cover_art(
             cover_art_url=final_cover_url,
             description=description,
             tracklist=tracklist,
-            tags=tags,
+            tags=str(tags) if tags else None,
             genre=genre,
             album=album,
             year=year,
@@ -1126,6 +1185,21 @@ async def _save_cover_art(
         # Use model_dump and then jsonable_encoder to ensure JSON-serializable types
         response_content = response_model.model_dump()
         response_content['stream_url'] = f'/tracks/{db_mix.id}/stream'
+        
+        # Add frontend-expected properties
+        response_content['success'] = True
+        response_content['generating_art'] = bool(public_cover_url)  # True if we generated/processed cover art
+        response_content['metadata'] = {
+            'title': title,
+            'artist': artist_name,
+            'album': album,
+            'genre': genre,
+            'duration_seconds': duration_seconds,
+            'file_size_mb': file_size_mb,
+            'quality_kbps': quality_kbps,
+            'bpm': bpm
+        }
+        
         # Include storage details in response for observability
         if storage_provider:
             response_content['storage'] = storage_provider
@@ -1133,8 +1207,7 @@ async def _save_cover_art(
             response_content['location'] = storage_location
         if fallback_from_b2:
             response_content['fallback_from_b2'] = True
-        logger.info("[upload] success mix_id=%s", db_mix.id)
-        termprint(f"[upload] success mix_id={db_mix.id}")
+        logger.info("✅ Success! Track saved with ID: %s", db_mix.id)
         from fastapi.encoders import jsonable_encoder
         resp = JSONResponse(status_code=status.HTTP_201_CREATED, content=jsonable_encoder(response_content))
         # Surface storage details to clients (for UI warnings/telemetry)
@@ -1146,7 +1219,7 @@ async def _save_cover_art(
             resp.headers['X-Local-Fallback'] = '1'
         return resp
         
-    except IntegrityError as e:
+    except IntegrityError:
         # Unique constraint (e.g., file_path) violation -> map to 409 duplicate
         db.rollback()
         try:
@@ -1185,7 +1258,7 @@ async def _save_cover_art(
                 if cover_key:
                     b2.delete_file(cover_key)
         except Exception as cleanup_error:
-            print(f"Error during cleanup: {cleanup_error}")
+            logger.warning("⚠️  Error during cleanup: %s", str(cleanup_error))
             
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
