@@ -1,4 +1,12 @@
 services:
+  # PostgreSQL Database
+  - type: pgsql
+    name: papzincrew-db
+    databaseName: papzincrew_music
+    databaseUser: papzincrew_user
+    plan: free
+
+  # Backend API Service
   - type: web
     name: papzincrew-api
     env: python
@@ -9,21 +17,31 @@ services:
     healthCheckPath: /health
     autoDeploy: true
     envVars:
-      # Set these in Render dashboard after creating the service, or edit this blueprint with real values
-      - key: SQLALCHEMY_DATABASE_URL
-        value: ""  # e.g. postgres://USER:PASSWORD@HOST:PORT/DBNAME
+      # Database connection (automatically provided by Render when using pgsql service)
+      - key: DATABASE_URL
+        fromDatabase:
+          name: papzincrew-db
+          property: connectionString
+      # Backblaze B2 Storage Configuration (set these in Render dashboard)
       - key: B2_ACCESS_KEY_ID
-        value: ""
+        value: ""  # Your Backblaze B2 Application Key ID
       - key: B2_SECRET_ACCESS_KEY
-        value: ""
+        value: ""  # Your Backblaze B2 Application Key
       - key: B2_BUCKET
-        value: ""
+        value: ""  # Your Backblaze B2 bucket name (e.g., papzincrew-music-djpapzin)
+      # CORS Configuration
       - key: ALLOWED_ORIGINS
-        value: "https://<your-frontend-domain>"
-      # Optional regex for additional origins; defaults to localhost
+        value: "https://papzincrew.netlify.app,http://localhost:5173,http://localhost:5174,http://127.0.0.1:5173"
       - key: ALLOWED_ORIGIN_REGEX
-        value: ""
+        value: ""  # Optional regex for additional origins; defaults to localhost
+      # Optional: Logging and Performance
+      - key: LOG_LEVEL
+        value: "INFO"
+      - key: ENABLE_UPLOAD_PRINTS
+        value: "0"  # Set to 1 for debug upload logging
 
+  # Frontend Static Site (Note: This would be deployed separately on Netlify)
+  # Keeping this for reference/alternative deployment option
   - type: static
     name: papzincrew-frontend
     rootDir: frontend/project
@@ -32,4 +50,4 @@ services:
     publishPath: dist
     envVars:
       - key: VITE_API_URL
-        value: "https://<your-backend-domain>"  # Set this to the Render backend URL once created
+        value: "https://papzincrew-backend.onrender.com"
