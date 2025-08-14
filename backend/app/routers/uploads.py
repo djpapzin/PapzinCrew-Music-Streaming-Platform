@@ -172,9 +172,14 @@ async def extract_metadata(
         # Validate the file
         is_valid, validation_result = validate_audio_file(file, lightweight=True)
         if not is_valid:
+            # Return structured validation details so frontend can show precise errors
+            detail = {
+                **validation_result,
+                'message': validation_result.get('error') or 'Invalid audio file'
+            }
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=validation_result.get('message', 'Invalid audio file')
+                detail=detail
             )
         
         # Extract metadata with timeout; fall back to filename stem
@@ -183,7 +188,6 @@ async def extract_metadata(
         except asyncio.TimeoutError:
             metadata = {'title': Path(file.filename).stem}
         except Exception as e:
-            logger.info("✅ Metadata extracted successfully")
             logger.warning("Metadata extraction error (fast path): %s", e)
             metadata = {'title': Path(file.filename).stem}
         
@@ -199,8 +203,7 @@ async def extract_metadata(
     except HTTPException:
         raise
     except Exception as e:
-        logger.info("✅ Metadata extracted successfully")
-        logger.exception("Error in extract_metadata")
+        logger.exception("Error in extract_metadata: %s", e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to extract metadata: {str(e)}"
