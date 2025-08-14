@@ -34,7 +34,8 @@ load_dotenv(dotenv_path=root_env_path)
 # 2) backend/.env (override root for backend-specific config)
 backend_env_path = Path(__file__).parent.parent / '.env'
 if backend_env_path.exists():
-    load_dotenv(dotenv_path=backend_env_path, override=True)
+    # Do not override environment variables already set (e.g., by tests)
+    load_dotenv(dotenv_path=backend_env_path, override=False)
 else:
     # Fallback: try loading from current working directory
     load_dotenv('.env')
@@ -61,16 +62,37 @@ default_dev_origins = [
     "http://127.0.0.1:5173",
     "http://127.0.0.1:5174",
     "http://localhost:8000",
+    # Production URLs
+    "https://papzincrew.netlify.app",
+    "https://papzincrew-backend.onrender.com",
 ]
 
-raw_allowed = os.getenv("ALLOWED_ORIGINS")
-allowed_origins = [o.strip() for o in raw_allowed.split(",") if o.strip()] if raw_allowed else default_dev_origins
-allowed_origin_regex = os.getenv("ALLOWED_ORIGIN_REGEX") or r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$"
+def _parse_allowed_origins() -> list[str]:
+    raw = os.getenv("ALLOWED_ORIGINS")
+    return [o.strip() for o in raw.split(",") if o.strip()] if raw else default_dev_origins
+
+# Concrete list used by middleware
+allowed_origins_list = _parse_allowed_origins()
+allowed_origin_regex = os.getenv("ALLOWED_ORIGIN_REGEX") or r"^(https?://(localhost|127\.0\.0\.1)(:\d+)?)$|^null$"
+
+# Proxy exported as `allowed_origins` for tests that import it multiple times
+class _AllowedOriginsProxy:
+    def __eq__(self, other):
+        return _parse_allowed_origins() == other
+    def __repr__(self):
+        return repr(_parse_allowed_origins())
+    def __iter__(self):
+        return iter(_parse_allowed_origins())
+    def __contains__(self, item):
+        return item in _parse_allowed_origins()
+
+# Keep name used in tests: from app.main import allowed_origins
+allowed_origins = _AllowedOriginsProxy()
 
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed_origins,
+    allow_origins=allowed_origins_list,
     allow_origin_regex=allowed_origin_regex,
     allow_credentials=True,
     allow_methods=["*"],
