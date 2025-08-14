@@ -4,6 +4,7 @@ import logging
 import re
 from pathlib import Path
 from dotenv import load_dotenv
+from sqlalchemy import inspect, text
 from fastapi import FastAPI, Request, Response, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -49,6 +50,30 @@ logger.info(
 
 # Create database tables
 models.Base.metadata.create_all(bind=engine)
+
+# Ensure backward-compatible schema for existing databases without migrations
+def _ensure_mix_extra_columns():
+    """
+    Add missing columns on the 'mixes' table when running against an
+    existing database that was created before these fields existed.
+
+    This is a lightweight, idempotent startup migration so deploys don't
+    fail with 'column mixes.play_count does not exist' errors.
+    """
+    try:
+        inspector = inspect(engine)
+        existing_cols = {col["name"] for col in inspector.get_columns("mixes")}
+        # Use a transactional connection so it works on Postgres and SQLite
+        with engine.begin() as conn:
+            if "play_count" not in existing_cols:
+                conn.execute(text("ALTER TABLE mixes ADD COLUMN play_count INTEGER DEFAULT 0"))
+            if "download_count" not in existing_cols:
+                conn.execute(text("ALTER TABLE mixes ADD COLUMN download_count INTEGER DEFAULT 0"))
+    except Exception:
+        # Never crash server on startup; just log for diagnostics
+        logger.exception("Failed to ensure extra columns on 'mixes' table")
+
+_ensure_mix_extra_columns()
 
 app = FastAPI(title="PapzinCrew Music Streaming API",
               description="API for PapzinCrew Music Streaming Platform",
