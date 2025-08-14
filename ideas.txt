@@ -2,35 +2,53 @@
 
 ## Status (Aug 13, 2025)
 - [x] MVP complete: upload → B2 → stream; metadata + cover art extraction.
-- [x] Backend on Render; PostgreSQL configured and in use (persistent DB).
-- [x] Frontend on Netlify; uses Render backend.
-- [x] CORS fixed (ALLOWED_ORIGINS corrected to include https://papzincrew.netlify.app).
-- [x] Proxy streaming enabled to avoid B2 CORS issues.
-- [x] Structured upload validation errors returned (e.g., file_too_large, unsupported_file_extension).
-- [x] Duplicate upload route removed to prevent conflicts.
-- [ ] Confirm data persists across backend redeploys (postgreSQL check end-to-end).
-- [ ] Final polish: docs and blueprint verified for one-click deployment.
+- [x] B2-first storage; local only as fallback.
+- [x] Streaming fixed: robust local resolution, B2 redirect/proxy; CORS verified on B2.
+- [x] DB clean: broken_count=0; all tracks playable (remote 200).
+- [x] Backend: detailed stream logging; mixes ordered newest-first.
+- [x] Frontend: empty-state UI, enhanced upload progress stepper; auto library refresh on upload.
+- [x] E2E playback test updated: accept /tracks/{id}/stream(/proxy) and use HEAD (accept 206); passing on Chromium.
+- [x] **Fixed upload syntax errors**: Resolved malformed logging statements and template markers in uploads.py.
+- [x] **Route compatibility**: Added POST /upload alias to maintain frontend compatibility alongside /upload-mix.
+- [x] **Cover art helper**: Extracted _save_cover_art() function for cleaner B2-first cover art handling.
 
-## Near-Term TODO
-- [ ] Persistence test: upload a track, redeploy backend, verify track still present.
-- [ ] Frontend: ensure UI displays backend `error_code` messages cleanly.
-- [ ] Backblaze env: verify B2 bucket/key correctness in Render env and render.yaml placeholders.
-- [ ] Observability: add minimal request/error logging for uploads/streams.
+## Near-term
+- [ ] Mobile playback test; if using LAN origin (e.g., http://192.168.x.x:5173), add it to B2 CORS.
+- [ ] Finalize production B2 CORS rules (domains, headers, maxAge).
+- [x] Remove unused file: frontend/project/src/mockData.ts.
+- [ ] Optional: add admin delete-by-id endpoint in backend/app/routers/tracks.py.
+- [ ] Decide on using /tracks/{id}/stream/proxy for mobile (Range/CORS) vs redirect.
 
-## Product Enhancements
-- [ ] Playlists/queue; favorites.
-- [ ] Search/filter (artist, title, BPM, tags).
-- [ ] Shareable links; social previews.
-- [ ] Now-playing mini-player; background audio on mobile.
-
-## Technical Enhancements
-- [ ] File de-duplication by content hash to avoid duplicate uploads.
+## Quality/ops
+- [ ] Basic monitoring/logging: request IDs, structured logs, error reporting.
+- [ ] File deduplication by content hash to avoid duplicate uploads.
 - [ ] Rate limiting for upload/stream endpoints.
 - [ ] Robust upload cancel/resume; large-file handling.
 - [ ] Cover art caching/resizing; waveform preview generation.
-- [ ] Admin endpoint: delete-by-id in `backend/app/routers/tracks.py` (optional).
-- [ ] Unit tests for metadata extraction and image generation.
 
-## Utilities
-- [x] Cover art helper extracted for cleaner B2-first flow.
-- [ ] Track housekeeping script: confirm `tools/scan_prune_tracks.py` options and add README snippet.
+## Product
+- [ ] Playlists/queue; favorites.
+- [ ] Search/filter (artist, title, BPM, tags).
+- [ ] Shareable links; social previews.
+- [ ] Now playing mini-player and background audio on mobile.
+
+
+- add upload date to the file and show it in the main page.
+- minimize buttons for the maimized player
+  - add ff and rw when only 1 track is in the playlist
+  - add like button
+  - add share button
+- store created prompts for image gneration in a database
+
+
+- create unit tests for meta data extration
+
+- create unit tests for image generation
+
+- when music is playing, "publish" button gets hidden
+
+- clicking on logo should tak me home. 
+
+- Add papzin & crew (black & Whie) logo. 
+
+- how to view render.com live logs on my terminal or app without going to render.com dashboard
