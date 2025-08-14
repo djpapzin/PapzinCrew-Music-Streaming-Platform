@@ -87,6 +87,10 @@ def _parse_allowed_origins() -> list[str]:
 allowed_origins_list = _parse_allowed_origins()
 allowed_origin_regex = os.getenv("ALLOWED_ORIGIN_REGEX") or r"^(https?://(localhost|127\.0\.0\.1)(:\d+)?)$|^null$"
 
+# Debug CORS configuration
+logger.info("CORS allowed_origins_list: %s", allowed_origins_list)
+logger.info("CORS allowed_origin_regex: %s", allowed_origin_regex)
+
 # Proxy exported as `allowed_origins` for tests that import it multiple times
 class _AllowedOriginsProxy:
     def __eq__(self, other):
