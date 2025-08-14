@@ -101,7 +101,7 @@ def test_upload_b2_failure_fallback_local(test_app, tmp_path):
 
     assert resp.status_code == 201, resp.text
     body = resp.json()
-    assert body.get("storage") == "local"
+    assert body.get("storage") == "local_filesystem"
     assert body.get("fallback_from_b2") is True
     # Ensure the local file exists
     loc = body.get("location")
@@ -125,7 +125,7 @@ def test_upload_without_b2_uses_local_no_fallback_flag(test_app, tmp_path):
 
     assert resp.status_code == 201, resp.text
     body = resp.json()
-    assert body.get("storage") == "local"
+    assert body.get("storage") == "local_filesystem"
     # Not a fallback due to B2 error; B2 wasn't configured
     assert "fallback_from_b2" not in body
     loc = body.get("location")

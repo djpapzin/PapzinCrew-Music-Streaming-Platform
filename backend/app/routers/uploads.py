@@ -65,30 +65,36 @@ async def _save_cover_art(cover_bytes: bytes, base_name: str, upload_dir: str, s
         
         if b2.is_configured():
             logger.info("🎨 Uploading cover art to B2 storage (%s, %d bytes)", source, len(cover_bytes))
-            try:
-                b2_timeout = float(os.getenv('B2_PUT_TIMEOUT', '20'))
-                result = await asyncio.wait_for(
-                    asyncio.to_thread(
-                        b2.put_bytes_safe,
-                        cover_key,
-                        cover_bytes,
-                        "image/jpeg"
-                    ),
-                    timeout=b2_timeout
-                )
-                if result.get("ok"):
-                    public_cover_url = result.get("url")
-                    logger.info("✅ Cover art uploaded to B2: %s", public_cover_url)
-                else:
-                    logger.warning("⚠️ B2 cover upload failed: %s", result.get("detail"))
-            except asyncio.TimeoutError:
-                logger.warning("⚠️ B2 cover upload timed out")
-            except Exception as e:
-                logger.warning("⚠️ B2 cover upload error: %s", e)
+            b2_timeout = float(os.getenv('B2_PUT_TIMEOUT', '20'))
+            max_retries = int(os.getenv('B2_MAX_RETRIES', '3'))
+            retry_backoff = float(os.getenv('B2_RETRY_BACKOFF', '0.75'))
+            for attempt in range(1, max_retries + 1):
+                try:
+                    result = await asyncio.wait_for(
+                        asyncio.to_thread(
+                            b2.put_bytes_safe,
+                            cover_key,
+                            cover_bytes,
+                            "image/jpeg"
+                        ),
+                        timeout=b2_timeout
+                    )
+                    if result.get("ok"):
+                        public_cover_url = result.get("url")
+                        logger.info("✅ Cover art uploaded to B2: %s", public_cover_url)
+                        break
+                    else:
+                        logger.warning("⚠️ B2 cover upload failed (attempt %d/%d): %s", attempt, max_retries, result.get("detail"))
+                except asyncio.TimeoutError:
+                    logger.warning("⚠️ B2 cover upload timed out (attempt %d/%d)", attempt, max_retries)
+                except Exception as e:
+                    logger.warning("⚠️ B2 cover upload error (attempt %d/%d): %s", attempt, max_retries, e)
+                if attempt < max_retries:
+                    await asyncio.sleep(retry_backoff * attempt)
         
-        # Fallback to local storage if B2 fails
-        if not public_cover_url:
-            logger.info("📁 Saving cover art locally (%s, %d bytes)", source, len(cover_bytes))
+        # Fallback to local storage only after multiple B2 failures
+        if not public_cover_url and b2.is_configured():
+            logger.info("📁 Saving cover art locally after B2 retries failed (%s, %d bytes)", source, len(cover_bytes))
             try:
                 # Ensure upload directory exists
                 if not os.path.exists(upload_dir):
@@ -104,7 +110,7 @@ async def _save_cover_art(cover_bytes: bytes, base_name: str, upload_dir: str, s
             except Exception as e:
                 logger.error("🚨 Failed to save cover art locally: %s", e)
                 return None
-        
+
         return public_cover_url
         
     except Exception as e:
@@ -437,52 +443,7 @@ def get_unique_filepath(db: Session, directory: str, filename:str) -> str:
 
     return new_filename
 
-@router.post("/extract-metadata")
-async def extract_metadata(
-    file: UploadFile = File(...),
-    db: Session = Depends(get_db)
-):
-    """
-    Extract metadata from an audio file.
-    Used by the frontend to pre-fill the upload form.
-    """
-    try:
-        # Validate the file
-        is_valid, validation_result = validate_audio_file(file, lightweight=True)
-        if not is_valid:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=validation_result.get('message', 'Invalid audio file')
-            )
-        
-        # Extract metadata with timeout; fall back to filename stem
-        try:
-            metadata = await asyncio.wait_for(asyncio.to_thread(extract_metadata_from_file, file), timeout=3.0)
-        except asyncio.TimeoutError:
-            metadata = {'title': Path(file.filename).stem}
-        except Exception as e:
-            logger.info("✅ Metadata extracted successfully")
-            logger.warning("Metadata extraction error (fast path): %s", e)
-            metadata = {'title': Path(file.filename).stem}
-        
-        # Reset file position for potential further processing
-        await file.seek(0)
-        
-        return {
-            'success': True,
-            'metadata': metadata,
-            'filename': file.filename
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.info("✅ Metadata extracted successfully")
-        logger.exception("Error in extract_metadata")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to extract metadata: {str(e)}"
-        )
+# (Removed duplicate extract-metadata route definition)
 
 # NOTE: Removed duplicate minimalist /upload-mix route to avoid conflicts with the main upload handler.
 
@@ -785,7 +746,28 @@ async def upload_mix(
         quality_kbps = 0
         bpm = None
     
-    # --- Cover Art Handling (B2-First) ---
+    # --- Early Duplicate Detection (before any storage writes) ---
+    duplicate_info = check_for_duplicate_track(
+        db=db,
+        title=title,
+        artist_name=artist_name,
+        file_size=validation_result['file_size_bytes'],
+        file_hash=file_hash,
+        duration_seconds=duration_seconds,
+        album=album
+    )
+    if duplicate_info and not skip_duplicate_check:
+        logger.info("[upload] duplicate detected (pre-storage): %s", duplicate_info.get('reason'))
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "error": f"Duplicate detected: {duplicate_info.get('reason', 'Similar track found')}",
+                "error_code": "duplicate_track",
+                "duplicate_info": duplicate_info
+            }
+        )
+
+    # --- Cover Art Handling (B2-First with retries, local fallback only after B2 failures) ---
     public_cover_url = None
     try:
         # 1. Check for user-uploaded cover art first
@@ -798,7 +780,6 @@ async def upload_mix(
 
         # 2. If no uploaded cover, try to extract from audio metadata
         if not public_cover_url:
-            logger.info("🎨 No cover art found in metadata, checking for AI generation...")
             cover_art_data = None
             try:
                 tags = getattr(tags_source, 'tags', None)
@@ -817,7 +798,6 @@ async def upload_mix(
 
         # 3. If still no cover art, generate one with AI
         if not public_cover_url:
-            logger.info("🎨 No cover art found in metadata, checking for AI generation...")
             try:
                 ai_generator = AIArtGenerator()
                 ai_timeout = float(os.getenv('AI_COVER_TIMEOUT_SECONDS', '45.0'))
@@ -871,101 +851,80 @@ async def upload_mix(
             logger.info("[upload] B2 audio upload start key=%s size=%dB", audio_key, len(audio_bytes))
             termprint(f"[upload] B2 audio upload start key={audio_key} size={len(audio_bytes)}B")
             b2_timeout = float(os.getenv('B2_PUT_TIMEOUT', '20'))
-            start = time.perf_counter()
-            try:
-                _res = await asyncio.wait_for(
-                    asyncio.to_thread(
-                        b2.put_bytes_safe,
-                        audio_key,
-                        audio_bytes,
-                        validation_result.get('mime_type', 'audio/mpeg')
-                    ),
-                    timeout=b2_timeout
-                )
-                if _res.get("ok"):
-                    public_audio_url = _res.get("url")
-                    storage_provider = "b2"
-                    storage_location = _res.get("key") or _res.get("url")
-                else:
-                    b2_error_code = _res.get("error_code")
-                    logger.warning("[upload] B2 audio upload failed code=%s detail=%s", _res.get("error_code"), _res.get("detail"))
-            except asyncio.TimeoutError:
-                logger.warning("[upload] B2 audio upload timed out after %ss", b2_timeout)
-                public_audio_url = None
-                b2_error_code = "timeout"
-                termprint(f"[upload] B2 audio upload timed out after {b2_timeout}s")
-            else:
-                elapsed = (time.perf_counter() - start)
-                if public_audio_url:
-                    logger.info("[upload] B2 audio upload done in %.2fs url=%s", elapsed, public_audio_url)
+            max_retries = int(os.getenv('B2_MAX_RETRIES', '3'))
+            retry_backoff = float(os.getenv('B2_RETRY_BACKOFF', '0.75'))
+            start_overall = time.perf_counter()
+            for attempt in range(1, max_retries + 1):
+                try:
+                    _res = await asyncio.wait_for(
+                        asyncio.to_thread(
+                            b2.put_bytes_safe,
+                            audio_key,
+                            audio_bytes,
+                            validation_result.get('mime_type', 'audio/mpeg')
+                        ),
+                        timeout=b2_timeout
+                    )
+                    if _res.get("ok"):
+                        public_audio_url = _res.get("url")
+                        storage_provider = "b2"
+                        storage_location = _res.get("key") or _res.get("url")
+                        break
+                    else:
+                        b2_error_code = _res.get("error_code")
+                        logger.warning("[upload] B2 audio upload failed (attempt %d/%d) code=%s detail=%s", attempt, max_retries, _res.get("error_code"), _res.get("detail"))
+                except asyncio.TimeoutError:
+                    logger.warning("[upload] B2 audio upload timed out after %ss (attempt %d/%d)", b2_timeout, attempt, max_retries)
+                    public_audio_url = None
+                    b2_error_code = "timeout"
+                except Exception as e:
+                    logger.warning("[upload] B2 audio upload error (attempt %d/%d): %s", attempt, max_retries, e)
+                if not public_audio_url and attempt < max_retries:
+                    await asyncio.sleep(retry_backoff * attempt)
+            elapsed_total = (time.perf_counter() - start_overall)
+            if public_audio_url:
+                logger.info("[upload] B2 audio upload done in %.2fs url=%s", elapsed_total, public_audio_url)
     except Exception as e:
         logger.error("[upload] B2 audio upload error: %s", e)
-    # Fallback to local storage if B2 is not configured or fails
+    # Fallback to local storage only after multiple B2 failures (and only if B2 is configured)
     if not public_audio_url:
-        storage_provider = "local_filesystem"
-        fallback_from_b2 = True if b2.is_configured() else False
-        logger.warning("[upload] B2 upload failed or not configured, falling back to local storage.")
-        termprint("[upload] B2 upload failed or not configured, falling back to local storage.")
-        try:
-            # Ensure the local uploads directory exists
-            if not os.path.exists(UPLOAD_DIR):
-                os.makedirs(UPLOAD_DIR)
-            # Sanitize filename and get a unique path
-            sanitized_filename = sanitize_filename(file.filename or "untitled.mp3")
-            unique_filename = get_unique_filepath(db, UPLOAD_DIR, sanitized_filename)
-            local_audio_path = os.path.join(UPLOAD_DIR, unique_filename)
-            # Save the file to the local filesystem
-            with open(local_audio_path, "wb") as buffer:
-                buffer.write(audio_bytes)
-            public_audio_url = f"/uploads/{unique_filename}"  # This is a relative path for local fallback
-            storage_location = local_audio_path
-            logger.info("✅ Upload complete! 📁 Access at: %s", public_audio_url)
-            termprint(f"[upload] saved to local fallback: {public_audio_url}")
-        except Exception as e:
-            logger.error("🚨 [upload] local save failed: %s", e)
+        if b2.is_configured():
+            storage_provider = "local_filesystem"
+            fallback_from_b2 = True
+            logger.warning("[upload] B2 upload failed after retries, falling back to local storage.")
+            termprint("[upload] B2 upload failed after retries, falling back to local storage.")
+            try:
+                # Ensure the local uploads directory exists
+                if not os.path.exists(UPLOAD_DIR):
+                    os.makedirs(UPLOAD_DIR)
+                # Sanitize filename and get a unique path
+                sanitized_filename = sanitize_filename(file.filename or "untitled.mp3")
+                unique_filename = get_unique_filepath(db, UPLOAD_DIR, sanitized_filename)
+                local_audio_path = os.path.join(UPLOAD_DIR, unique_filename)
+                # Save the file to the local filesystem
+                with open(local_audio_path, "wb") as buffer:
+                    buffer.write(audio_bytes)
+                public_audio_url = f"/uploads/{unique_filename}"
+                storage_location = local_audio_path
+                logger.info("✅ Upload complete! 📁 Access at: %s", public_audio_url)
+                termprint(f"[upload] saved to local fallback: {public_audio_url}")
+            except Exception as e:
+                logger.error("🚨 [upload] local save failed: %s", e)
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail={"error": f"Failed to save file locally: {e}", "error_code": "local_save_failed"}
+                )
+        else:
+            logger.error("[upload] B2 storage not configured; refusing local fallback per policy")
             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail={"error": f"Failed to save file locally: {e}", "error_code": "local_save_failed"}
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail={
+                    "error": "B2 storage not configured",
+                    "error_code": "storage_unavailable"
+                }
             )
 
-    # Enhanced duplicate detection with file hash and metadata
-    # ... (rest of the code remains the same)
-    duplicate_info = check_for_duplicate_track(
-        db=db,
-        title=title,
-        artist_name=artist_name,
-        file_size=validation_result['file_size_bytes'],
-        file_hash=file_hash,
-        duration_seconds=duration_seconds,
-        album=album
-    )
-    
-    if duplicate_info:
-        logger.info("[upload] duplicate detected: %s", duplicate_info.get('reason'))
-        # Attempt to remove uploaded objects from B2 on duplicate
-        try:
-            b2 = B2Storage()
-            if b2.is_configured():
-                if public_audio_url:
-                    audio_key = b2.extract_key_from_url(public_audio_url)
-                    if audio_key:
-                        b2.delete_file(audio_key)
-                if locals().get('public_cover_url'):
-                    cover_key = b2.extract_key_from_url(locals().get('public_cover_url'))
-                    if cover_key:
-                        b2.delete_file(cover_key)
-        except Exception:
-            pass
-
-        # Return 409 Conflict with enhanced duplicate information
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={
-                "error": f"Duplicate detected: {duplicate_info.get('reason', 'Similar track found')}",
-                "error_code": "duplicate_track",
-                "duplicate_info": duplicate_info
-            }
-        )
+    # (Removed post-storage duplicate detection; now performed pre-storage)
 
     # Guard against duplicate by exact file_path before DB insert
     # If a mix already exists with the same stored file_path, return 409 and clean up uploaded blobs

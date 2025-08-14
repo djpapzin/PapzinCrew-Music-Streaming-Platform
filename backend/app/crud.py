@@ -53,7 +53,7 @@ def get_artists(db: Session, skip: int = 0, limit: int = 100):
     return db.query(models.Artist).offset(skip).limit(limit).all()
 
 def create_artist(db: Session, artist: schemas.ArtistCreate):
-    db_artist = models.Artist(**artist.dict())
+    db_artist = models.Artist(**artist.model_dump())
     db.add(db_artist)
     db.commit()
     db.refresh(db_artist)

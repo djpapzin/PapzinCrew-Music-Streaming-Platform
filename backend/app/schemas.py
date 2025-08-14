@@ -1,6 +1,6 @@
 from typing import List, Optional
 from datetime import datetime
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 class TracklistItemBase(BaseModel):
@@ -17,8 +17,7 @@ class TracklistItem(TracklistItemBase):
     id: int
     mix_id: int
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class CategoryBase(BaseModel):
@@ -41,23 +40,20 @@ class ArtistCreate(ArtistBase):
 class ArtistSimple(ArtistBase):
     id: int
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class Artist(ArtistBase):
     id: int
     mixes: List['Mix'] = []
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class Category(CategoryBase):
     id: int
     mixes: List['Mix'] = []
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class MixBase(BaseModel):
@@ -92,8 +88,7 @@ class Mix(MixBase):
     file_path: Optional[str] = None
     artist: ArtistSimple
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class MixDetailed(MixBase):
     id: int
@@ -101,8 +96,7 @@ class MixDetailed(MixBase):
     file_path: Optional[str] = None
     artist: Artist
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # Resolve forward references

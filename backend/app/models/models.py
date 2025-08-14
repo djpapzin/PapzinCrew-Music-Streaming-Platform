@@ -25,7 +25,7 @@ class Mix(Base):
     file_size_mb = Column(Float)
     quality_kbps = Column(Integer)
     bpm = Column(Integer, nullable=True)
-    release_date = Column(DateTime, default=datetime.datetime.utcnow)
+    release_date = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
     
     # New fields for advanced options
     description = Column(String)
@@ -38,6 +38,8 @@ class Mix(Base):
     allow_downloads = Column(String, default='yes')
     display_embed = Column(String, default='yes')
     age_restriction = Column(String, default='all')
+    play_count = Column(Integer, default=0)
+    download_count = Column(Integer, default=0)
 
     artist_id = Column(Integer, ForeignKey("artists.id"))
     artist = relationship("Artist", back_populates="mixes")
