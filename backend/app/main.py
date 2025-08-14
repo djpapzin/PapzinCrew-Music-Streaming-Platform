@@ -131,11 +131,11 @@ class _AllowedOriginsProxy:
 allowed_origins = _AllowedOriginsProxy()
 
 # Add CORS middleware
-# Temporarily allow all origins to resolve CORS issues
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Temporarily allow all origins
-    allow_credentials=False,  # Must be False when allow_origins=["*"]
+    allow_origins=allowed_origins_list,
+    allow_origin_regex=allowed_origin_regex,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["*"],
