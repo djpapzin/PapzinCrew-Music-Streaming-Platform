@@ -89,6 +89,34 @@ This repo includes a Render Blueprint: `render.yaml`.
 - Redeploy/restart the backend in Render and refresh the frontend.
 - The track should still be present (PostgreSQL-backed). If not, check `DATABASE_URL`.
 
+## 🧪 Continuous Integration (CI)
+- CI runs on pushes/PRs to `main`.
+- Jobs:
+  - Backend Tests (Python 3.11): runs `pytest -q` in `backend/`.
+  - Frontend Build (Node 18): builds Vite app in `frontend/project/`.
+- Local test quickstart:
+  ```bash
+  cd backend
+  python -m venv venv
+  venv/Scripts/activate  # Windows
+  # source venv/bin/activate  # macOS/Linux
+  pip install -r requirements.txt
+  # Optional
+  [ -f requirements-dev.txt ] && pip install -r requirements-dev.txt || pip install pytest pytest-cov
+  pytest -q
+  ```
+- Notes:
+  - Tests expecting B2 or external services may fail in CI. Mock or set safe env defaults.
+  - Consider marking integration tests and skipping them in CI.
+
+## 📜 View Render Logs from Terminal
+- Render CLI (recommended):
+  1) Install "Render CLI".
+  2) `render services list` → find your backend service ID.
+  3) Tail logs: `render logs --service <SERVICE_ID> -f`
+- Render API: Use `RENDER_API_KEY` to fetch logs via HTTP and tail with a small script.
+- Log drains: Configure a drain to a log platform (e.g., Better Stack) and use their CLI.
+
 ## 🧰 Troubleshooting
 - CORS blocked: ensure `ALLOWED_ORIGINS` exactly matches frontend origin (no typos).
 - Data loss after redeploy: using SQLite on Render’s ephemeral filesystem — switch to PostgreSQL.

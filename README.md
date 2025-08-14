@@ -99,6 +99,27 @@ VITE_API_URL=http://127.0.0.1:8000
 - Publish directory: `frontend/project/dist`
 - Environment: `VITE_API_URL=https://papzincrew-backend.onrender.com`
 
+## Continuous Integration (CI)
+- Jobs: Backend Tests (Python 3.11) and Frontend Build (Node 18).
+- Status: see badge above or view workflow runs: https://github.com/djpapzin/PapzinCrew-Music-Streaming-Platform/actions/workflows/ci.yml
+- Run backend tests locally:
+  ```bash
+  cd backend
+  python -m venv venv
+  # Windows
+  venv/Scripts/activate
+  # macOS/Linux
+  # source venv/bin/activate
+  pip install -r requirements.txt
+  # if present
+  [ -f requirements-dev.txt ] && pip install -r requirements-dev.txt || pip install pytest pytest-cov
+  pytest -q
+  ```
+- Common CI failures:
+  - Tests rely on external services (e.g., Backblaze B2). Mock or provide env vars in CI.
+  - Missing env in CI (B2_*): tests expecting B2 may fail; adjust tests or set safe defaults.
+  - Consider marking slow/integration tests with `@pytest.mark.integration` and skipping them in CI.
+
 ## Troubleshooting
 - Disallowed CORS origin (400 on OPTIONS): fix `ALLOWED_ORIGINS` (e.g., `https://papzincrew.netlify.app`)
 - Data loss on redeploy: ensure PostgreSQL is configured; avoid SQLite on Render’s ephemeral FS
