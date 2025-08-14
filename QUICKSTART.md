@@ -1,151 +1,98 @@
 # PapzinCrew Music Streaming Platform - Quick Start Guide
 
 ## 🚀 Live Platform
+- Frontend: https://papzincrew.netlify.app/
+- Backend: https://papzincrew-backend.onrender.com/ (health: `/health`)
 
-**🎵 Try the live platform now:**
-- **Frontend**: https://papzincrew.netlify.app/
-- **Backend API**: https://papzincrew-backend.onrender.com
-- **Upload Music**: https://papzincrew.netlify.app/upload
+## 🧪 Local Development
+### Prereqs
+- Python 3.11+
+- Node.js 18+
 
-## 🔧 Local Development
-
-For local development, follow these steps:
-
-### Prerequisites
-
-- Python 3.8+ installed
-- Node.js 16+ installed
-- Git installed
-
-### 1. Start Python FastAPI Backend
-
+### Start Backend (FastAPI)
 ```bash
+# From repo root
 cd backend
-# Activate virtual environment if needed (Windows)
-# .venv\Scripts\activate
-python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+python -m venv venv
+# Windows
+venv\Scripts\activate
+# macOS/Linux
+# source venv/bin/activate
+
+pip install -r requirements.txt
+# Optional: create backend/.env (see Environment)
+uvicorn app.main:app --reload  # http://127.0.0.1:8000
 ```
 
-### 2. Start React Frontend
-
+### Start Frontend (Vite + React)
 ```bash
+# From repo root
 cd frontend/project
 npm install
-npm run dev
+# Optional: set API URL for local backend
+# echo "VITE_API_URL=http://127.0.0.1:8000" > .env
+npm run dev  # http://localhost:5173
 ```
 
-## 🎵 Features Available
-
-Once both servers are running, you'll have access to:
-
-- **AI-Assisted Upload**: Automatic metadata extraction; optional AI-generated cover art when missing
-- **Multi-phase Progress**: Uploading (0–40%), Processing metadata (40–70%), AI cover art (70–100%), with speed and ETA
-- **Cancel Upload**: Cancel during active phases
-- **Auto-play Integration**: Uploaded tracks can start playing after publish
-- **Seamless Navigation**: Smooth transition from upload to now playing
-
-## 📍 Access Points
-
-### Live Production
-- **Frontend**: https://papzincrew.netlify.app/
-- **Backend API**: https://papzincrew-backend.onrender.com
-- **Upload Page**: https://papzincrew.netlify.app/upload
-
-### Local Development
-- **Frontend**: http://localhost:5173 (or the port shown in terminal)
-- **Backend API**: http://localhost:8000
-- **Upload Page**: http://localhost:5173/upload
-
 ## 🔐 Environment
+Create `backend/.env` as needed:
+```
+# Database (omit for local SQLite dev)
+DATABASE_URL=postgresql://USER:PASSWORD@HOST:PORT/DBNAME
 
-### Production Deployment
-- **Frontend**: Deployed on Netlify with automatic builds from GitHub
-- **Backend**: Deployed on Render with Backblaze B2 storage configured
-- **Storage**: Backblaze B2 bucket `papzincrew-music-djpapzin` in us-east-005 region
+# Backblaze B2 (omit to use local storage fallback)
+B2_ACCESS_KEY_ID=...
+B2_SECRET_ACCESS_KEY=...
+B2_BUCKET=papzincrew-music-djpapzin
 
-### Local Development
-- Frontend: set `VITE_API_URL` (e.g., `http://localhost:8000`). If unset, defaults to `http://localhost:8000`.
-- Backend: copy `backend/.env.example` to `backend/.env` and configure Backblaze B2 credentials if available. When B2 is not configured or fails, uploads fall back to local storage.
+# CORS
+ALLOWED_ORIGINS=https://papzincrew.netlify.app,http://localhost:5173,http://127.0.0.1:5173
+# ALLOWED_ORIGIN_REGEX=  # optional
 
-## 🛠️ Troubleshooting
+# Logging
+LOG_LEVEL=INFO
+ENABLE_UPLOAD_PRINTS=0
+```
+Optional `frontend/project/.env`:
+```
+VITE_API_URL=http://127.0.0.1:8000
+```
 
-### Backend Issues
-- Make sure you're in the `backend` directory
-- Activate the virtual environment if you have one
-- Install dependencies: `pip install -r requirements.txt`
+## ⬆️ Upload Flow
+- Validates type/size, parses metadata via Mutagen (max ~100MB).
+- Progress phases: upload → processing → cover art.
+- Duplicate detection with optional forced upload; backend returns structured `error_code`s.
+- Storage: B2-first; local filesystem fallback when B2 unset/unavailable.
 
-### Frontend Issues
-- Make sure you're in the `frontend/project` directory
-- Clear node_modules if needed: `rm -rf node_modules && npm install`
-- Check if port 5173 is available
+## ☁️ Production Deployment
+This repo includes a Render Blueprint: `render.yaml`.
 
-### 409 Conflict during upload
-- Cause: duplicate detected by backend when not forcing overwrite.
-- Fix: Click "Upload Anyway" on the duplicate banner to resend with `skip_duplicate_check=true`.
-- Verify in browser DevTools → Network → POST /upload → Form Data contains `skip_duplicate_check: true`.
+### Backend on Render
+1. In Render: New → Blueprint → connect this repo.
+2. Render creates:
+   - PostgreSQL DB (persistent)
+   - Web Service for FastAPI backend
+3. Verify environment on the backend service:
+   - DATABASE_URL (auto from Render Postgres)
+   - B2_ACCESS_KEY_ID, B2_SECRET_ACCESS_KEY, B2_BUCKET
+   - ALLOWED_ORIGINS must include `https://papzincrew.netlify.app`
+4. Deploy. Health check: `GET /health` should return OK.
 
-## 🎯 Testing the Upload Feature
+### Frontend on Netlify
+- Build command: `npm ci && npm run build`
+- Publish directory: `frontend/project/dist`
+- Environment: `VITE_API_URL=https://papzincrew-backend.onrender.com`
 
-### Live Platform
-1. Navigate to https://papzincrew.netlify.app/upload
-2. Drag and drop an audio file or click to select
-3. Watch as metadata is automatically extracted
-4. Fill in any additional details
-5. Click "Publish" to upload
-6. The track will automatically start playing after upload
+## ✅ Verify Persistence
+- Upload a track via the live frontend.
+- Confirm it plays.
+- Redeploy/restart the backend in Render and refresh the frontend.
+- The track should still be present (PostgreSQL-backed). If not, check `DATABASE_URL`.
 
-### Local Development
-1. Navigate to http://localhost:5173/upload
-2. Follow the same steps as above
+## 🧰 Troubleshooting
+- CORS blocked: ensure `ALLOWED_ORIGINS` exactly matches frontend origin (no typos).
+- Data loss after redeploy: using SQLite on Render’s ephemeral filesystem — switch to PostgreSQL.
+- Upload rejected: check backend response `error_code` (`file_too_large`, `unsupported_file_extension`, `invalid_audio_file`, etc.).
+- B2 errors: verify credentials and bucket name; local fallback will be used if unset.
 
-## 🔁 Duplicate / Overwrite Flow
-
-- The app checks for duplicates before uploading. If detected, a banner appears with track details.
-- Click "Upload Anyway" to force upload; the request includes `skip_duplicate_check=true`.
-- When forced and B2 is configured, the backend creates a unique B2 key to avoid DB unique constraint issues.
-- If you still see 409, confirm the flag is present in the Network tab and retry.
-- Custom cover art prompt is optional; leave blank to generate automatically.
-
-## 🌐 Deployment Status
-
-### Current Live Deployment
-- ✅ **Frontend**: Netlify (auto-deploys from GitHub main branch)
-- ✅ **Backend**: Render (connected to GitHub, auto-deploys)
-- ✅ **Storage**: Backblaze B2 cloud storage configured
-- ✅ **CORS**: Proxy streaming enabled for cross-origin audio playback
-- ✅ **Features**: Full upload, metadata extraction, AI cover art generation
-
-### Recent Fixes Applied
-- Fixed CORS issues with B2 storage by enabling proxy streaming
-- Configured frontend to use production backend URL
-- All uploaded tracks now stream successfully
-
-## 📝 Notes
-
-- The backend uses FastAPI with automatic metadata extraction
-- The frontend uses React with Vite for fast development
-- Upload progress is tracked with a multi-phase UI and detailed status
-- Cover art is extracted from files when present; AI-generated when missing (no API key required)
-- Storage: Backblaze B2 by default (when configured); local `uploads` used as fallback
-
-## Maintenance: Scan and prune unplayable tracks
-
-- Tool: `backend/tools/scan_prune_tracks.py`
-- Purpose: Detects tracks that won’t play and optionally deletes their DB rows.
-- Playable criteria:
-  - Remote: `file_path` starting with `http://` or `https://` (B2/remote) → OK
-  - Local: resolves `/uploads/...` or `uploads/...` to your `UPLOAD_DIR` and checks existence; also tries the basename and numbered variants like `name_1.mp3`.
-- Usage (run from `backend/`):
-  - Scan only:
-    - `python tools/scan_prune_tracks.py`
-  - Scan with explicit upload dir:
-    - `python tools/scan_prune_tracks.py --upload-dir uploads`
-  - Delete unplayable (destructive):
-    - `python tools/scan_prune_tracks.py --delete`
-- Notes:
-  - Make a DB backup before using `--delete`.
-  - This script does not restart or affect the running server.
-
----
-
-**Happy streaming! 🎶**
+Happy streaming! 🎶

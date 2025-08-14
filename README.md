@@ -1,126 +1,104 @@
 # Papzin & Crew - Music Streaming Platform
 
+## Live Platform
+- Frontend: https://papzincrew.netlify.app/
+- Backend: https://papzincrew-backend.onrender.com/ (health: `/health`)
+
 ## About The Project
+Papzin & Crew connects independent artists and listeners. DJs and creators upload mixes/tracks; listeners discover, play, and share.
 
-Papzin & Crew is a platform designed to connect DJs and music enthusiasts. It provides a space for DJs to showcase their skills and for fans to discover a wide variety of new music and custom-made mixtapes. This project is the official implementation of the vision outlined in the [Papzin & Crew Business Plan](docs/Papzin_Crew_Business_Plan.md).
+## Architecture
+- Backend: FastAPI (Uvicorn) + SQLAlchemy + Alembic
+- Database: PostgreSQL (production on Render). SQLite auto-used locally if DATABASE_URL is not set.
+- Storage: Backblaze B2 for audio/cover art (local filesystem fallback for dev)
+- Frontend: React (Vite + TypeScript + Tailwind)
+- Hosting: Backend on Render, Frontend on Netlify
 
-Our goal is to support and promote Mega-Mixers, provide a way for music lovers to discover new music, and eventually monetize the content for the Record Owners.
+## Tech Stack
+- Python 3.11, FastAPI, SQLAlchemy 2.x, Alembic, psycopg2-binary
+- React 18, Vite, TypeScript, Tailwind CSS
+- Backblaze B2 (boto3), Mutagen for metadata
 
-## MVP Scope
-
-This repository contains the code for the Minimum Viable Product (MVP). The primary goal is to deliver the core music streaming experience.
-
-The MVP will include:
-*   The ability to see a list of available mixes.
-*   The ability to stream any mix directly in the browser.
-*   A simple interface for uploading new mixes.
-
-For a detailed breakdown of the MVP, please see the [MVP Development Plan](docs/MVP_Development_Plan.md).
-
-## Technology Stack
-
-### Backend
-
-*   **Framework**: **FastAPI** on Python.
-*   **Server**: **Uvicorn** (for development).
-*   **Database**: **SQLite** (for development) & **PostgreSQL** (for production) with **SQLAlchemy** (ORM) and **Alembic** (Migrations).
-*   **Audio Storage**: **Backblaze B2** (default) with local filesystem fallback (development/testing).
-
-### Frontend
-
-*   **Framework**: **React** (Vite)
-*   **Language**: **TypeScript**
-*   **Styling**: **Tailwind CSS**
-*   **Package Manager**: **npm**
-
-## Getting Started
-
-To get a local copy up and running, follow these simple steps.
-
+## Getting Started (Local)
 ### Prerequisites
+- Python 3.11+
+- Node.js 18+
 
-*   Node.js (v18 or later recommended)
-*   Python (v3.8 or later recommended)
+### Backend Setup
+```bash
+# From repo root
+cd backend
+python -m venv venv
+# Windows
+venv\Scripts\activate
+# macOS/Linux
+# source venv/bin/activate
 
-### Installation & Setup
+pip install -r requirements.txt
 
-1.  **Clone the repository:**
-    ```sh
-    git clone https://github.com/djpapzin/PapzinCrew-Music-Streaming-Platform.git
-    cd PapzinCrew-Music-Streaming-Platform
-    ```
+# Optional: create backend/.env (see Environment)
+uvicorn app.main:app --reload
+# http://127.0.0.1:8000 (health: /health)
+```
 
-2.  **Setup the Backend:**
-    ```sh
-    # Navigate to the backend directory
-    cd backend
-
-    # Create a virtual environment
-    python -m venv venv
-
-    # Activate the virtual environment
-    # On Windows:
-    .\venv\Scripts\activate
-    # On macOS/Linux:
-    source venv/bin/activate
-
-    # Install Python dependencies
-    pip install -r requirements.txt
-    ```
-
-3.  **Setup the Frontend:**
-    ```sh
-    # Navigate to the frontend directory
-    cd ../frontend/project
-
-    # Install npm packages
-    npm install
-    ```
-
-## Usage
-
-1.  **Run the Backend Server:**
-    *   Make sure you are in the `backend` directory with your virtual environment activated.
-    *   Run the Uvicorn server:
-    ```sh
-    uvicorn app.main:app --reload
-    ```
-    *   The backend will be available at `http://127.0.0.1:8000`.
-
-2.  **Run the Frontend Application:**
-    *   Open a new terminal and navigate to the `frontend/project` directory.
-    *   Start the Vite dev server:
-    ```sh
-    npm run dev
-    ```
-    *   Open your browser and go to `http://localhost:5173` (or the port shown in your terminal).
+### Frontend Setup
+```bash
+# From repo root
+cd frontend/project
+npm install
+# (Optional) create .env with: VITE_API_URL=http://127.0.0.1:8000
+npm run dev
+# http://localhost:5173
+```
 
 ## Environment
+Create `backend/.env` with any of the following as needed:
+```
+# Database (omit for local SQLite dev)
+DATABASE_URL=postgresql://USER:PASSWORD@HOST:PORT/DBNAME
 
-Create and configure environment files as needed:
+# Backblaze B2 (omit to use local storage fallback)
+B2_ACCESS_KEY_ID=...
+B2_SECRET_ACCESS_KEY=...
+B2_BUCKET=papzincrew-music-djpapzin
 
-* Backend: copy `backend/.env.example` to `backend/.env` and set values (e.g., B2 credentials). The app runs fine locally without B2; if not configured, uploads fall back to local storage.
-* Frontend: set `VITE_API_URL` to point to your backend (e.g., `http://localhost:8000`). If unset, the frontend defaults to `http://localhost:8000`.
- 
+# CORS
+ALLOWED_ORIGINS=https://papzincrew.netlify.app,http://localhost:5173,http://localhost:5174,http://127.0.0.1:5173
+# ALLOWED_ORIGIN_REGEX=  # optional
+
+# Logging
+LOG_LEVEL=INFO
+ENABLE_UPLOAD_PRINTS=0
+```
+Frontend (optional) `frontend/project/.env`:
+```
+VITE_API_URL=http://127.0.0.1:8000
+```
+
 ## Upload Flow Overview
+- Validates file type/size; extracts metadata via Mutagen.
+- Shows progress phases: file upload → processing → cover art.
+- Duplicate detection with optional forced upload; structured error codes returned.
+- B2-first storage; local fallback.
 
-- Multi-phase progress UI: `file_upload` (0–40%), `processing` (40–70%), `cover_art` (70–100%).
-- Real-time speed and ETA, with a Cancel button during active phases.
-- Metadata is extracted automatically; cover art is read from tags when present or generated by AI when missing.
-- Custom cover art prompt is optional; blank means generate automatically.
+## Deployment
+### Render (Backend)
+- This repo includes `render.yaml` (Render Blueprint).
+- Use Render Dashboard → New → Blueprint, connect this repo.
+- Ensure env vars on the backend service:
+  - DATABASE_URL (auto-wired from pg service in render.yaml)
+  - B2_ACCESS_KEY_ID, B2_SECRET_ACCESS_KEY, B2_BUCKET
+  - ALLOWED_ORIGINS must include https://papzincrew.netlify.app (watch for typos)
 
-## Duplicate / Overwrite Behavior
+### Netlify (Frontend)
+- Build command: `npm ci && npm run build`
+- Publish directory: `frontend/project/dist`
+- Environment: `VITE_API_URL=https://papzincrew-backend.onrender.com`
 
-- Preflight duplicate check runs before upload. If a duplicate is detected, a warning banner appears with details.
-- Clicking "Upload Anyway" performs a forced upload by sending `skip_duplicate_check=true`.
-- When forced and Backblaze B2 is configured, the backend generates a unique B2 key to avoid DB unique-constraint collisions.
-- If not forced, the backend returns `409 Conflict` with duplicate info; the UI lets you retry with overwrite.
-
-## Storage Behavior (B2-first)
-
-- Audio storage is Backblaze B2–first. Local filesystem is used as a fallback when B2 is not configured/unavailable.
-- Streaming endpoint prefers B2 URLs when a B2 key is stored; local streaming is used only when a filesystem path exists.
+## Troubleshooting
+- Disallowed CORS origin (400 on OPTIONS): fix `ALLOWED_ORIGINS` (e.g., `https://papzincrew.netlify.app`)
+- Data loss on redeploy: ensure PostgreSQL is configured; avoid SQLite on Render’s ephemeral FS
+- Upload errors: the backend returns structured errors with `error_code` for UI display
 
 ## License
-
-This project is licensed under the MIT License. See the `LICENSE.md` file for details.
+MIT. See `LICENSE.md`.
