@@ -26,33 +26,38 @@
 - [ ] Robust upload cancel/resume; large-file handling.
 - [ ] Cover art caching/resizing; waveform preview generation.
 
+## CI & Testing
+- [ ] Stabilize CI (backend tests) to green
+  - [ ] Mark integration tests and skip in CI: run `pytest -m "not integration"`
+  - [ ] Inject safe env vars in CI (B2_* dummies) to avoid external dependencies
+  - [ ] Add `pytest.ini` with markers and default warnings config
+  - [ ] Consider separate jobs: unit vs integration (matrix)
+
 ## Product
 - [ ] Playlists/queue; favorites.
 - [ ] Search/filter (artist, title, BPM, tags).
 - [ ] Shareable links; social previews.
 - [ ] Now playing mini-player and background audio on mobile.
 
+- [ ] add upload date to the file and show it in the main page.
+- [ ] minimize buttons for the maximized player
+  - [ ] add ff and rw when only 1 track is in the playlist
+  - [ ] add like button
+  - [ ] add share button
+- [ ] store created prompts for image generation in a database
 
-- add upload date to the file and show it in the main page.
-- minimize buttons for the maimized player
-  - add ff and rw when only 1 track is in the playlist
-  - add like button
-  - add share button
-- store created prompts for image gneration in a database
+- [ ] create unit tests for metadata extraction
 
+- [ ] create unit tests for image generation
 
-- create unit tests for meta data extration
+- [ ] when music is playing, "publish" button gets hidden
 
-- create unit tests for image generation
+- [ ] clicking on logo should take me home.
 
-- when music is playing, "publish" button gets hidden
+- [ ] Add papzin & crew (black & White) logo.
 
-- clicking on logo should tak me home. 
-
-- Add papzin & crew (black & Whie) logo. 
-
-- how to view render.com live logs on my terminal or app without going to render.com dashboard
-   - Option A: Render CLI (recommended) — install "Render CLI" and run `render logs --service <SERVICE_ID> -f` to follow logs. See Render CLI docs.
-   - Option B: Render API — call logs endpoint with `RENDER_API_KEY` to fetch recent logs; wrap with a small PowerShell/Node script to tail.
-   - Option C: Log drain — send app logs to a provider (e.g., Better Stack/Logtail) and view/tail from their CLI.
-   - App-level: ensure FastAPI/Uvicorn logs go to stdout; include request IDs for easier tracing.
+- [ ] how to view render.com live logs on my terminal or app without going to render.com dashboard
+  - [ ] Option A: Render CLI (recommended) — install "Render CLI" and run `render logs --service <SERVICE_ID> -f` to follow logs. See Render CLI docs.
+  - [ ] Option B: Render API — call logs endpoint with `RENDER_API_KEY` to fetch recent logs; wrap with a small PowerShell/Node script to tail.
+  - [ ] Option C: Log drain — send app logs to a provider (e.g., Better Stack/Logtail) and view/tail from their CLI.
+  - [ ] App-level: ensure FastAPI/Uvicorn logs go to stdout; include request IDs for easier tracing.
