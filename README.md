@@ -1,4 +1,8 @@
 # Papzin & Crew - Music Streaming Platform
+[![CI](https://github.com/djpapzin/PapzinCrew-Music-Streaming-Platform/actions/workflows/ci.yml/badge.svg)](https://github.com/djpapzin/PapzinCrew-Music-Streaming-Platform/actions/workflows/ci.yml)
+[![Frontend](https://img.shields.io/website?down_message=offline&label=frontend&up_message=online&url=https%3A%2F%2Fpapzincrew.netlify.app%2F)](https://papzincrew.netlify.app/)
+[![Backend health](https://img.shields.io/website?down_message=unhealthy&label=backend%20health&up_message=healthy&url=https%3A%2F%2Fpapzincrew-backend.onrender.com%2Fhealth)](https://papzincrew-backend.onrender.com/health)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE.md)
 
 ## Live Platform
 - Frontend: https://papzincrew.netlify.app/

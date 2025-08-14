@@ -1,0 +1,78 @@
+# File Description: Continuous Integration workflow for backend tests and frontend build
+# Author: DJ Papzin <L.fanampe@gmail.com>
+# Created: 2025
+
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend-tests:
+    name: Backend Tests (Python 3.11)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
+            backend/render-requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; else pip install pytest pytest-cov; fi
+
+      - name: Run tests
+        env:
+          PYTHONWARNINGS: default
+          ENABLE_UPLOAD_PRINTS: "0"
+        run: |
+          pytest -q
+
+  frontend-build:
+    name: Frontend Build (Node 18)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend/project
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: frontend/project/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Build
+        env:
+          # In CI we don't call the live backend; build should not require it.
+          VITE_API_URL: http://127.0.0.1:8000
+        run: npm run build
