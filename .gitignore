@@ -35,3 +35,8 @@ Thumbs.db
 
 # Build artifacts
 coverage/
+
+# Windsurf rules
+.windsurf/
+.windsurf/backup/
+.windsurf/rules/
