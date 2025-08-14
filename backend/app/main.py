@@ -69,7 +69,19 @@ default_dev_origins = [
 
 def _parse_allowed_origins() -> list[str]:
     raw = os.getenv("ALLOWED_ORIGINS")
-    return [o.strip() for o in raw.split(",") if o.strip()] if raw else default_dev_origins
+    if raw:
+        # Parse environment variable but always include production URLs
+        env_origins = [o.strip() for o in raw.split(",") if o.strip()]
+        # Always ensure production URLs are included
+        production_urls = [
+            "https://papzincrew.netlify.app",
+            "https://papzincrew-backend.onrender.com",
+        ]
+        # Combine and deduplicate
+        all_origins = list(set(env_origins + production_urls))
+        return all_origins
+    else:
+        return default_dev_origins
 
 # Concrete list used by middleware
 allowed_origins_list = _parse_allowed_origins()
