@@ -12,7 +12,7 @@ services:
     env: python
     rootDir: backend
     plan: free
-    buildCommand: pip install -r render-requirements.txt
+    buildCommand: pip install -r requirements.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     autoDeploy: true
@@ -22,6 +22,9 @@ services:
         fromDatabase:
           name: papzincrew-db
           property: connectionString
+      # Explicit Python version
+      - key: PYTHON_VERSION
+        value: "3.12.5"
       # Backblaze B2 Storage Configuration (set these in Render dashboard)
       - key: B2_ACCESS_KEY_ID
         value: ""  # Your Backblaze B2 Application Key ID
