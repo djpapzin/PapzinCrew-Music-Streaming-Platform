@@ -45,14 +45,14 @@ const Sidebar: React.FC<SidebarProps> = ({ onNavigate }) => {
     <div className="w-64 bg-black/90 backdrop-blur-xl border-r border-white/10 flex flex-col h-full">
       {/* Logo */}
       <div className="p-6 border-b border-white/10 flex-shrink-0">
-        <div className="flex items-center space-x-2">
-          <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg flex items-center justify-center">
+        <Link to="/" onClick={onNavigate} aria-label="Go to Home" className="flex items-center space-x-2 group">
+          <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg flex items-center justify-center group-hover:shadow group-hover:scale-105 transition-transform">
             <Music className="w-5 h-5 text-white" />
           </div>
           <span className="text-lg lg:text-xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
             Papzin & Crew
           </span>
-        </div>
+        </Link>
       </div>
 
       {/* Main Navigation */}
