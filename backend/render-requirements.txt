@@ -7,6 +7,7 @@ python-dotenv
 python-multipart
 mutagen
 httpx
+aiohttp
 boto3
 requests  # Required for AI art generator
 pillow  # Required for AI art generator (PIL)
