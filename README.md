@@ -8,6 +8,9 @@
 - Frontend: https://papzincrew.netlify.app/
 - Backend: https://papzincrew-backend.onrender.com/ (health: `/health`)
 
+## Logs
+[Backend logs: quick reference](docs/logs.md)
+
 ## About The Project
 Papzin & Crew connects independent artists and listeners. DJs and creators upload mixes/tracks; listeners discover, play, and share.
 
