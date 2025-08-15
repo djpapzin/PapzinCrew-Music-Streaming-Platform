@@ -278,6 +278,49 @@ class TestPlayCountStatistics:
         stats = response.json()
         assert stats["play_count"] == 150
         assert stats["download_count"] == 25
+        
+    def test_admin_delete_endpoint(self, mock_db_session):
+        """Test admin delete endpoint."""
+        # Setup mock track
+        track = MagicMock()
+        track.id = 1
+        track.title = "Test Track"
+        track.artist = MagicMock()
+        track.artist.name = "Test Artist"
+        track.file_path = "https://example.com/test.mp3"
+        track.cover_art_url = "/uploads/cover.jpg"
+        mock_db_session.query().filter().first.return_value = track
+        
+        # Mock B2Storage
+        with patch('app.routers.tracks.B2Storage') as mock_b2:
+            # Configure the mock
+            mock_b2_instance = mock_b2.return_value
+            mock_b2_instance.is_configured.return_value = True
+            mock_b2_instance.extract_key_from_url.return_value = "test.mp3"
+            mock_b2_instance.delete_file.return_value = True
+            
+            # Mock os.path.exists and os.remove for cover art
+            with patch('os.path.exists', return_value=True), \
+                 patch('os.remove', return_value=None):
+                
+                # Call the endpoint
+                response = client.delete("/tracks/admin/1")
+                
+                # Verify response
+                assert response.status_code == 200
+                result = response.json()
+                assert result["id"] == 1
+                assert result["title"] == "Test Mix"
+                assert result["artist"] == "Test Artist"
+                assert result["deleted"] == True
+                
+                # Verify B2 deletion was attempted
+                mock_b2_instance.extract_key_from_url.assert_called_once_with("https://example.com/test.mp3")
+                mock_b2_instance.delete_file.assert_called_once_with("test.mp3")
+                
+                # Verify DB deletion
+                mock_db_session.delete.assert_called_once_with(track)
+                mock_db_session.commit.assert_called_once()
     
     def test_increment_download_count(self, mock_db_session):
         """Test that download count increments on download."""

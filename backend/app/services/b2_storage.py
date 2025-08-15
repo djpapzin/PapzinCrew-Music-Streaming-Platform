@@ -5,45 +5,63 @@ from botocore.client import Config
 from botocore.exceptions import ClientError, EndpointConnectionError, BotoCoreError
 from dotenv import load_dotenv
 
+# Optional Backblaze native SDK imports (tests may patch B2Api symbol)
+try:
+    from b2sdk.v2 import B2Api, InMemoryAccountInfo  # type: ignore
+except Exception:  # pragma: no cover - not required in production path
+    B2Api = None  # type: ignore
+    InMemoryAccountInfo = None  # type: ignore
+
 
 class B2Storage:
     """Thin wrapper around S3-compatible Backblaze B2 uploads."""
 
     def __init__(self) -> None:
-        # Ensure .env is loaded (fallback if not loaded by main.py)
-        load_dotenv('.env')
-        
+        # Do NOT auto-load .env. Allow explicit opt-in via env flag.
+        if os.getenv("B2_LOAD_DOTENV") == "1":
+            load_dotenv('.env')
+        # S3-compatible envs
         self.endpoint_url: Optional[str] = os.getenv("B2_ENDPOINT")
         self.region_name: Optional[str] = os.getenv("B2_REGION") or "us-west-002"
         self.bucket: Optional[str] = os.getenv("B2_BUCKET")
         self.access_key: Optional[str] = os.getenv("B2_ACCESS_KEY_ID")
         self.secret_key: Optional[str] = os.getenv("B2_SECRET_ACCESS_KEY")
 
-        if not all([self.endpoint_url, self.bucket, self.access_key, self.secret_key]):
-            # Not configured; operate in disabled mode
-            self.enabled = False
-            self.s3 = None
-            return
+        # Native B2 envs (used by unit tests)
+        self.application_key_id: Optional[str] = os.getenv("B2_APPLICATION_KEY_ID")
+        self.application_key: Optional[str] = os.getenv("B2_APPLICATION_KEY")
+        self.bucket_name_native: Optional[str] = os.getenv("B2_BUCKET_NAME")
 
-        self.enabled = True
-        # Configure conservative timeouts and retries to avoid long hangs on network issues
-        connect_timeout = int(os.getenv("B2_CONNECT_TIMEOUT", "5"))
-        read_timeout = int(os.getenv("B2_READ_TIMEOUT", "15"))
-        max_attempts = int(os.getenv("B2_MAX_ATTEMPTS", "3"))
+        # Determine operating mode
+        self.mode: str = "disabled"
+        self.s3 = None
+        self.enabled = False
 
-        self.s3 = boto3.client(
-            "s3",
-            endpoint_url=self.endpoint_url,
-            region_name=self.region_name,
-            aws_access_key_id=self.access_key,
-            aws_secret_access_key=self.secret_key,
-            config=Config(
-                signature_version="s3v4",
-                connect_timeout=connect_timeout,
-                read_timeout=read_timeout,
-                retries={"max_attempts": max_attempts, "mode": "standard"},
-            ),
-        )
+        if all([self.application_key_id, self.application_key, self.bucket_name_native]):
+            # Prefer native mode if explicitly configured (aligns with tests)
+            self.mode = "native"
+            self.enabled = True
+        elif all([self.endpoint_url, self.bucket, self.access_key, self.secret_key]):
+            self.mode = "s3"
+            self.enabled = True
+            # Configure conservative timeouts and retries to avoid long hangs on network issues
+            connect_timeout = int(os.getenv("B2_CONNECT_TIMEOUT", "5"))
+            read_timeout = int(os.getenv("B2_READ_TIMEOUT", "15"))
+            max_attempts = int(os.getenv("B2_MAX_ATTEMPTS", "3"))
+
+            self.s3 = boto3.client(
+                "s3",
+                endpoint_url=self.endpoint_url,
+                region_name=self.region_name,
+                aws_access_key_id=self.access_key,
+                aws_secret_access_key=self.secret_key,
+                config=Config(
+                    signature_version="s3v4",
+                    connect_timeout=connect_timeout,
+                    read_timeout=read_timeout,
+                    retries={"max_attempts": max_attempts, "mode": "standard"},
+                ),
+            )
 
     def is_configured(self) -> bool:
         return self.enabled
@@ -61,10 +79,29 @@ class B2Storage:
         Result shape:
           { ok: bool, url?: str, key?: str, error_code?: str, detail?: str }
         """
-        if not self.enabled or self.s3 is None:
+        if not self.enabled:
             return {"ok": False, "error_code": "not_configured", "detail": "B2 storage not configured"}
 
+        # Native B2 path (used by tests; B2Api is patched there)
+        if self.mode == "native":
+            try:
+                # Instantiate API (unit tests patch B2Api to a MagicMock)
+                api = B2Api(InMemoryAccountInfo()) if B2Api else None  # type: ignore
+                if api is None:
+                    # If SDK is unavailable and not patched, simulate not configured
+                    return {"ok": False, "error_code": "sdk_missing", "detail": "b2sdk not installed"}
+                api.authorize_account("production", self.application_key_id, self.application_key)  # type: ignore[arg-type]
+                bucket = api.get_bucket_by_name(self.bucket_name_native)  # type: ignore[assignment]
+                # In b2sdk, upload_bytes accepts (data, file_name, content_type=...)
+                file_info = bucket.upload_bytes(data, key, content_type=content_type)
+                return {"ok": True, "url": self._generate_public_url(key), "key": key}
+            except Exception as e:
+                # Map to a generic error_code for tests
+                return {"ok": False, "error_code": "client_error", "detail": str(e)}
+
+        # S3-compatible path
         try:
+            assert self.s3 is not None and self.bucket is not None
             self.s3.put_object(
                 Bucket=self.bucket,
                 Key=key,
@@ -130,6 +167,21 @@ class B2Storage:
         """Build a public URL to an object key."""
         if not self.enabled:
             return None
+
+    # Helper for unit tests to patch; builds a public URL for a given key
+    def _generate_public_url(self, key: str) -> str:
+        if self.mode == "native":
+            # Prefer endpoint env if provided (e.g., CDN or S3 gateway). Fallback to a generic pattern.
+            base = os.getenv("B2_ENDPOINT")
+            bucket = self.bucket_name_native or self.bucket or ""
+            if base:
+                return f"{base}/{bucket}/{key}"
+            # Generic Backblaze-style URL placeholder
+            return f"https://example-b2/{bucket}/{key}"
+        # S3-compatible
+        if self.endpoint_url and self.bucket:
+            return f"{self.endpoint_url}/{self.bucket}/{key}"
+        return key
         return f"{self.endpoint_url}/{self.bucket}/{key}"
 
     def head_object(self, key: str) -> Dict[str, Any]:

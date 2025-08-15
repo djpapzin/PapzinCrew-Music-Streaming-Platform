@@ -1,0 +1,109 @@
+# Page snapshot
+
+```yaml
+- link "Go to Home":
+  - /url: /
+  - img
+  - text: Papzin & Crew
+- navigation:
+  - link "Home":
+    - /url: /
+    - img
+    - text: Home
+  - link "Search":
+    - /url: /search
+    - img
+    - text: Search
+  - link "Your Library":
+    - /url: /library
+    - img
+    - text: Your Library
+- button "Create Playlist":
+  - img
+  - text: Create Playlist
+- heading "Your Library" [level=3]
+- navigation:
+  - link "Playlists":
+    - /url: /playlists
+    - img
+    - text: Playlists
+  - link "Artists":
+    - /url: /artists
+    - img
+    - text: Artists
+  - link "Albums":
+    - /url: /albums
+    - img
+    - text: Albums
+  - link "Liked Songs":
+    - /url: /liked
+    - img
+    - text: Liked Songs
+- heading "Discover" [level=3]
+- navigation:
+  - link "Independent Artists":
+    - /url: /independent
+    - img
+    - text: Independent Artists
+  - link "Trending Now":
+    - /url: /trending
+    - img
+    - text: Trending Now
+  - link "Upload Music":
+    - /url: /upload
+    - img
+    - text: Upload Music
+- heading "Join Papzin & Crew" [level=4]
+- paragraph: Connect with independent artists and discover fresh talent.
+- button "Get Started"
+- button:
+  - img
+- button:
+  - img
+- heading "Good evening" [level=1]
+- button "Upload":
+  - img
+  - text: Upload
+- button:
+  - img
+- button:
+  - img
+- button:
+  - img
+- img
+- heading "Welcome to Papzin & Crew" [level=1]
+- paragraph: Discover independent artists and support emerging talent through our platform
+- img
+- heading "Independent Artists" [level=3]
+- paragraph: Support emerging talent and discover fresh sounds
+- img
+- heading "Trending Music" [level=3]
+- paragraph: Stay updated with the hottest tracks and artists
+- img
+- heading "Community Driven" [level=3]
+- paragraph: Join a community that celebrates music diversity
+- heading "Quick Play" [level=3]
+- paragraph: Jump right into the music with one click
+- button "Play" [disabled]:
+  - img
+  - text: Play
+- button "Shuffle" [disabled]:
+  - img
+  - text: Shuffle
+- button "Radio" [disabled]:
+  - img
+  - text: Radio
+- heading "No uploads yet" [level=2]
+- paragraph: Go to the Upload page to add your first track.
+- heading "Featured Content" [level=2]
+- paragraph: Handpicked selections from our curated collection
+- img
+- heading "Quick Access" [level=2]
+- heading "Recent Songs" [level=3]
+- heading "Popular Playlists" [level=3]
+- heading "New Albums" [level=3]
+- img
+- heading "Independent Artists Spotlight" [level=2]
+- heading "Recently played" [level=2]
+- heading "Made for you" [level=2]
+```

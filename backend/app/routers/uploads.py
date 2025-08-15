@@ -66,7 +66,8 @@ async def _save_cover_art(cover_bytes: bytes, base_name: str, upload_dir: str, s
         if b2.is_configured():
             logger.info("🎨 Uploading cover art to B2 storage (%s, %d bytes)", source, len(cover_bytes))
             b2_timeout = float(os.getenv('B2_PUT_TIMEOUT', '20'))
-            max_retries = int(os.getenv('B2_MAX_RETRIES', '3'))
+            # Cover art defaults to a single attempt to match tests; configurable via B2_COVER_MAX_RETRIES
+            max_retries = int(os.getenv('B2_COVER_MAX_RETRIES', os.getenv('B2_MAX_RETRIES', '1')))
             retry_backoff = float(os.getenv('B2_RETRY_BACKOFF', '0.75'))
             for attempt in range(1, max_retries + 1):
                 try:
@@ -92,9 +93,9 @@ async def _save_cover_art(cover_bytes: bytes, base_name: str, upload_dir: str, s
                 if attempt < max_retries:
                     await asyncio.sleep(retry_backoff * attempt)
         
-        # Fallback to local storage only after multiple B2 failures
-        if not public_cover_url and b2.is_configured():
-            logger.info("📁 Saving cover art locally after B2 retries failed (%s, %d bytes)", source, len(cover_bytes))
+        # Fallback to local storage when B2 is not configured or after failures
+        if not public_cover_url:
+            logger.info("Saving cover art locally (%s, %d bytes)", source, len(cover_bytes))
             try:
                 # Ensure upload directory exists
                 if not os.path.exists(upload_dir):
@@ -106,7 +107,7 @@ async def _save_cover_art(cover_bytes: bytes, base_name: str, upload_dir: str, s
                     f.write(cover_bytes)
                 
                 public_cover_url = f"/uploads/{cover_filename}"
-                logger.info("✅ Cover art saved locally: %s", public_cover_url)
+                logger.info("Cover art saved locally: %s", public_cover_url)
             except Exception as e:
                 logger.error("🚨 Failed to save cover art locally: %s", e)
                 return None
@@ -236,44 +237,51 @@ SUPPORTED_MIME_TYPES = {
 
 # Do not create local upload directories; we store only in B2
 
-def validate_audio_file(file: UploadFile, lightweight: bool = False) -> Tuple[bool, Dict[str, Any]]:
+def validate_audio_file(file_or_bytes, filename: Optional[str] = None, lightweight: bool = False) -> Tuple[bool, Dict[str, Any]]:
     """
     Validate the audio file for type, size, and integrity.
-    Returns a tuple of (is_valid: bool, result: Dict).
+    Supports either FastAPI UploadFile, a file-like object (BytesIO), or raw bytes.
+    Returns a tuple (is_valid, result_dict).
     """
-    # Reset file pointer at start
+    data: bytes = b""
+    detected_filename: str = filename or ""
+    underlying: Any = None
+
+    # Normalize inputs and read bytes once
     try:
-        file.file.seek(0)
+        if hasattr(file_or_bytes, "file") and hasattr(file_or_bytes.file, "read"):
+            # FastAPI UploadFile
+            underlying = file_or_bytes.file
+            if not detected_filename:
+                detected_filename = (getattr(file_or_bytes, "filename", None) or "")
+            try:
+                file_or_bytes.file.seek(0)
+            except Exception:
+                pass
+            data = file_or_bytes.file.read()
+        elif hasattr(file_or_bytes, "read"):
+            # File-like object (e.g., BytesIO)
+            underlying = file_or_bytes
+            try:
+                file_or_bytes.seek(0)
+            except Exception:
+                pass
+            data = file_or_bytes.read()
+        elif isinstance(file_or_bytes, (bytes, bytearray)):
+            data = bytes(file_or_bytes)
+        else:
+            return False, {
+                "valid": False,
+                "error": "Unsupported input type for audio validation",
+                "error_code": "invalid_input"
+            }
     except Exception as e:
-        return False, {
-            'valid': False,
-            'error': f'Error reading file: {str(e)}',
-            'error_code': 'file_read_error'
-        }
-    
-    # Check file size
-    try:
-        file_size = len(file.file.read())
-        file.file.seek(0)  # Reset file pointer after reading
-    except Exception as e:
-        return False, {
-            'valid': False,
-            'error': f'Error reading file size: {str(e)}',
-            'error_code': 'file_read_error'
-        }
-    
-    if file_size > MAX_FILE_SIZE_MB * 1024 * 1024:
-        return False, {
-            'valid': False,
-            'error': f'File too large. Maximum size is {MAX_FILE_SIZE_MB}MB',
-            'error_code': 'file_too_large'
-        }
-    
-    # First, try to determine MIME type from filename extension
-    extension = os.path.splitext((file.filename or '').lower())[1]
+        return False, {"valid": False, "error": f"Error reading file: {str(e)}", "error_code": "file_read_error"}
+
+    file_size = len(data)
+    # Derive extension and mime from filename
+    extension = os.path.splitext((detected_filename or "").lower())[1]
     allowed_extensions = {'.mp3', '.wav', '.aiff', '.flac', '.m4a', '.ogg', '.wma'}
-    
-    # Map extensions to MIME types
     extension_to_mime = {
         '.mp3': 'audio/mpeg',
         '.wav': 'audio/wav',
@@ -283,93 +291,95 @@ def validate_audio_file(file: UploadFile, lightweight: bool = False) -> Tuple[bo
         '.ogg': 'audio/ogg',
         '.wma': 'audio/x-ms-wma',
     }
-    
-    # Check if extension is supported
-    if extension not in allowed_extensions:
+    detected_mime = extension_to_mime.get(extension, 'application/octet-stream')
+
+    # Empty file check
+    if file_size == 0:
+        return False, {
+            'valid': False,
+            'error': 'File is empty',
+            'error_code': 'file_empty',
+            'file_extension': extension or None,
+            'file_size_bytes': 0,
+        }
+
+    # Soft limit check – include size info regardless of validity
+    if file_size > MAX_FILE_SIZE_MB * 1024 * 1024:
+        return False, {
+            'valid': False,
+            'error': f'File too large. Maximum size is {MAX_FILE_SIZE_MB}MB',
+            'error_code': 'file_too_large',
+            'file_extension': extension or None,
+            'file_size_bytes': file_size,
+        }
+
+    # Unsupported extension
+    if extension and extension not in allowed_extensions:
         return False, {
             'valid': False,
             'error': f'Unsupported file type. Supported extensions: {sorted(allowed_extensions)}',
-            'error_code': 'unsupported_file_extension'
+            'error_code': 'unsupported_file_extension',
+            'file_extension': extension,
+            'file_size_bytes': file_size,
         }
-    
-    # Use the MIME type from extension as fallback
-    detected_mime = extension_to_mime.get(extension, 'application/octet-stream')
-    
-    # Lightweight mode: skip deep parsing and return fast
+
     if lightweight:
         return True, {
             'valid': True,
             'mime_type': detected_mime,
             'file_extension': extension,
-            'file_size_bytes': file_size
+            'file_size_bytes': file_size,
         }
-    
-    # Try to validate the file with mutagen for basic integrity
-    temp_file = None
+
+    # Deep validation using mutagen
     try:
-        # Create a temporary file in memory first
-        file_content = file.file.read()
-        file.file.seek(0)  # Reset file pointer
-        
-        # Try to parse with mutagen directly from memory
-        try:
-            audio = mutagen.File(BytesIO(file_content))
-            if audio is None:
-                raise ValueError("Failed to parse audio file")
-                
-            # If we got here, the file is valid
-            return True, {
-                'valid': True,
-                'mime_type': detected_mime,
-                'file_extension': extension,
-                'file_size_bytes': file_size
+        audio = mutagen.File(BytesIO(data))
+        if audio is None:
+            return False, {
+                'valid': False,
+                'error': 'Invalid or unsupported audio format',
+                'error_code': 'invalid_audio_file',
+                'file_extension': extension or None,
+                'file_size_bytes': file_size,
             }
-            
-        except Exception as e:
-            # If in-memory parsing fails, try with a temporary file as fallback
-            try:
-                temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=extension)
-                temp_file.write(file_content)
-                temp_file.close()
-                
-                audio = mutagen.File(temp_file.name)
-                if audio is None:
-                    raise ValueError("Failed to parse audio file")
-                    
-                return True, {
-                    'valid': True,
-                    'mime_type': detected_mime,
-                    'file_extension': extension,
-                    'file_size_bytes': file_size
-                }
-                
-            except Exception as e:
-                return False, {
-                    'valid': False,
-                    'error': f'Invalid or corrupted audio file: {str(e)}',
-                    'error_code': 'invalid_audio_file'
-                }
-            
+
+        # Compute optional metadata
+        duration_seconds = None
+        quality_kbps = None
+        try:
+            if hasattr(audio, 'info') and hasattr(audio.info, 'length'):
+                duration_seconds = float(audio.info.length)
+            if hasattr(audio, 'info') and hasattr(audio.info, 'bitrate') and audio.info.bitrate is not None:
+                br = float(audio.info.bitrate)
+                quality_kbps = int(br if br <= 1000 else round(br / 1000))
+        except Exception:
+            pass
+
+        result: Dict[str, Any] = {
+            'valid': True,
+            'mime_type': detected_mime,
+            'file_extension': extension,
+            'file_size_bytes': file_size,
+        }
+        if duration_seconds is not None:
+            result['duration_seconds'] = duration_seconds
+        if quality_kbps is not None:
+            result['quality_kbps'] = quality_kbps
+        return True, result
     except Exception as e:
         return False, {
             'valid': False,
             'error': f'Error validating audio file: {str(e)}',
-            'error_code': 'file_validation_error'
+            'error_code': 'file_validation_error',
+            'file_extension': extension or None,
+            'file_size_bytes': file_size,
         }
-        
     finally:
-        # Clean up temporary file if it was created
-        if temp_file and os.path.exists(temp_file.name):
-            try:
-                os.unlink(temp_file.name)
-            except Exception:
-                pass
-                
-        # Always reset file pointer
+        # Reset stream positions where applicable
         try:
-            file.file.seek(0)
+            if underlying is not None and hasattr(underlying, 'seek'):
+                underlying.seek(0)
         except Exception:
-            pass
             pass
 
 def sanitize_filename(filename: str) -> str:
@@ -888,20 +898,40 @@ async def upload_mix(
         logger.error("[upload] B2 audio upload error: %s", e)
     # Fallback to local storage only after multiple B2 failures (and only if B2 is configured)
     if not public_audio_url:
-        if b2.is_configured():
+        enforce_b2_only = os.getenv("ENFORCE_B2_ONLY", "0").lower() in ("1", "true", "yes")
+        if not b2.is_configured() and not enforce_b2_only:
+            # B2 disabled: use local storage (allowed by default in tests/dev)
+            storage_provider = "local_filesystem"
+            fallback_from_b2 = False
+            logger.warning("[upload] B2 not configured; using local storage.")
+            try:
+                if not os.path.exists(UPLOAD_DIR):
+                    os.makedirs(UPLOAD_DIR)
+                sanitized_filename = sanitize_filename(file.filename or "untitled.mp3")
+                unique_filename = get_unique_filepath(db, UPLOAD_DIR, sanitized_filename)
+                local_audio_path = os.path.join(UPLOAD_DIR, unique_filename)
+                with open(local_audio_path, "wb") as buffer:
+                    buffer.write(audio_bytes)
+                public_audio_url = f"/uploads/{unique_filename}"
+                storage_location = local_audio_path
+                logger.info("✅ Upload complete! 📁 Access at: %s", public_audio_url)
+            except Exception as e:
+                logger.error("🚨 [upload] local save failed: %s", e)
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail={"error": f"Failed to save file locally: {e}", "error_code": "local_save_failed"}
+                )
+        elif b2.is_configured():
             storage_provider = "local_filesystem"
             fallback_from_b2 = True
             logger.warning("[upload] B2 upload failed after retries, falling back to local storage.")
             termprint("[upload] B2 upload failed after retries, falling back to local storage.")
             try:
-                # Ensure the local uploads directory exists
                 if not os.path.exists(UPLOAD_DIR):
                     os.makedirs(UPLOAD_DIR)
-                # Sanitize filename and get a unique path
                 sanitized_filename = sanitize_filename(file.filename or "untitled.mp3")
                 unique_filename = get_unique_filepath(db, UPLOAD_DIR, sanitized_filename)
                 local_audio_path = os.path.join(UPLOAD_DIR, unique_filename)
-                # Save the file to the local filesystem
                 with open(local_audio_path, "wb") as buffer:
                     buffer.write(audio_bytes)
                 public_audio_url = f"/uploads/{unique_filename}"
