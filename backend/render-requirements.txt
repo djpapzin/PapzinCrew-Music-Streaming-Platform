@@ -1,13 +1,13 @@
-fastapi
+fastapi>=0.116,<0.117
 uvicorn[standard]
-sqlalchemy
+sqlalchemy>=2.0,<2.1
 psycopg2-binary>=2.9.9  # PostgreSQL driver for SQLAlchemy (binary wheels)
 alembic
 python-dotenv
 python-multipart
 mutagen
 httpx
-aiohttp
+aiohttp>=3.12,<4
 boto3
 requests  # Required for AI art generator
 pillow  # Required for AI art generator (PIL)
@@ -33,3 +33,6 @@ idna>=3.4
 h11>=0.14.0
 httpcore>=1.0.2
 six>=1.16.0
+
+# Explicitly pin Starlette to a range compatible with FastAPI 0.116.x
+starlette>=0.47,<0.48

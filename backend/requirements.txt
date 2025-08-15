@@ -1,21 +1,18 @@
-fastapi
+fastapi>=0.116,<0.117
 uvicorn[standard]
-sqlalchemy
+sqlalchemy>=2.0,<2.1
 alembic
 python-dotenv
 python-multipart
 mutagen
 httpx
-aiohttp
+aiohttp>=3.12,<4
 boto3
-python-magic-bin
 psycopg2-binary
-python-multipart
 requests
-Pillow
+pillow
 huggingface-hub
-python-multipart
 python-magic-bin; platform_system == "Windows"
 python-magic; platform_system != "Windows"
-boto3
 b2
+starlette>=0.47,<0.48

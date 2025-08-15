@@ -1,5 +1,16 @@
 # PapzinCrew Music Streaming Platform — Status & Ideas
 
+## Next up (Post-deploy)
+- [ ] Pin Python version on Render (add `backend/runtime.txt` with `python-3.12.5` or set `PYTHON_VERSION` env).
+- [ ] Pin critical packages: fastapi, starlette, sqlalchemy, aiohttp (e.g., `aiohttp>=3.12,<4`).
+- [ ] Align and deduplicate `backend/requirements.txt` vs `backend/render-requirements.txt`.
+- [ ] Set up live log tailing locally (Render CLI or log drain).
+
+## Status (Aug 16, 2025)
+- [x] Backend: Render deploy succeeded after adding aiohttp to `backend/render-requirements.txt`.
+- [x] Health: `/health` returns healthy; OpenAPI reachable.
+- [x] Frontend: Netlify site loads and talks to backend.
+
 ## Status (Aug 13, 2025)
 - [x] MVP complete: upload → B2 → stream; metadata + cover art extraction.
 - [x] B2-first storage; local only as fallback.
