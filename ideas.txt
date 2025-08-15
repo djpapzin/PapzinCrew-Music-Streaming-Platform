@@ -1,9 +1,9 @@
 # PapzinCrew Music Streaming Platform — Status & Ideas
 
 ## Next up (Post-deploy)
-- [ ] Pin Python version on Render (add `backend/runtime.txt` with `python-3.12.5` or set `PYTHON_VERSION` env).
-- [ ] Pin critical packages: fastapi, starlette, sqlalchemy, aiohttp (e.g., `aiohttp>=3.12,<4`).
-- [ ] Align and deduplicate `backend/requirements.txt` vs `backend/render-requirements.txt`.
+- [x] Pin Python version on Render (add `backend/runtime.txt` with `python-3.12.5` or set `PYTHON_VERSION` env).
+- [x] Pin critical packages: fastapi, starlette, sqlalchemy, aiohttp (e.g., `aiohttp>=3.12,<4`).
+- [x] Align and deduplicate `backend/requirements.txt` vs `backend/render-requirements.txt`.
 - [ ] Set up live log tailing locally (Render CLI or log drain).
 
 ## Status (Aug 16, 2025)
@@ -63,7 +63,7 @@
 
 - [ ] when music is playing, "publish" button gets hidden
 
-- [ ] clicking on logo should take me home.
+- [x] clicking on logo should take me home.
 
 - [ ] Add papzin & crew (black & White) logo.
 
