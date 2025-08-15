@@ -1,11 +1,12 @@
 fastapi>=0.116,<0.117
-uvicorn[standard]
+uvicorn[standard]>=0.30,<0.31
 sqlalchemy>=2.0,<2.1
 alembic
+pydantic>=2,<3
 python-dotenv
 python-multipart
 mutagen
-httpx
+httpx>=0.27,<0.28
 aiohttp>=3.12,<4
 boto3
 psycopg2-binary
