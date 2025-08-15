@@ -17,8 +17,14 @@ backend/uploads/
 
 # Env
 .env
+.env.local
+.env.*
 backend/.env
+backend/.env.local
+backend/.env.*
 frontend/project/.env
+frontend/project/.env.local
+frontend/project/.env.*
 
 # Node/Vite
 node_modules/
