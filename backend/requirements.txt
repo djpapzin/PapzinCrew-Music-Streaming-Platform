@@ -6,6 +6,7 @@ python-dotenv
 python-multipart
 mutagen
 httpx
+aiohttp
 boto3
 python-magic-bin
 psycopg2-binary
