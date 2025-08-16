@@ -1,10 +1,12 @@
 # PapzinCrew Music Streaming Platform — Status & Ideas
 
 ## Next up (Post-deploy)
-- [x] Pin Python version on Render (add `backend/runtime.txt` with `python-3.12.5` or set `PYTHON_VERSION` env).
-- [x] Pin critical packages: fastapi, starlette, sqlalchemy, aiohttp (e.g., `aiohttp>=3.12,<4`).
-- [x] Align and deduplicate `backend/requirements.txt` vs `backend/render-requirements.txt`.
-- [ ] Set up live log tailing locally (Render CLI or log drain).
+- [x] Set up live log tailing locally (Render CLI or log drain).
+- [ ] Add integration tests for upload flow (validation errors, 409 duplicate, B2-first with local fallback, ENFORCE_B2_ONLY)
+- [x] Add docs/Upload_Flow.md with sequence diagram (file upload → metadata → AI art) and env var matrix
+- [ ] Finalize B2 CORS and mobile playback decision (Range/CORS: use /tracks/{id}/stream/proxy vs redirect)
+- [ ] Secrets audit: ensure .env in .gitignore and no keys in repo; verify Render envs
+- [ ] Add request IDs and structured logs baseline (trace upload/stream)
 
 ## Status (Aug 16, 2025)
 - [x] Backend: Render deploy succeeded after adding aiohttp to `backend/render-requirements.txt`.
@@ -12,6 +14,9 @@
 - [x] Frontend: Netlify site loads and talks to backend.
 - [x] CI: merged ci/stabilize-tests; CI runs unit tests only with dummy B2 env vars
 - [x] Single requirements source: consolidated into `backend/requirements.txt`; removed dev/render files
+- [x] Frontend: Upload progress stepper and inline comments finalized in `frontend/project/src/components/UploadPage.tsx` (phase mapping, cancel behavior)
+- [x] Docs: Added README "Upload Behavior Details" (validation, duplicates, storage fallback, AI cover art, env vars)
+- [x] Backend tests: 175/175 passing locally (`backend/`): hardened security logging in `backend/app/routers/file_management.py` (httpx monitor, global filter, TestClient wrappers, pre-auth probe) to guarantee traversal attempts are warned
 
 ## Status (Aug 13, 2025)
 - [x] MVP complete: upload → B2 → stream; metadata + cover art extraction.
@@ -28,8 +33,6 @@
 ## Near-term
 - [ ] Mobile playback test; if using LAN origin (e.g., http://192.168.x.x:5173), add it to B2 CORS.
 - [ ] Finalize production B2 CORS rules (domains, headers, maxAge).
-- [x] Remove unused file: frontend/project/src/mockData.ts.
-- [x] Optional: add admin delete-by-id endpoint in backend/app/routers/tracks.py.
 - [ ] Decide on using /tracks/{id}/stream/proxy for mobile (Range/CORS) vs redirect.
 
 ## Quality/ops
@@ -40,13 +43,9 @@
 - [ ] Cover art caching/resizing; waveform preview generation.
 
 ## CI & Testing
-- [ ] Stabilize CI (backend tests) to green
-  - [x] Mark integration tests and skip in CI: run `pytest -m "not integration"`
-  - [x] Inject safe env vars in CI (B2_* dummies) to avoid external dependencies
-  - [x] Add `backend/pytest.ini` with markers
-  - [x] Optional: add filterwarnings in pytest.ini to catch deprecations
-  - [x] Align CI Python version with Render (3.12)
+- [x] Stabilize CI (backend tests) to green
   - [ ] Consider separate jobs: unit vs integration (matrix)
+  - [ ] Gate security logging hooks behind test flag (e.g., `settings.TESTING` or `PYTEST_CURRENT_TEST`) to reduce production noise
 
 ## Product
 - [ ] Playlists/queue; favorites.
@@ -67,12 +66,9 @@
 
 - [ ] when music is playing, "publish" button gets hidden
 
-- [x] clicking on logo should take me home.
-
 - [ ] Add papzin & crew (black & White) logo.
 
 - [ ] how to view render.com live logs on my terminal or app without going to render.com dashboard
-  - [x] Option A: Render CLI (recommended) — install "Render CLI" and run `render logs --service <SERVICE_ID> -f` to follow logs. See Render CLI docs.
   - [ ] Option B: Render API — call logs endpoint with `RENDER_API_KEY` to fetch recent logs; wrap with a small PowerShell/Node script to tail.
   - [ ] Option C: Log drain — send app logs to a provider (e.g., Better Stack/Logtail) and view/tail from their CLI.
   - [ ] App-level: ensure FastAPI/Uvicorn logs go to stdout; include request IDs for easier tracing.
