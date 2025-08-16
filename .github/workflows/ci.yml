@@ -48,8 +48,11 @@ jobs:
         env:
           PYTHONWARNINGS: default
           ENABLE_UPLOAD_PRINTS: "0"
+          B2_ACCESS_KEY_ID: dummy
+          B2_SECRET_ACCESS_KEY: dummy
+          B2_BUCKET: dummy
         run: |
-          pytest -q
+          pytest -m "not integration" -q
 
   frontend-build:
     name: Frontend Build (Node 18)

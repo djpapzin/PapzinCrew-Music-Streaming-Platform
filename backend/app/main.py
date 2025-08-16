@@ -94,19 +94,14 @@ default_dev_origins = [
 
 def _parse_allowed_origins() -> list[str]:
     raw = os.getenv("ALLOWED_ORIGINS")
-    if raw:
-        # Parse environment variable but always include production URLs
+    # If the env var is present (even empty), parse strictly from it
+    if raw is not None:
         env_origins = [o.strip() for o in raw.split(",") if o.strip()]
-        # Always ensure production URLs are included
-        production_urls = [
-            "https://papzincrew.netlify.app",
-            "https://papzincrew-backend.onrender.com",
-        ]
-        # Combine and deduplicate
-        all_origins = list(set(env_origins + production_urls))
-        return all_origins
-    else:
-        return default_dev_origins
+        # Deduplicate while preserving order for deterministic equality in tests
+        dedup = list(dict.fromkeys(env_origins))
+        return dedup
+    # Fallback to development defaults when not configured
+    return default_dev_origins
 
 # Concrete list used by middleware
 allowed_origins_list = _parse_allowed_origins()
@@ -131,11 +126,11 @@ class _AllowedOriginsProxy:
 allowed_origins = _AllowedOriginsProxy()
 
 # Add CORS middleware
-# Temporarily allow all origins to resolve CORS issues
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Temporarily allow all origins
-    allow_credentials=False,  # Must be False when allow_origins=["*"]
+    allow_origins=allowed_origins_list,
+    allow_origin_regex=allowed_origin_regex,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["*"],
