@@ -11,6 +11,7 @@
 - [x] Health: `/health` returns healthy; OpenAPI reachable.
 - [x] Frontend: Netlify site loads and talks to backend.
 - [x] CI: merged ci/stabilize-tests; CI runs unit tests only with dummy B2 env vars
+- [x] Single requirements source: consolidated into `backend/requirements.txt`; removed dev/render files
 
 ## Status (Aug 13, 2025)
 - [x] MVP complete: upload → B2 → stream; metadata + cover art extraction.
@@ -71,7 +72,7 @@
 - [ ] Add papzin & crew (black & White) logo.
 
 - [ ] how to view render.com live logs on my terminal or app without going to render.com dashboard
-  - [ ] Option A: Render CLI (recommended) — install "Render CLI" and run `render logs --service <SERVICE_ID> -f` to follow logs. See Render CLI docs.
+  - [x] Option A: Render CLI (recommended) — install "Render CLI" and run `render logs --service <SERVICE_ID> -f` to follow logs. See Render CLI docs.
   - [ ] Option B: Render API — call logs endpoint with `RENDER_API_KEY` to fetch recent logs; wrap with a small PowerShell/Node script to tail.
   - [ ] Option C: Log drain — send app logs to a provider (e.g., Better Stack/Logtail) and view/tail from their CLI.
   - [ ] App-level: ensure FastAPI/Uvicorn logs go to stdout; include request IDs for easier tracing.
