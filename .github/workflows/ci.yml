@@ -50,6 +50,29 @@ jobs:
         run: |
           pytest -m "not integration" -q
 
+  frontend-tests:
+    name: Frontend Unit Tests (Node 18)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend/project
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: frontend/project/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Run unit tests
+        run: npm run test:run
+
   frontend-build:
     name: Frontend Build (Node 18)
     runs-on: ubuntu-latest

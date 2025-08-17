@@ -1,6 +1,6 @@
 from typing import List, Optional
 from datetime import datetime
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, StrictInt, StrictFloat, field_validator
 
 
 class TracklistItemBase(BaseModel):
@@ -21,7 +21,7 @@ class TracklistItem(TracklistItemBase):
 
 
 class CategoryBase(BaseModel):
-    name: str
+    name: str = Field(min_length=1)
     description: Optional[str] = None
 
 
@@ -30,7 +30,18 @@ class CategoryCreate(CategoryBase):
 
 
 class ArtistBase(BaseModel):
-    name: str
+    name: str = Field(min_length=1)
+
+    @field_validator('name')
+    @classmethod
+    def name_non_empty(cls, v: str) -> str:
+        # Normalize whitespace and ensure non-empty after stripping
+        if v is None:
+            raise ValueError('name must not be empty')
+        v = v.strip()
+        if not v:
+            raise ValueError('name must not be empty')
+        return v
 
 
 class ArtistCreate(ArtistBase):
@@ -59,11 +70,11 @@ class Category(CategoryBase):
 class MixBase(BaseModel):
     title: str
     original_filename: str
-    artist_id: int
-    duration_seconds: int
-    file_size_mb: float
-    quality_kbps: int
-    bpm: Optional[int] = None
+    artist_id: StrictInt
+    duration_seconds: StrictInt
+    file_size_mb: StrictFloat
+    quality_kbps: StrictInt
+    bpm: Optional[StrictInt] = None
     file_path: str
     cover_art_url: Optional[str] = None
     description: Optional[str] = None
@@ -71,7 +82,7 @@ class MixBase(BaseModel):
     tags: Optional[str] = None
     genre: Optional[str] = None
     album: Optional[str] = None
-    year: Optional[int] = None
+    year: Optional[StrictInt] = None
     availability: Optional[str] = 'public'
     allow_downloads: Optional[str] = 'yes'
     display_embed: Optional[str] = 'yes'

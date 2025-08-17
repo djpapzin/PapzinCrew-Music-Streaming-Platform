@@ -56,6 +56,9 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
   const [showCustomPrompt, setShowCustomPrompt] = useState(false);
   const [customPrompt, setCustomPrompt] = useState('');
   const [fileValidation, setFileValidation] = useState<FileValidationResult | null>(null);
+  // Upload status model powers the segmented stepper in the status modal.
+  // phase drives the highlighted step and mini bar:
+  // - 'file_upload' (0–40%), 'metadata_extraction' (40–70%), 'ai_generation' (70–100%), 'complete'
   const [duplicateTrack, setDuplicateTrack] = useState<any>(null);
   const [uploadError, setUploadError] = useState<UploadError | null>(null);
   const [uploadStatus, setUploadStatus] = useState<{
@@ -253,6 +256,8 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
+  // Cancel button is visible when uploadStatus.canCancel is true.
+  // It aborts the in-flight XMLHttpRequest and cleans up timers.
   const cancelUpload = () => {
     // Cancel XMLHttpRequest if it exists
     if (currentXhrRef.current) {
@@ -483,7 +488,10 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
       lastLoaded.current = 0;
       lastTime.current = Date.now();
       
-      // Set up progress tracking
+      // Set up progress tracking.
+      // Phase 1 maps the raw upload progress (0–100%) to overall 0–40%.
+      // After we transition to the next phases, we guard against late upload
+      // events resetting overall progress below 40%.
       xhr.upload.addEventListener('progress', (event) => {
         if (event.lengthComputable) {
           const now = Date.now();

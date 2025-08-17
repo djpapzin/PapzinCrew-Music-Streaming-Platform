@@ -88,6 +88,40 @@ VITE_API_URL=http://127.0.0.1:8000
 - Duplicate detection with optional forced upload; structured error codes returned.
 - B2-first storage; local fallback.
 
+### Upload Behavior Details
+
+• __Validation__
+  - Max size: 100MB (frontend and backend aligned)
+  - Type: validated by extension and Mutagen sniffing; backend responds with structured errors
+  - Common error codes: `file_too_large`, `unsupported_file_type`, `invalid_audio_file` (may include `detected_type`)
+
+• __Duplicate detection__
+  - Pre-upload check via `POST /upload/check-duplicate` using title, artist, size, optional file hash and duration
+  - On the main upload, backend may return HTTP 409 with `error_code: duplicate_track` and `duplicate_info`
+  - Frontend can force upload by setting `skip_duplicate_check=true` in the multipart form data
+
+• __Storage strategy (B2-first with local fallback)__
+  - If B2 is configured: upload to B2 with retry/timeout
+  - If B2 upload exhausts retries: fallback to local filesystem (unless disabled)
+  - If B2 is not configured: save locally by default (dev/test)
+  - If `ENFORCE_B2_ONLY=1` and B2 unavailable: return 503 (no local write)
+  - Filenames are sanitized centrally via `sanitize_filename` and made unique before write
+
+• __Cover art flow__
+  1) User-provided image (if any)
+  2) Extract embedded art from audio metadata
+  3) AI-generated art fallback (with status polling). All use B2-first + local fallback
+
+• __Relevant environment variables__
+  - `UPLOAD_DIR` (default: `uploads`) – local fallback directory
+  - `ENFORCE_B2_ONLY` (default: 0) – when true, disables local fallback
+  - `B2_PUT_TIMEOUT`, `B2_MAX_RETRIES`, `B2_RETRY_BACKOFF` – control B2 upload behavior
+  - `ENABLE_UPLOAD_PRINTS` – verbose upload logging
+
+• __Security__
+  - Centralized filename sanitization prevents traversal and reserved-name issues
+  - Paths validated before local writes; secrets must be kept in environment variables
+
 ## Deployment
 ### Render (Backend)
 - This repo includes `render.yaml` (Render Blueprint).

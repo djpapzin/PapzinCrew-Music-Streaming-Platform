@@ -45,6 +45,7 @@ from ..db.database import get_db
 from ..models import models
 from ..services.ai_art_generator import AIArtGenerator
 from ..services.b2_storage import B2Storage
+from .file_management import sanitize_filename
 
 router = APIRouter(prefix="/upload", tags=["upload"])
 
@@ -184,6 +185,17 @@ async def extract_metadata(
                 **validation_result,
                 'message': validation_result.get('error') or 'Invalid audio file'
             }
+            logger.warning(
+                "[upload] extract-metadata validation failed",
+                extra={
+                    "action": "extract_metadata_validation_failed",
+                    "file_name": file.filename,
+                    "mime_type": validation_result.get("mime_type"),
+                    "file_extension": validation_result.get("file_extension"),
+                    "file_size_bytes": validation_result.get("file_size_bytes"),
+                    "error_code": validation_result.get("error_code"),
+                },
+            )
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=detail
@@ -235,7 +247,7 @@ SUPPORTED_MIME_TYPES = {
     'audio/x-ms-wma': '.wma'
 }
 
-# Do not create local upload directories; we store only in B2
+# Prefer B2 storage; create local upload directories only for fallback or when B2 is disabled
 
 def validate_audio_file(file_or_bytes, filename: Optional[str] = None, lightweight: bool = False) -> Tuple[bool, Dict[str, Any]]:
     """
@@ -318,8 +330,9 @@ def validate_audio_file(file_or_bytes, filename: Optional[str] = None, lightweig
         return False, {
             'valid': False,
             'error': f'Unsupported file type. Supported extensions: {sorted(allowed_extensions)}',
-            'error_code': 'unsupported_file_extension',
+            'error_code': 'unsupported_file_type',
             'file_extension': extension,
+            'detected_type': detected_mime,
             'file_size_bytes': file_size,
         }
 
@@ -382,9 +395,7 @@ def validate_audio_file(file_or_bytes, filename: Optional[str] = None, lightweig
         except Exception:
             pass
 
-def sanitize_filename(filename: str) -> str:
-    """Removes invalid characters from a filename."""
-    return re.sub(r'[\\/*?:"<>|]', "", filename)
+# Using centralized sanitize_filename from file_management
 
 def calculate_file_hash(file_content: bytes) -> str:
     """
@@ -661,12 +672,30 @@ async def upload_mix(
         title,
         artist_name,
         getattr(file, 'filename', None),
+        extra={
+            "action": "upload_start",
+            "title": title,
+            "artist": artist_name,
+            "file_name": getattr(file, 'filename', None),
+            "availability": availability,
+            "allow_downloads": allow_downloads,
+        },
     )
     termprint(f"[upload] start title='{title}' artist='{artist_name}' filename='{getattr(file, 'filename', None)}'")
     # Validate the file first
     is_valid, validation_result = validate_audio_file(file)
     if not is_valid:
-        logger.warning("[upload] validation failed: %s", validation_result)
+        logger.warning(
+            "[upload] validation failed: %s",
+            validation_result,
+            extra={
+                "action": "upload_validation_failed",
+                "file_extension": validation_result.get('file_extension'),
+                "mime_type": validation_result.get('mime_type'),
+                "file_size_bytes": validation_result.get('file_size_bytes'),
+                "error_code": validation_result.get('error_code'),
+            },
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=validation_result
@@ -677,6 +706,12 @@ async def upload_mix(
             validation_result.get('file_extension'),
             validation_result.get('mime_type'),
             validation_result.get('file_size_bytes'),
+            extra={
+                "action": "upload_validation_ok",
+                "file_extension": validation_result.get('file_extension'),
+                "mime_type": validation_result.get('mime_type'),
+                "file_size_bytes": validation_result.get('file_size_bytes'),
+            },
         )
     
     # Enhanced duplicate check after file processing (moved after file hash calculation)
@@ -692,7 +727,7 @@ async def upload_mix(
                 parts = name_clean.split(sep)
                 if len(parts) >= 2 and parts[0].strip():
                     artist_name = parts[0].strip()
-                    logger.info("[upload] artist fallback from filename: %s", artist_name)
+                    logger.info("[upload] artist fallback from filename: %s", artist_name, extra={"action": "artist_fallback", "source": "filename", "artist": artist_name})
                     break
         if not artist_name:
             artist_name = "Unknown Artist"
@@ -715,14 +750,14 @@ async def upload_mix(
     # Prefer B2 if configured; otherwise we'll use local storage fallback
     b2_precheck = B2Storage()
     if not b2_precheck.is_configured():
-        logger.warning("[upload] B2 not configured; will use local storage fallback")
+        logger.warning("[upload] B2 not configured; will use local storage fallback", extra={"action": "b2_not_configured"})
     
     # Read file content into memory (B2-first) and compute hash
     file.file.seek(0)
     audio_bytes = file.file.read()
     file_hash = calculate_file_hash(audio_bytes)
     audio_fileobj = BytesIO(audio_bytes)
-    logger.info("[upload] read bytes size=%d hash=%s", len(audio_bytes), file_hash)
+    logger.info("[upload] read bytes size=%d hash=%s", len(audio_bytes), file_hash, extra={"action": "audio_read", "size_bytes": len(audio_bytes), "file_hash": file_hash})
     termprint(f"[upload] read bytes size={len(audio_bytes)} hash={file_hash}")
     
     # Extract metadata directly from in-memory bytes
@@ -748,9 +783,9 @@ async def upload_mix(
                 logger.info("[upload] extracted BPM=%s", bpm)
         except Exception as e:
             logger.debug("[upload] BPM parse error: %s", e)
-        logger.info("🔍 Extracted track metadata: %ss, %s kbps, %.2f MB", duration_seconds, quality_kbps, file_size_mb)
+        logger.info("🔍 Extracted track metadata: %ss, %s kbps, %.2f MB", duration_seconds, quality_kbps, file_size_mb, extra={"action": "metadata_extracted", "duration_seconds": duration_seconds, "quality_kbps": quality_kbps, "file_size_mb": file_size_mb})
     except Exception as e:
-        logger.warning("[upload] metadata extraction error: %s", e)
+        logger.warning("[upload] metadata extraction error: %s", e, extra={"action": "metadata_extraction_error", "error": str(e)})
         duration_seconds = 0
         file_size_mb = validation_result['file_size_bytes'] / (1024 * 1024)
         quality_kbps = 0
@@ -767,7 +802,7 @@ async def upload_mix(
         album=album
     )
     if duplicate_info and not skip_duplicate_check:
-        logger.info("[upload] duplicate detected (pre-storage): %s", duplicate_info.get('reason'))
+        logger.info("[upload] duplicate detected (pre-storage): %s", duplicate_info.get('reason'), extra={"action": "duplicate_detected_pre_storage", "reason": duplicate_info.get('reason'), "match_type": duplicate_info.get('match_type')})
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={
@@ -782,7 +817,7 @@ async def upload_mix(
     try:
         # 1. Check for user-uploaded cover art first
         if cover_art and cover_art.filename:
-            logger.info("🎵 Processing track: %s", file.filename)
+            logger.info("🎵 Processing track: %s", file.filename, extra={"action": "cover_art_user_uploaded", "file_name": file.filename})
             cover_art.file.seek(0)
             cover_bytes = cover_art.file.read()
             if cover_bytes:
@@ -801,7 +836,7 @@ async def upload_mix(
                     cover_art_data = tags_source.pictures[0].data
                 
                 if cover_art_data:
-                    logger.info("[upload] found extracted cover art in metadata (%d bytes)", len(cover_art_data))
+                    logger.info("[upload] found extracted cover art in metadata (%d bytes)", len(cover_art_data), extra={"action": "cover_art_extracted", "bytes": len(cover_art_data)})
                     public_cover_url = await _save_cover_art(cover_art_data, base_name, UPLOAD_DIR, source="extracted")
             except Exception as e:
                 logger.debug("[upload] could not extract cover from metadata: %s", e)
@@ -819,18 +854,18 @@ async def upload_mix(
                     timeout=ai_timeout
                 )
                 if cover_art_bytes:
-                    logger.info("[upload] AI generation successful (%d bytes)", len(cover_art_bytes))
+                    logger.info("[upload] AI generation successful (%d bytes)", len(cover_art_bytes), extra={"action": "ai_cover_generated", "bytes": len(cover_art_bytes)})
                     public_cover_url = await _save_cover_art(cover_art_bytes, base_name, UPLOAD_DIR, source="ai")
                 else:
-                    logger.warning("[upload] AI generation returned no data")
+                    logger.warning("[upload] AI generation returned no data", extra={"action": "ai_cover_empty"})
             except asyncio.TimeoutError:
-                logger.warning("[upload] AI cover generation timed out after %ss", ai_timeout)
+                logger.warning("[upload] AI cover generation timed out after %ss", ai_timeout, extra={"action": "ai_cover_timeout", "timeout_seconds": ai_timeout})
             except Exception as e:
-                logger.error("[upload] AI cover generation failed: %s", e)
+                logger.error("[upload] AI cover generation failed: %s", e, extra={"action": "ai_cover_error", "error": str(e)})
 
     except Exception as e:
         # Don't fail the entire upload if cover art handling fails
-        logger.warning("[upload] cover art processing error: %s", e)
+        logger.warning("[upload] cover art processing error: %s", e, extra={"action": "cover_art_processing_error", "error": str(e)})
 
     # B2-first: upload audio bytes directly when configured
     public_audio_url = None
@@ -839,8 +874,8 @@ async def upload_mix(
     fallback_from_b2 = False
     b2_error_code = None
     # public_cover_url was set during cover art handling above
+    b2 = B2Storage()
     try:
-        b2 = B2Storage()
         if b2.is_configured():
             # Clean the base name to remove problematic characters
             import re
@@ -854,11 +889,11 @@ async def upload_mix(
                 random_str = str(uuid.uuid4())[:8]
                 safe_hash = (file_hash or f"{timestamp}-{random_str}").replace("/", "_")[:32]
                 audio_key = f"audio/{clean_base}-{safe_hash}{file_extension}"
-                logger.info("[upload] Using unique key for forced upload: %s", audio_key)
+                logger.info("[upload] Using unique key for forced upload: %s", audio_key, extra={"action": "b2_unique_key_forced", "audio_key": audio_key})
             else:
                 # Use descriptive filename for normal uploads
                 audio_key = f"audio/{clean_base}{file_extension}"
-            logger.info("[upload] B2 audio upload start key=%s size=%dB", audio_key, len(audio_bytes))
+            logger.info("[upload] B2 audio upload start key=%s size=%dB", audio_key, len(audio_bytes), extra={"action": "b2_audio_upload_start", "audio_key": audio_key, "size_bytes": len(audio_bytes)})
             termprint(f"[upload] B2 audio upload start key={audio_key} size={len(audio_bytes)}B")
             b2_timeout = float(os.getenv('B2_PUT_TIMEOUT', '20'))
             max_retries = int(os.getenv('B2_MAX_RETRIES', '3'))
@@ -882,28 +917,34 @@ async def upload_mix(
                         break
                     else:
                         b2_error_code = _res.get("error_code")
-                        logger.warning("[upload] B2 audio upload failed (attempt %d/%d) code=%s detail=%s", attempt, max_retries, _res.get("error_code"), _res.get("detail"))
+                        logger.warning("[upload] B2 audio upload failed (attempt %d/%d) code=%s detail=%s", attempt, max_retries, _res.get("error_code"), _res.get("detail"), extra={"action": "b2_audio_upload_failed", "attempt": attempt, "max_retries": max_retries, "error_code": _res.get("error_code")})
                 except asyncio.TimeoutError:
-                    logger.warning("[upload] B2 audio upload timed out after %ss (attempt %d/%d)", b2_timeout, attempt, max_retries)
+                    logger.warning("[upload] B2 audio upload timed out after %ss (attempt %d/%d)", b2_timeout, attempt, max_retries, extra={"action": "b2_audio_timeout", "timeout_seconds": b2_timeout, "attempt": attempt, "max_retries": max_retries})
                     public_audio_url = None
                     b2_error_code = "timeout"
                 except Exception as e:
-                    logger.warning("[upload] B2 audio upload error (attempt %d/%d): %s", attempt, max_retries, e)
+                    logger.warning("[upload] B2 audio upload error (attempt %d/%d): %s", attempt, max_retries, e, extra={"action": "b2_audio_upload_error", "attempt": attempt, "max_retries": max_retries, "error": str(e)})
                 if not public_audio_url and attempt < max_retries:
                     await asyncio.sleep(retry_backoff * attempt)
             elapsed_total = (time.perf_counter() - start_overall)
             if public_audio_url:
-                logger.info("[upload] B2 audio upload done in %.2fs url=%s", elapsed_total, public_audio_url)
+                logger.info("[upload] B2 audio upload done in %.2fs url=%s", elapsed_total, public_audio_url, extra={"action": "b2_audio_upload_done", "elapsed_seconds": round(elapsed_total, 2), "url": public_audio_url})
     except Exception as e:
-        logger.error("[upload] B2 audio upload error: %s", e)
-    # Fallback to local storage only after multiple B2 failures (and only if B2 is configured)
+        logger.error("[upload] B2 audio upload error: %s", e, extra={"action": "b2_audio_unhandled_error", "error": str(e)})
+    # Fallback to local storage logic (only after B2 attempts)
+    # Storage strategy:
+    # - B2 configured: try B2 first with retries/timeouts above
+    # - If B2 is NOT configured and ENFORCE_B2_ONLY is false -> save locally (dev/tests)
+    # - If B2 IS configured but upload failed after retries -> fall back to local and mark response headers
+    # - If ENFORCE_B2_ONLY is true and B2 not configured -> return 503 without local save
     if not public_audio_url:
         enforce_b2_only = os.getenv("ENFORCE_B2_ONLY", "0").lower() in ("1", "true", "yes")
         if not b2.is_configured() and not enforce_b2_only:
+            # B2 disabled and local storage permitted: write to local filesystem
             # B2 disabled: use local storage (allowed by default in tests/dev)
             storage_provider = "local_filesystem"
             fallback_from_b2 = False
-            logger.warning("[upload] B2 not configured; using local storage.")
+            logger.warning("[upload] B2 not configured; using local storage.", extra={"action": "local_storage_used", "reason": "b2_not_configured"})
             try:
                 if not os.path.exists(UPLOAD_DIR):
                     os.makedirs(UPLOAD_DIR)
@@ -914,17 +955,18 @@ async def upload_mix(
                     buffer.write(audio_bytes)
                 public_audio_url = f"/uploads/{unique_filename}"
                 storage_location = local_audio_path
-                logger.info("✅ Upload complete! 📁 Access at: %s", public_audio_url)
+                logger.info("✅ Upload complete! 📁 Access at: %s", public_audio_url, extra={"action": "local_save_success", "provider": storage_provider, "url": public_audio_url, "path": local_audio_path})
             except Exception as e:
-                logger.error("🚨 [upload] local save failed: %s", e)
+                logger.error("🚨 [upload] local save failed: %s", e, extra={"action": "local_save_failed", "error": str(e)})
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     detail={"error": f"Failed to save file locally: {e}", "error_code": "local_save_failed"}
                 )
         elif b2.is_configured():
+            # B2 was configured but all retries failed: perform local fallback to ensure upload completes
             storage_provider = "local_filesystem"
             fallback_from_b2 = True
-            logger.warning("[upload] B2 upload failed after retries, falling back to local storage.")
+            logger.warning("[upload] B2 upload failed after retries, falling back to local storage.", extra={"action": "local_fallback", "from": "b2_failed"})
             termprint("[upload] B2 upload failed after retries, falling back to local storage.")
             try:
                 if not os.path.exists(UPLOAD_DIR):
@@ -936,16 +978,17 @@ async def upload_mix(
                     buffer.write(audio_bytes)
                 public_audio_url = f"/uploads/{unique_filename}"
                 storage_location = local_audio_path
-                logger.info("✅ Upload complete! 📁 Access at: %s", public_audio_url)
+                logger.info("✅ Upload complete! 📁 Access at: %s", public_audio_url, extra={"action": "local_save_success", "provider": storage_provider, "url": public_audio_url, "path": local_audio_path, "fallback_from_b2": True})
                 termprint(f"[upload] saved to local fallback: {public_audio_url}")
             except Exception as e:
-                logger.error("🚨 [upload] local save failed: %s", e)
+                logger.error("🚨 [upload] local save failed: %s", e, extra={"action": "local_save_failed", "error": str(e)})
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     detail={"error": f"Failed to save file locally: {e}", "error_code": "local_save_failed"}
                 )
         else:
-            logger.error("[upload] B2 storage not configured; refusing local fallback per policy")
+            # ENFORCE_B2_ONLY prevents local fallback when remote storage is unavailable
+            logger.error("[upload] B2 storage not configured; refusing local fallback per policy", extra={"action": "storage_unavailable_policy", "policy": "ENFORCE_B2_ONLY"})
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail={
@@ -1001,7 +1044,7 @@ async def upload_mix(
     final_cover_url = public_cover_url if public_cover_url else None
 
     try:
-        logger.info("💾 Saving track to database...")
+        logger.info("💾 Saving track to database...", extra={"action": "db_save_start", "provider": storage_provider, "location": storage_location, "fallback_from_b2": fallback_from_b2})
         mix_data = schemas.MixCreate(
             title=title,
             original_filename=file.filename,
@@ -1054,7 +1097,7 @@ async def upload_mix(
             response_content['location'] = storage_location
         if fallback_from_b2:
             response_content['fallback_from_b2'] = True
-        logger.info("✅ Success! Track saved with ID: %s", db_mix.id)
+        logger.info("✅ Success! Track saved with ID: %s", db_mix.id, extra={"action": "db_save_success", "mix_id": db_mix.id, "storage_provider": storage_provider, "storage_location": storage_location})
         from fastapi.encoders import jsonable_encoder
         resp = JSONResponse(status_code=status.HTTP_201_CREATED, content=jsonable_encoder(response_content))
         # Surface storage details to clients (for UI warnings/telemetry)
@@ -1069,6 +1112,7 @@ async def upload_mix(
     except IntegrityError:
         # Unique constraint (e.g., file_path) violation -> map to 409 duplicate
         db.rollback()
+        logger.warning("[upload] DB unique constraint violated during save", extra={"action": "db_unique_violation"})
         try:
             b2 = B2Storage()
             if b2.is_configured() and public_audio_url:

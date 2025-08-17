@@ -38,7 +38,7 @@ This document outlines the step-by-step plan for integrating the frontend (start
   - Fallback to filename parsing if metadata is missing, with user alert
   - Backend validates and stores metadata
 
-- [ ] **Progress Bar & UI Feedback**
+- [x] **Progress Bar & UI Feedback**
   - Implement upload progress indicator
   - Show success/error messages (basic alerts implemented, polish pending)
 
@@ -54,7 +54,7 @@ This document outlines the step-by-step plan for integrating the frontend (start
     - Genre, Availability, Explicit
     - (Removed: Language)
 
-- [ ] **Security & Validation**
+- [x] **Security & Validation**
   - Add file type/size validation on both frontend and backend (basic implemented, review for completeness)
   - Handle authentication/authorization if needed
 

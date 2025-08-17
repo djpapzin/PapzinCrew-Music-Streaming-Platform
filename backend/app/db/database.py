@@ -1,6 +1,7 @@
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
 import os
 from pathlib import Path
@@ -18,7 +19,10 @@ env_db_url = (
 if env_db_url and env_db_url.startswith("postgres://"):
     env_db_url = env_db_url.replace("postgres://", "postgresql+psycopg2://", 1)
 
-if env_db_url:
+# Use an isolated in-memory SQLite database for pytest runs to ensure clean schema
+if os.getenv("PYTEST_CURRENT_TEST"):
+    SQLALCHEMY_DATABASE_URL = "sqlite://"
+elif env_db_url:
     SQLALCHEMY_DATABASE_URL = env_db_url
 else:
     # Get the absolute path to the backend directory (ephemeral on Render)
@@ -28,9 +32,18 @@ else:
 # Only pass sqlite-specific connect args for sqlite URLs
 connect_args = {"check_same_thread": False} if SQLALCHEMY_DATABASE_URL.startswith("sqlite") else {}
 
-engine = create_engine(
-    SQLALCHEMY_DATABASE_URL, connect_args=connect_args, pool_pre_ping=True
-)
+if SQLALCHEMY_DATABASE_URL == "sqlite://":
+    # In-memory DB shared across threads/process via StaticPool
+    engine = create_engine(
+        SQLALCHEMY_DATABASE_URL,
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+        pool_pre_ping=True,
+    )
+else:
+    engine = create_engine(
+        SQLALCHEMY_DATABASE_URL, connect_args=connect_args, pool_pre_ping=True
+    )
 
 # Enable foreign key constraints for SQLite
 if SQLALCHEMY_DATABASE_URL.startswith("sqlite"):
@@ -40,7 +53,7 @@ if SQLALCHEMY_DATABASE_URL.startswith("sqlite"):
         cursor.execute("PRAGMA foreign_keys=ON")
         cursor.close()
 
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, expire_on_commit=False, bind=engine)
 
 Base = declarative_base()
 

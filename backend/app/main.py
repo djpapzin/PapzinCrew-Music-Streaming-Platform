@@ -12,21 +12,18 @@ from fastapi.responses import JSONResponse
 from .db.database import engine
 from .models import models
 from .routers import tracks, categories, artists, uploads, storage, cleanup, file_management
-
-# Configure logging early
-log_level = os.getenv("LOG_LEVEL", "INFO").upper()
-logging.basicConfig(
-    level=getattr(logging, log_level, logging.INFO),
-    format="%(levelname)s:%(name)s: %(message)s",
+from .logging_utils import (
+    setup_logging,
+    set_request_id,
+    clear_request_id,
+    generate_request_id,
+    get_request_id,
 )
+
+# Configure logging early (JSON/text with request_id support)
+setup_logging()
 # App logger
 logger = logging.getLogger("app")
-
-# Tame very chatty libraries
-logging.getLogger("botocore").setLevel(logging.WARNING)
-logging.getLogger("urllib3").setLevel(logging.WARNING)
-# Reduce uvicorn access noise (HTTP request lines)
-logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
 
 # Load environment variables from .env files
 # 1) Project root .env
@@ -89,6 +86,7 @@ default_dev_origins = [
     "http://localhost:8000",
     # Production URLs
     "https://papzincrew.netlify.app",
+    "https://papzincrew-netlify.app",
     "https://papzincrew-backend.onrender.com",
 ]
 
@@ -105,7 +103,7 @@ def _parse_allowed_origins() -> list[str]:
 
 # Concrete list used by middleware
 allowed_origins_list = _parse_allowed_origins()
-allowed_origin_regex = os.getenv("ALLOWED_ORIGIN_REGEX") or r"^(https?://(localhost|127\.0\.0\.1)(:\d+)?)$|^null$"
+allowed_origin_regex = os.getenv("ALLOWED_ORIGIN_REGEX") or r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$|^https://papzincrew\-netlify\.app$|^null$"
 
 # Debug CORS configuration
 logger.info("CORS allowed_origins_list: %s", allowed_origins_list)
@@ -136,6 +134,81 @@ app.add_middleware(
     expose_headers=["*"],
     max_age=600,  # Cache preflight requests for 10 minutes
 )
+
+# Request ID middleware (sets context var and response header)
+@app.middleware("http")
+async def request_id_middleware(request: Request, call_next):
+    # Prefer incoming header (client-supplied) else generate
+    incoming = request.headers.get("x-request-id") or request.headers.get("x-request-id")
+    req_id = generate_request_id(incoming)
+    set_request_id(req_id)
+    # Log request start
+    logger.info(
+        "request_start %s %s",
+        request.method,
+        request.url.path,
+        extra={"path": request.url.path, "method": request.method, "action": "request_start"},
+    )
+    try:
+        response: Response = await call_next(request)
+    except Exception:
+        # Ensure context cleared on error path; exception handler will run next
+        clear_request_id()
+        raise
+    # Attach header for correlation
+    try:
+        response.headers["X-Request-ID"] = req_id
+    except Exception:
+        pass
+    # Log request end
+    logger.info(
+        "request_end %s %s -> %s",
+        request.method,
+        request.url.path,
+        getattr(response, "status_code", None),
+        extra={
+            "path": request.url.path,
+            "method": request.method,
+            "status": getattr(response, "status_code", None),
+            "action": "request_end",
+        },
+    )
+    # Clear after response to avoid leaking across tasks
+    clear_request_id()
+    return response
+
+# Security & audit middleware to ensure suspicious /files requests are logged early
+@app.middleware("http")
+async def files_security_audit_middleware(request: Request, call_next):
+    try:
+        # Use the file_management module's logger so tests that patch it will capture logs
+        from .routers import file_management as _fm
+        sec_logger = _fm.logger
+    except Exception:
+        sec_logger = logger
+
+    try:
+        raw_path_bytes = request.scope.get("raw_path")  # type: ignore[attr-defined]
+        raw_path = raw_path_bytes.decode("latin-1") if isinstance(raw_path_bytes, (bytes, bytearray)) else request.url.path
+    except Exception:
+        raw_path = request.url.path
+
+    # Only act on /files* routes
+    if raw_path.startswith("/files"):
+        # Audit all DELETE attempts
+        if request.method.upper() == "DELETE":
+            try:
+                sec_logger.warning(f"Audit: DELETE request path={raw_path}")
+            except Exception:
+                pass
+        # Security: log traversal indicators even if routing normalizes the path later
+        try:
+            if ".." in raw_path or re.search(r"%2e", raw_path, flags=re.IGNORECASE):
+                sec_logger.warning(f"Directory traversal attempt detected (middleware raw path): {raw_path}")
+        except Exception:
+            pass
+
+    return await call_next(request)
 
 # Include routers
 app.include_router(tracks.router)
@@ -188,6 +261,11 @@ async def catch_exceptions_middleware(request: Request, call_next):
             status_code=500,
             content=error_payload,
         )
+        # Propagate request id for correlation
+        try:
+            response.headers["X-Request-ID"] = get_request_id()
+        except Exception:
+            pass
         origin = request.headers.get("origin")
         try:
             if origin:

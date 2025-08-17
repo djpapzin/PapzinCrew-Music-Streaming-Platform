@@ -24,6 +24,12 @@ def db_session():
     try:
         yield session
     finally:
+        # Ensure we are not in a failed/rolled-back transaction from a test
+        # (e.g., after IntegrityError) before attempting cleanup operations.
+        try:
+            session.rollback()
+        except Exception:
+            pass
         # Clean up test data in correct order (respecting foreign keys)
         session.query(models.Mix).delete()
         session.query(models.Artist).delete()
@@ -95,13 +101,13 @@ class TestArtistCRUD:
         # Attempt to create duplicate - should still work (no unique constraint on name)
         duplicate_artist = crud.create_artist(db=db_session, artist=sample_artist)
         assert duplicate_artist.id is not None
-        assert duplicate_artist.name == "Test Artist"
+        assert duplicate_artist.name == sample_artist.name
     
     def test_get_artist_by_name(self, db_session: Session, sample_artist):
         """Test retrieving artist by name."""
         created_artist = crud.create_artist(db=db_session, artist=sample_artist)
         
-        found_artist = crud.get_artist_by_name(db=db_session, name="Test Artist")
+        found_artist = crud.get_artist_by_name(db=db_session, name=sample_artist.name)
         assert found_artist is not None
         assert found_artist.id == created_artist.id
     
