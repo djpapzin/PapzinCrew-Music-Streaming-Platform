@@ -7,6 +7,8 @@
 - [ ] Finalize B2 CORS and mobile playback decision (Range/CORS: use /tracks/{id}/stream/proxy vs redirect)
 - [ ] Secrets audit: ensure .env in .gitignore and no keys in repo; verify Render envs
 - [ ] Add request IDs and structured logs baseline (trace upload/stream)
+ - [ ] Add ENFORCE_B2_ONLY config toggle (env var) to force B2 uploads; local FS only when explicitly requested; document in README and render.yaml
+ - [ ] Integration tests: enforce B2-only mode (ENFORCE_B2_ONLY=1) rejects local writes; with 0 allows fallback
 
 ## Status (Aug 17, 2025)
 - [x] Backend: Fixed `B2Storage` native init to work when `b2sdk` isn't installed and `B2Api` is patched by tests; unit now passes in CI.
