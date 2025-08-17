@@ -85,8 +85,16 @@ class B2Storage:
         # Native B2 path (used by tests; B2Api is patched there)
         if self.mode == "native":
             try:
-                # Instantiate API (unit tests patch B2Api to a MagicMock)
-                api = B2Api(InMemoryAccountInfo()) if B2Api else None  # type: ignore
+                # Instantiate API (unit tests patch B2Api to a MagicMock). If b2sdk is not
+                # installed (InMemoryAccountInfo is None) but B2Api is patched, fall back
+                # to calling B2Api() without arguments.
+                api = None
+                if B2Api:  # type: ignore[truthy-bool]
+                    try:
+                        api = B2Api(InMemoryAccountInfo()) if InMemoryAccountInfo else B2Api()  # type: ignore
+                    except TypeError:
+                        # Some patched or SDK constructors may not accept args; retry default ctor
+                        api = B2Api()
                 if api is None:
                     # If SDK is unavailable and not patched, simulate not configured
                     return {"ok": False, "error_code": "sdk_missing", "detail": "b2sdk not installed"}
