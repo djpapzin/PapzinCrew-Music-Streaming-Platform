@@ -8,6 +8,12 @@
 - [ ] Secrets audit: ensure .env in .gitignore and no keys in repo; verify Render envs
 - [ ] Add request IDs and structured logs baseline (trace upload/stream)
 
+## Status (Aug 17, 2025)
+- [x] Backend: Fixed `B2Storage` native init to work when `b2sdk` isn't installed and `B2Api` is patched by tests; unit now passes in CI.
+- [x] CI: Frontend Unit Tests (Vitest on Node 18) and Frontend Build passing; Backend Tests back to green.
+- [x] Git: Ignore local/test SQLite DBs and backups in `.gitignore` to keep repos clean.
+- [x] Streaming: Reinforced B2-first behavior; `/tracks/{id}/stream` redirects to B2 or proxies when needed; local FS only as fallback.
+
 ## Status (Aug 16, 2025)
 - [x] Backend: Render deploy succeeded after adding aiohttp to `backend/render-requirements.txt`.
 - [x] Health: `/health` returns healthy; OpenAPI reachable.
@@ -44,6 +50,7 @@
 
 ## CI & Testing
 - [x] Stabilize CI (backend tests) to green
+- [x] Added Frontend Unit Tests job (Vitest, Node 18) to CI
   - [ ] Consider separate jobs: unit vs integration (matrix)
   - [ ] Gate security logging hooks behind test flag (e.g., `settings.TESTING` or `PYTEST_CURRENT_TEST`) to reduce production noise
 
