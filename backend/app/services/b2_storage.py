@@ -1,9 +1,19 @@
 import os
 from typing import Optional, Dict, Any
-import boto3
-from botocore.client import Config
-from botocore.exceptions import ClientError, EndpointConnectionError, BotoCoreError
 from dotenv import load_dotenv
+
+# Lazy imports for boto3/botocore to avoid import-time warnings during tests.
+# We bind real classes only when S3-compatible mode is actually used.
+boto3 = None  # type: ignore
+Config = None  # type: ignore
+
+class _BotocorePlaceholder(Exception):
+    pass
+
+# Placeholders to keep except clauses valid even if botocore isn't installed.
+ClientError = _BotocorePlaceholder  # type: ignore
+EndpointConnectionError = _BotocorePlaceholder  # type: ignore
+BotoCoreError = _BotocorePlaceholder  # type: ignore
 
 # Optional Backblaze native SDK imports (tests may patch B2Api symbol)
 try:
@@ -42,6 +52,30 @@ class B2Storage:
             self.mode = "native"
             self.enabled = True
         elif all([self.endpoint_url, self.bucket, self.access_key, self.secret_key]):
+            # Attempt to enable S3-compatible mode with lazy imports.
+            try:
+                import boto3 as _boto3  # type: ignore
+                from botocore.client import Config as _Config  # type: ignore
+                from botocore.exceptions import (
+                    ClientError as _ClientError,  # type: ignore
+                    EndpointConnectionError as _EndpointConnectionError,  # type: ignore
+                    BotoCoreError as _BotoCoreError,  # type: ignore
+                )
+                # Bind into module globals so except clauses resolve real classes at runtime
+                globals().update(
+                    boto3=_boto3,
+                    Config=_Config,
+                    ClientError=_ClientError,
+                    EndpointConnectionError=_EndpointConnectionError,
+                    BotoCoreError=_BotoCoreError,
+                )
+            except Exception:
+                # If boto3/botocore are unavailable, disable S3 mode gracefully
+                self.mode = "disabled"
+                self.enabled = False
+                self.s3 = None
+                return
+
             self.mode = "s3"
             self.enabled = True
             # Configure conservative timeouts and retries to avoid long hangs on network issues

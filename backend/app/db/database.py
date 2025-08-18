@@ -4,6 +4,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 import os
+import sys
 from pathlib import Path
 import logging
 
@@ -20,7 +21,8 @@ if env_db_url and env_db_url.startswith("postgres://"):
     env_db_url = env_db_url.replace("postgres://", "postgresql+psycopg2://", 1)
 
 # Use an isolated in-memory SQLite database for pytest runs to ensure clean schema
-if os.getenv("PYTEST_CURRENT_TEST"):
+RUNNING_UNDER_PYTEST = bool(os.getenv("PYTEST_CURRENT_TEST")) or ("pytest" in sys.modules)
+if RUNNING_UNDER_PYTEST:
     SQLALCHEMY_DATABASE_URL = "sqlite://"
 elif env_db_url:
     SQLALCHEMY_DATABASE_URL = env_db_url
