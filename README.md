@@ -11,6 +11,15 @@
 ## Logs
 [Backend logs: quick reference](docs/logs.md)
 
+## Documentation
+- Docs index: [docs/README.md](docs/README.md)
+- PRD: [docs/PRD_PapzinCrew.md](docs/PRD_PapzinCrew.md)
+- Architecture: [docs/Architecture.md](docs/Architecture.md)
+- API index: [docs/API.md](docs/API.md)
+- Data model: [docs/Data_Model.md](docs/Data_Model.md)
+- Upload flow: [docs/Upload_Flow.md](docs/Upload_Flow.md)
+- B2-first uploads: [docs/B2-first-uploads.md](docs/B2-first-uploads.md)
+
 ## About The Project
 Papzin & Crew connects independent artists and listeners. DJs and creators upload mixes/tracks; listeners discover, play, and share.
 
