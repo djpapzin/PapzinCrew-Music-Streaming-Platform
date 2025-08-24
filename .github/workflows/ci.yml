@@ -1,5 +1,5 @@
 # File Description: Continuous Integration workflow for backend tests and frontend build
-# Author: DJ Papzin <L.fanampe@gmail.com>
+# Author: DJ Papzin
 # Created: 2025
 
 name: CI
@@ -43,6 +43,7 @@ jobs:
       - name: Run tests
         env:
           PYTHONWARNINGS: default
+          PYTEST_DISABLE_PLUGIN_AUTOLOAD: "1"
           ENABLE_UPLOAD_PRINTS: "0"
           B2_ACCESS_KEY_ID: dummy
           B2_SECRET_ACCESS_KEY: dummy
