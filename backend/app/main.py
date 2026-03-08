@@ -45,8 +45,6 @@ logger.info(
     os.getenv('B2_BUCKET'),
 )
 
-# Create database tables
-models.Base.metadata.create_all(bind=engine)
 
 # Ensure backward-compatible schema for existing databases without migrations
 def _ensure_mix_extra_columns():
@@ -70,7 +68,15 @@ def _ensure_mix_extra_columns():
         # Never crash server on startup; just log for diagnostics
         logger.exception("Failed to ensure extra columns on 'mixes' table")
 
-_ensure_mix_extra_columns()
+
+def _db_ping() -> bool:
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        return True
+    except Exception:
+        logger.exception("Database ping failed")
+        return False
 
 app = FastAPI(title="PapzinCrew Music Streaming API",
               description="API for PapzinCrew Music Streaming Platform",
@@ -219,12 +225,30 @@ app.include_router(storage.router)
 app.include_router(cleanup.router)
 app.include_router(file_management.router)
 
-# Determine upload directory from environment and ensure it exists
+# Determine upload directory from environment
 UPLOAD_DIR = os.getenv("UPLOAD_DIR", "uploads")
-os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 # Mount the upload directory to serve static files consistently at /uploads
-app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
+app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR, check_dir=False), name="uploads")
+
+
+def _env_bool(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+@app.on_event("startup")
+def startup_event():
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+    if _env_bool("DB_AUTO_MIGRATE", default=False):
+        try:
+            models.Base.metadata.create_all(bind=engine)
+            _ensure_mix_extra_columns()
+        except Exception:
+            logger.exception("Legacy DB bootstrap failed during startup")
 
 @app.get("/")
 def read_root():
@@ -233,7 +257,14 @@ def read_root():
 # Health check endpoint
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy", "b2_configured": 'B2_ACCESS_KEY_ID' in os.environ}
+    return {"status": "ok", "b2_configured": "B2_ACCESS_KEY_ID" in os.environ}
+
+
+@app.get("/ready")
+async def readiness_check():
+    if _db_ping():
+        return {"status": "ready"}
+    return JSONResponse(status_code=503, content={"status": "not_ready", "reason": "database_unavailable"})
 
 # Keep-alive endpoint to prevent server from shutting down
 @app.get("/keepalive")

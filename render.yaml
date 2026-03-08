@@ -13,7 +13,7 @@ services:
     rootDir: backend
     plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    startCommand: bash -lc "alembic upgrade head || echo 'alembic upgrade failed; continuing startup'; uvicorn app.main:app --host 0.0.0.0 --port $PORT"
     healthCheckPath: /health
     autoDeploy: true
     envVars:
@@ -37,6 +37,9 @@ services:
         value: "https://papzincrew.netlify.app,http://localhost:5173,http://localhost:5174,http://127.0.0.1:5173"
       - key: ALLOWED_ORIGIN_REGEX
         value: ""  # Optional regex for additional origins; defaults to localhost
+      # Startup migration control (legacy bootstrap disabled by default)
+      - key: DB_AUTO_MIGRATE
+        value: "false"
       # Optional: Logging and Performance
       - key: LOG_LEVEL
         value: "INFO"
