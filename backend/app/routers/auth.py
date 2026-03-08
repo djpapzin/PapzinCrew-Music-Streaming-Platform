@@ -2,7 +2,7 @@ from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, or_
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from .. import schemas
@@ -17,6 +17,16 @@ from ..security import (
 )
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+def _ensure_users_table(db: Session) -> None:
+    """Best-effort safety net for environments where migrations were not run."""
+    try:
+        bind = db.get_bind()
+        User.__table__.create(bind=bind, checkfirst=True)
+    except SQLAlchemyError:
+        # Let normal query/insert paths raise clearer API errors if DB is unavailable.
+        pass
 
 
 def _find_user_by_identifier(db: Session, identifier: str) -> User | None:
@@ -37,6 +47,7 @@ def _find_user_by_identifier(db: Session, identifier: str) -> User | None:
 
 @router.post("/register", response_model=schemas.AuthRegisterResponse, status_code=status.HTTP_201_CREATED)
 def register_user(payload: schemas.AuthRegisterRequest, db: Session = Depends(get_db)):
+    _ensure_users_table(db)
     normalized_email = str(payload.email).strip().lower()
     normalized_username = payload.username.strip().lower()
 
@@ -68,6 +79,7 @@ def register_user(payload: schemas.AuthRegisterRequest, db: Session = Depends(ge
 
 @router.post("/login", response_model=schemas.AuthTokenResponse)
 def login_user(payload: schemas.AuthLoginRequest, db: Session = Depends(get_db)):
+    _ensure_users_table(db)
     user = _find_user_by_identifier(db, payload.identifier)
     if not user or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
