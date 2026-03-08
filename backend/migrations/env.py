@@ -1,3 +1,4 @@
+import os
 from logging.config import fileConfig
 
 from sqlalchemy import engine_from_config
@@ -11,6 +12,17 @@ from app.models.models import Base
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config
+
+# Prefer runtime environment DB URLs (Render/Heroku style) over static alembic.ini.
+env_db_url = (
+    os.getenv("SQLALCHEMY_DATABASE_URL")
+    or os.getenv("DATABASE_URL")
+    or os.getenv("INTERNAL_DATABASE_URL")
+)
+if env_db_url and env_db_url.startswith("postgres://"):
+    env_db_url = env_db_url.replace("postgres://", "postgresql+psycopg2://", 1)
+if env_db_url:
+    config.set_main_option("sqlalchemy.url", env_db_url)
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.

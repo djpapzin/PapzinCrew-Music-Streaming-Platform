@@ -4,7 +4,7 @@ from sqlalchemy import func
 
 from ..db.database import get_db
 from ..models import models
-from .tracks import require_admin # Import the dependency
+from ..security import require_admin  # Import the dependency
 
 router = APIRouter(
     prefix="/admin",

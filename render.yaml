@@ -40,6 +40,11 @@ services:
       # Startup migration control (legacy bootstrap disabled by default)
       - key: DB_AUTO_MIGRATE
         value: "false"
+      # Auth/JWT configuration
+      - key: JWT_SECRET
+        sync: false
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: "60"
       # Optional: Logging and Performance
       - key: LOG_LEVEL
         value: "INFO"

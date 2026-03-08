@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from .db.database import engine
 from .models import models
-from .routers import tracks, categories, artists, uploads, storage, cleanup, file_management
+from .routers import auth, tracks, categories, artists, uploads, storage, cleanup, file_management
 from .logging_utils import (
     setup_logging,
     set_request_id,
@@ -217,6 +217,7 @@ async def files_security_audit_middleware(request: Request, call_next):
     return await call_next(request)
 
 # Include routers
+app.include_router(auth.router)
 app.include_router(tracks.router)
 app.include_router(categories.router)
 app.include_router(artists.router)

@@ -1,6 +1,6 @@
-from typing import List, Optional
+from typing import List, Optional, Literal
 from datetime import datetime
-from pydantic import BaseModel, Field, ConfigDict, StrictInt, StrictFloat, field_validator
+from pydantic import BaseModel, Field, ConfigDict, StrictInt, StrictFloat, field_validator, EmailStr
 
 
 class TracklistItemBase(BaseModel):
@@ -113,3 +113,65 @@ class MixDetailed(MixBase):
 # Resolve forward references
 Artist.model_rebuild()
 Category.model_rebuild()
+
+
+class AuthRegisterRequest(BaseModel):
+    email: EmailStr
+    username: str = Field(min_length=3, max_length=50)
+    password: str = Field(min_length=8, max_length=128)
+
+    @field_validator("username")
+    @classmethod
+    def validate_username(cls, value: str) -> str:
+        username = value.strip().lower()
+        if not username:
+            raise ValueError("username must not be empty")
+        if not all(ch.isalnum() or ch in {"_", "."} for ch in username):
+            raise ValueError("username may only contain letters, numbers, underscores, and dots")
+        return username
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, value: str) -> str:
+        if not any(ch.isalpha() for ch in value) or not any(ch.isdigit() for ch in value):
+            raise ValueError("password must contain at least one letter and one number")
+        return value
+
+
+class AuthLoginRequest(BaseModel):
+    identifier: str = Field(min_length=1, max_length=255)
+    password: str = Field(min_length=1, max_length=128)
+
+    @field_validator("identifier")
+    @classmethod
+    def normalize_identifier(cls, value: str) -> str:
+        identifier = value.strip().lower()
+        if not identifier:
+            raise ValueError("identifier must not be empty")
+        return identifier
+
+
+class UserPublic(BaseModel):
+    id: int
+    email: EmailStr
+    username: str
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AuthTokenResponse(BaseModel):
+    access_token: str
+    token_type: Literal["bearer"] = "bearer"
+    expires_in: int
+    user: UserPublic
+
+
+class AuthRegisterResponse(UserPublic):
+    pass
+
+
+class AuthProfileResponse(UserPublic):
+    pass

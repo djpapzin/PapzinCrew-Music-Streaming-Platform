@@ -1,5 +1,5 @@
 import datetime
-from sqlalchemy import (Column, Integer, String, Float, DateTime, 
+from sqlalchemy import (Column, Integer, String, Float, DateTime, Boolean,
                         ForeignKey, Table, Text)
 from sqlalchemy.types import TypeDecorator
 from sqlalchemy.orm import relationship, declarative_base
@@ -107,3 +107,20 @@ class TracklistItem(Base):
 
     mix_id = Column(Integer, ForeignKey("mixes.id"), nullable=False)
     mix = relationship("Mix", back_populates="tracklist_items")
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String(255), nullable=False, unique=True, index=True)
+    username = Column(String(50), nullable=False, unique=True, index=True)
+    password_hash = Column(String, nullable=False)
+    is_active = Column(Boolean, nullable=False, default=True)
+    created_at = Column(AwareDateTime(), default=lambda: datetime.datetime.now(datetime.timezone.utc), nullable=False)
+    updated_at = Column(
+        AwareDateTime(),
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        onupdate=lambda: datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
