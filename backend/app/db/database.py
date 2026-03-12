@@ -33,10 +33,40 @@ def _normalize_database_url(raw_url: str | None) -> str | None:
     return normalized
 
 
+def _env_int(name: str, default: int) -> int:
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return default
+
+    try:
+        return int(raw_value)
+    except ValueError:
+        return default
+
+
+def _postgres_connect_args() -> dict:
+    return {
+        "keepalives": _env_int("DB_TCP_KEEPALIVES", 1),
+        "keepalives_idle": _env_int("DB_TCP_KEEPALIVES_IDLE", 30),
+        "keepalives_interval": _env_int("DB_TCP_KEEPALIVES_INTERVAL", 10),
+        "keepalives_count": _env_int("DB_TCP_KEEPALIVES_COUNT", 5),
+    }
+
+
+def _postgres_engine_kwargs() -> dict:
+    return {
+        "pool_pre_ping": True,
+        "pool_recycle": _env_int("DB_POOL_RECYCLE", 300),
+        "pool_size": _env_int("DB_POOL_SIZE", 5),
+        "max_overflow": _env_int("DB_MAX_OVERFLOW", 10),
+        "connect_args": _postgres_connect_args(),
+    }
+
+
 def _build_db_diagnostics(db_url: str, source: str) -> dict:
     parsed = urlparse(db_url)
     query = parse_qs(parsed.query)
-    return {
+    diagnostics = {
         "source": source,
         "backend": parsed.scheme or ("sqlite" if db_url.startswith("sqlite") else "unknown"),
         "host": parsed.hostname,
@@ -45,6 +75,17 @@ def _build_db_diagnostics(db_url: str, source: str) -> dict:
         "sslmode": query.get("sslmode", [None])[0],
         "running_on_render": bool(os.getenv("RENDER")),
     }
+
+    if parsed.scheme.startswith("postgresql"):
+        diagnostics["pool"] = {
+            "pre_ping": True,
+            "recycle_seconds": _env_int("DB_POOL_RECYCLE", 300),
+            "pool_size": _env_int("DB_POOL_SIZE", 5),
+            "max_overflow": _env_int("DB_MAX_OVERFLOW", 10),
+            "tcp_keepalives": _postgres_connect_args(),
+        }
+
+    return diagnostics
 
 
 # Prefer environment-provided database URL. Support common names used in hosting.
@@ -70,9 +111,6 @@ else:
 
 DB_DIAGNOSTICS = _build_db_diagnostics(SQLALCHEMY_DATABASE_URL, DATABASE_URL_SOURCE)
 
-# Only pass sqlite-specific connect args for sqlite URLs
-connect_args = {"check_same_thread": False} if SQLALCHEMY_DATABASE_URL.startswith("sqlite") else {}
-
 if SQLALCHEMY_DATABASE_URL == "sqlite://":
     # In-memory DB shared across threads/process via StaticPool
     engine = create_engine(
@@ -81,10 +119,14 @@ if SQLALCHEMY_DATABASE_URL == "sqlite://":
         poolclass=StaticPool,
         pool_pre_ping=True,
     )
-else:
+elif SQLALCHEMY_DATABASE_URL.startswith("sqlite"):
     engine = create_engine(
-        SQLALCHEMY_DATABASE_URL, connect_args=connect_args, pool_pre_ping=True
+        SQLALCHEMY_DATABASE_URL,
+        connect_args={"check_same_thread": False},
+        pool_pre_ping=True,
     )
+else:
+    engine = create_engine(SQLALCHEMY_DATABASE_URL, **_postgres_engine_kwargs())
 
 # Enable foreign key constraints for SQLite
 if SQLALCHEMY_DATABASE_URL.startswith("sqlite"):
