@@ -9,7 +9,7 @@ from fastapi import FastAPI, Request, Response, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from .db.database import engine
+from .db.database import engine, get_db_diagnostics
 from .models import models
 from .routers import auth, tracks, categories, artists, uploads, storage, cleanup, file_management
 from .logging_utils import (
@@ -44,6 +44,7 @@ logger.info(
     'B2_ACCESS_KEY_ID' in os.environ and 'B2_SECRET_ACCESS_KEY' in os.environ,
     os.getenv('B2_BUCKET'),
 )
+logger.info("DB diagnostics: %s", get_db_diagnostics())
 
 
 # Ensure backward-compatible schema for existing databases without migrations
@@ -255,17 +256,26 @@ def startup_event():
 def read_root():
     return {"message": "Welcome to the Papzin & Crew Music Streaming API"}
 
-# Health check endpoint
+# Health check endpoint (liveness only; no DB query)
 @app.get("/health")
 async def health_check():
-    return {"status": "ok", "b2_configured": "B2_ACCESS_KEY_ID" in os.environ}
+    return {
+        "status": "ok",
+        "b2_configured": "B2_ACCESS_KEY_ID" in os.environ,
+        "database": get_db_diagnostics(),
+    }
 
 
 @app.get("/ready")
 async def readiness_check():
-    if _db_ping():
-        return {"status": "ready"}
-    return JSONResponse(status_code=503, content={"status": "not_ready", "reason": "database_unavailable"})
+    db_ready = _db_ping()
+    payload = {
+        "status": "ready" if db_ready else "not_ready",
+        "database": {**get_db_diagnostics(), "reachable": db_ready},
+    }
+    if db_ready:
+        return payload
+    return JSONResponse(status_code=503, content=payload)
 
 # Keep-alive endpoint to prevent server from shutting down
 @app.get("/keepalive")

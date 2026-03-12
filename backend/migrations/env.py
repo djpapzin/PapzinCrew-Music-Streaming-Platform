@@ -1,5 +1,6 @@
 import os
 from logging.config import fileConfig
+from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
@@ -13,16 +14,33 @@ from app.models.models import Base
 # access to the values within the .ini file in use.
 config = context.config
 
+def _normalize_database_url(raw_url: str | None) -> str | None:
+    if not raw_url:
+        return raw_url
+
+    normalized = raw_url.strip()
+    if normalized.startswith("postgres://"):
+        normalized = normalized.replace("postgres://", "postgresql+psycopg2://", 1)
+
+    parsed = urlparse(normalized)
+    is_postgres = parsed.scheme.startswith("postgresql")
+
+    if is_postgres and os.getenv("RENDER") and "sslmode" not in parse_qs(parsed.query):
+        query = parse_qs(parsed.query)
+        query["sslmode"] = [os.getenv("DB_SSLMODE", "require")]
+        normalized = urlunparse(parsed._replace(query=urlencode(query, doseq=True)))
+
+    return normalized
+
+
 # Prefer runtime environment DB URLs (Render/Heroku style) over static alembic.ini.
 env_db_url = (
     os.getenv("SQLALCHEMY_DATABASE_URL")
     or os.getenv("DATABASE_URL")
     or os.getenv("INTERNAL_DATABASE_URL")
 )
-if env_db_url and env_db_url.startswith("postgres://"):
-    env_db_url = env_db_url.replace("postgres://", "postgresql+psycopg2://", 1)
 if env_db_url:
-    config.set_main_option("sqlalchemy.url", env_db_url)
+    config.set_main_option("sqlalchemy.url", _normalize_database_url(env_db_url))
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.

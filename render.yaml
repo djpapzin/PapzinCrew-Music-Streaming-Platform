@@ -14,7 +14,7 @@ services:
     plan: free
     buildCommand: pip install -r requirements.txt
     startCommand: bash -lc "alembic upgrade head || echo 'alembic upgrade failed; continuing startup'; uvicorn app.main:app --host 0.0.0.0 --port $PORT"
-    healthCheckPath: /health
+    healthCheckPath: /ready
     autoDeploy: true
     envVars:
       # Database connection (automatically provided by Render when using pgsql service)
