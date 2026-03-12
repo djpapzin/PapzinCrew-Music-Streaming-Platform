@@ -50,6 +50,8 @@ services:
         value: "INFO"
       - key: ENABLE_UPLOAD_PRINTS
         value: "0"  # Set to 1 for debug upload logging
+      - key: ENFORCE_B2_ONLY
+        value: "1"  # Prod safety: refuse local filesystem fallback when B2 is unavailable
 
   # Frontend Static Site (Note: This would be deployed separately on Netlify)
   # Keeping this for reference/alternative deployment option

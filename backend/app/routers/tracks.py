@@ -187,7 +187,7 @@ def read_track(track_id: int, db: Session = Depends(_get_db_dyn), current_user: 
         "artist": {"id": artist_id, "name": artist_name} if (artist_id is not None or artist_name is not None) else None,
     }
 
-@router.get("/{track_id}/stream")
+@router.api_route("/{track_id}/stream", methods=["GET", "HEAD"])
 async def stream_track(track_id: int, request: Request, db: Session = Depends(_get_db_dyn), current_user: object = Depends(_get_current_user_dyn)):
     """
     Stream audio for a specific track.
@@ -211,9 +211,11 @@ async def stream_track(track_id: int, request: Request, db: Session = Depends(_g
         logger.warning("track stream missing file", extra={"action": "track_stream_missing_file", "track_id": track_id})
         raise HTTPException(status_code=404, detail="Audio file not found")
     
-    # Increment play count
-    db_track.play_count = (db_track.play_count or 0) + 1
-    db.commit()
+    # Increment play count for real playback requests only.
+    # HEAD is used by clients/tests for reachability checks and should be side-effect free.
+    if request.method.upper() != "HEAD":
+        db_track.play_count = (db_track.play_count or 0) + 1
+        db.commit()
 
     # If the stored path is a public URL (e.g., B2), redirect the client
     if file_path.startswith("http://") or file_path.startswith("https://"):
@@ -286,8 +288,10 @@ async def stream_track(track_id: int, request: Request, db: Session = Depends(_g
     # when builtins.open is patched to a MagicMock in tests.
     media_type = mimetypes.guess_type(resolved_path)[0] or "audio/mpeg"
     headers = {}
-    empty_iter = iter([b""])
     logger.info("track stream serve local", extra={"action": "track_stream_local", "track_id": track_id, "resolved_path": resolved_path, "media_type": media_type})
+    if request.method.upper() == "HEAD":
+        return Response(status_code=200, media_type=media_type, headers=headers)
+    empty_iter = iter([b""])
     return StreamingResponse(empty_iter, media_type=media_type, headers=headers)
 
 

@@ -112,6 +112,37 @@ class TestTrackStreaming:
             # Should support range requests for efficient streaming
             assert response.status_code in [200, 206]  # OK or Partial Content
 
+    def test_head_stream_track_remote_returns_redirect_without_incrementing_play_count(self, mock_db_session):
+        """HEAD /stream should mirror GET redirect behavior but remain side-effect free."""
+        remote_track = MagicMock()
+        remote_track.id = 1
+        remote_track.title = "Remote Track"
+        remote_track.file_path = "https://example.com/audio/test.mp3"
+        remote_track.availability = "public"
+        remote_track.play_count = 7
+        remote_track.artist = MagicMock()
+        mock_db_session.query().filter().first.return_value = remote_track
+
+        response = client.head("/tracks/1/stream", follow_redirects=False)
+
+        assert response.status_code == 307
+        assert response.headers["location"] == remote_track.file_path
+        assert remote_track.play_count == 7
+        mock_db_session.commit.assert_not_called()
+
+    def test_head_stream_track_local_returns_200_without_incrementing_play_count(self, mock_db_session, sample_track):
+        """HEAD /stream should resolve local files and return headers only."""
+        sample_track.play_count = 3
+        mock_db_session.query().filter().first.return_value = sample_track
+
+        with patch('os.path.exists', return_value=True):
+            response = client.head("/tracks/1/stream")
+
+        assert response.status_code == 200
+        assert response.headers.get("content-type", "").startswith("audio/")
+        assert sample_track.play_count == 3
+        mock_db_session.commit.assert_not_called()
+
 class TestTrackMetadata:
     """Test track metadata retrieval."""
     
