@@ -2,13 +2,20 @@
 
 ## Next up (Post-deploy)
 - [x] Set up live log tailing locally (Render CLI or log drain).
-- [ ] Add integration tests for upload flow (validation errors, 409 duplicate, B2-first with local fallback, ENFORCE_B2_ONLY)
 - [x] Add docs/Upload_Flow.md with sequence diagram (file upload → metadata → AI art) and env var matrix
-- [ ] Finalize B2 CORS and mobile playback decision (Range/CORS: use /tracks/{id}/stream/proxy vs redirect)
-- [ ] Secrets audit: ensure .env in .gitignore and no keys in repo; verify Render envs
-- [ ] Add request IDs and structured logs baseline (trace upload/stream)
- - [ ] Add ENFORCE_B2_ONLY config toggle (env var) to force B2 uploads; local FS only when explicitly requested; document in README and render.yaml
- - [ ] Integration tests: enforce B2-only mode (ENFORCE_B2_ONLY=1) rejects local writes; with 0 allows fallback
+
+### Moved into PapzinAI Task Tracker on 2026-03-13
+Treat the tracker as the source of truth for execution/approval for the following post-deploy items:
+- Task #188 — Add integration tests for upload flow
+- Task #189 — Finalize B2 CORS and mobile playback strategy
+- Task #190 — Audit Papzin & Crew secrets and Render env safety
+- Task #191 — Add request IDs and structured logs
+- Task #192 — Add ENFORCE_B2_ONLY config toggle
+- Task #193 — Add integration tests for B2-only mode
+- Task #194 — Run Papzin & Crew mobile playback test
+- Task #195 — Finalize production B2 CORS rules
+- Task #196 — Add file deduplication by content hash
+- Task #197 — Add rate limiting for upload and stream endpoints
 
 ## Status (Aug 17, 2025)
 - [x] Backend: Fixed `B2Storage` native init to work when `b2sdk` isn't installed and `B2Api` is patched by tests; unit now passes in CI.

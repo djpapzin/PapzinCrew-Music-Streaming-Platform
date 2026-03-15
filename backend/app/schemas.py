@@ -76,6 +76,7 @@ class MixBase(BaseModel):
     quality_kbps: StrictInt
     bpm: Optional[StrictInt] = None
     file_path: str
+    file_hash: Optional[str] = None
     cover_art_url: Optional[str] = None
     description: Optional[str] = None
     tracklist: Optional[str] = None

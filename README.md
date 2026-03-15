@@ -117,6 +117,10 @@ VITE_API_URL=http://127.0.0.1:8000
   - `ENFORCE_B2_ONLY` (default: 0) – when true, disables local fallback
   - `B2_PUT_TIMEOUT`, `B2_MAX_RETRIES`, `B2_RETRY_BACKOFF` – control B2 upload behavior
   - `ENABLE_UPLOAD_PRINTS` – verbose upload logging
+  - `ENABLE_INPROCESS_RATE_LIMITING` (default: 1) – enable lightweight single-process throttling
+  - `UPLOAD_RATE_LIMIT`, `UPLOAD_RATE_LIMIT_WINDOW_SECONDS` – upload throttling settings
+  - `STREAM_RATE_LIMIT`, `STREAM_RATE_LIMIT_WINDOW_SECONDS` – stream/proxy throttling settings
+  - `RATE_LIMIT_TRUSTED_PROXIES` – optional comma-separated proxy IPs/CIDRs whose `X-Forwarded-For` / `X-Real-IP` headers may be trusted for rate-limit identity; default is fail-closed (direct client socket only)
 
 • __Security__
   - Centralized filename sanitization prevents traversal and reserved-name issues
@@ -156,6 +160,12 @@ VITE_API_URL=http://127.0.0.1:8000
   - Tests rely on external services (e.g., Backblaze B2). Mock or provide env vars in CI.
   - Missing env in CI (B2_*): tests expecting B2 may fail; adjust tests or set safe defaults.
   - Consider marking slow/integration tests with `@pytest.mark.integration` and skipping them in CI.
+
+
+### B2 CORS + playback draft
+- Draft guidance only: `docs/b2-cors-playback-strategy.md` (not production-final sign-off)
+- Canonical draft bucket policy file: `b2-cors.json`
+- Recommendation tonight: keep `/tracks/{id}/stream` as the default playback URL, and use `/tracks/{id}/stream/proxy` as the compatibility fallback when mobile Range/CORS behavior is flaky.
 
 ## Troubleshooting
 - Disallowed CORS origin (400 on OPTIONS): fix `ALLOWED_ORIGINS` (e.g., `https://papzincrew.netlify.app`)

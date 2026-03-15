@@ -1,17 +1,26 @@
 {
   "CORSRules": [
     {
-      "AllowedHeaders": ["*"],
+      "AllowedOrigins": [
+        "https://papzincrew.netlify.app",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173"
+      ],
       "AllowedMethods": ["GET", "HEAD"],
-      "AllowedOrigins": ["*"],
+      "AllowedHeaders": [
+        "origin",
+        "range",
+        "accept",
+        "content-type"
+      ],
       "ExposeHeaders": [
-        "ETag",
         "Accept-Ranges",
         "Content-Range",
         "Content-Length",
-        "Content-Type"
+        "Content-Type",
+        "ETag"
       ],
-      "MaxAgeSeconds": 86400
+      "MaxAgeSeconds": 3600
     }
   ]
 }

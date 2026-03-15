@@ -1,3 +1,4 @@
+import importlib
 import pytest
 import os
 from unittest.mock import patch, MagicMock
@@ -463,3 +464,102 @@ class TestCORSPerformance:
             
             # Should complete reasonably quickly (adjust threshold as needed)
             assert elapsed_time < 5.0  # 5 seconds for 10 requests
+
+
+def _load_reloaded_app(tmp_path, monkeypatch, **env_overrides):
+    monkeypatch.setenv("SQLALCHEMY_DATABASE_URL", f"sqlite:///{tmp_path / 'cors-proxy.db'}")
+    monkeypatch.setenv("UPLOAD_DIR", str(tmp_path / "uploads"))
+    monkeypatch.setenv("B2_ACCESS_KEY_ID", "test")
+    monkeypatch.setenv("B2_SECRET_ACCESS_KEY", "test")
+    monkeypatch.setenv("B2_BUCKET", "test")
+    for key, value in env_overrides.items():
+        monkeypatch.setenv(key, value)
+
+    import app.db.database as db_mod
+    import app.routers.tracks as tracks_mod
+    import app.main as app_main
+
+    importlib.reload(db_mod)
+    importlib.reload(tracks_mod)
+    app_main = importlib.reload(app_main)
+    return app_main.app
+
+
+class TestProxyStreamCORS:
+    def test_stream_proxy_head_uses_allowlisted_origin_not_wildcard(self, tmp_path, monkeypatch):
+        app = _load_reloaded_app(
+            tmp_path,
+            monkeypatch,
+            ALLOWED_ORIGINS="https://papzincrew-netlify.app",
+        )
+        client = TestClient(app)
+
+        fake_track = MagicMock()
+        fake_track.id = 1
+        fake_track.file_path = "https://example.com/audio/test.mp3"
+        fake_track.availability = "public"
+        fake_track.play_count = 0
+        fake_track.artist = MagicMock()
+
+        async def _ok_head(*args, **kwargs):
+            response = MagicMock()
+            response.status_code = 200
+            response.headers = {
+                "Content-Type": "audio/mpeg",
+                "Content-Length": "12345",
+                "Accept-Ranges": "bytes",
+            }
+            return response
+
+        with patch("app.routers.tracks.crud.get_mix", return_value=fake_track), patch(
+            "httpx.AsyncClient.head", side_effect=_ok_head
+        ):
+            response = client.head(
+                "/tracks/1/stream/proxy",
+                headers={"Origin": "https://papzincrew-netlify.app"},
+                follow_redirects=False,
+            )
+
+        assert response.status_code == 200, response.text
+        assert response.headers.get("access-control-allow-origin") == "https://papzincrew-netlify.app"
+        assert response.headers.get("access-control-allow-credentials") == "true"
+        assert response.headers.get("vary")
+        assert "range" in response.headers["vary"].lower()
+        assert "origin" in response.headers["vary"].lower()
+
+    def test_stream_proxy_head_blocks_unallowlisted_origin(self, tmp_path, monkeypatch):
+        app = _load_reloaded_app(
+            tmp_path,
+            monkeypatch,
+            ALLOWED_ORIGINS="https://papzincrew-netlify.app",
+        )
+        client = TestClient(app)
+
+        fake_track = MagicMock()
+        fake_track.id = 1
+        fake_track.file_path = "https://example.com/audio/test.mp3"
+        fake_track.availability = "public"
+        fake_track.play_count = 0
+        fake_track.artist = MagicMock()
+
+        async def _ok_head(*args, **kwargs):
+            response = MagicMock()
+            response.status_code = 200
+            response.headers = {
+                "Content-Type": "audio/mpeg",
+                "Content-Length": "12345",
+                "Accept-Ranges": "bytes",
+            }
+            return response
+
+        with patch("app.routers.tracks.crud.get_mix", return_value=fake_track), patch(
+            "httpx.AsyncClient.head", side_effect=_ok_head
+        ):
+            response = client.head(
+                "/tracks/1/stream/proxy",
+                headers={"Origin": "https://malicious-site.com"},
+                follow_redirects=False,
+            )
+
+        assert response.status_code == 200, response.text
+        assert response.headers.get("access-control-allow-origin") is None

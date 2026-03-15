@@ -3,6 +3,7 @@ import sys
 import logging
 import re
 from pathlib import Path
+from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 from sqlalchemy import inspect, text
 from fastapi import FastAPI, Request, Response, HTTPException
@@ -48,23 +49,33 @@ logger.info("DB diagnostics: %s", get_db_diagnostics())
 
 
 # Ensure backward-compatible schema for existing databases without migrations
-def _ensure_mix_extra_columns():
+def _ensure_mix_extra_columns(db_engine=None):
     """
-    Add missing columns on the 'mixes' table when running against an
+    Add missing columns/indexes on the 'mixes' table when running against an
     existing database that was created before these fields existed.
 
-    This is a lightweight, idempotent startup migration so deploys don't
-    fail with 'column mixes.play_count does not exist' errors.
+    This is a lightweight, idempotent startup repair so deploys don't fail
+    with missing-column errors on legacy databases.
     """
+    db_engine = db_engine or engine
     try:
-        inspector = inspect(engine)
-        existing_cols = {col["name"] for col in inspector.get_columns("mixes")}
-        # Use a transactional connection so it works on Postgres and SQLite
-        with engine.begin() as conn:
+        # Use a transactional connection so it works on Postgres and SQLite.
+        with db_engine.begin() as conn:
+            inspector = inspect(conn)
+            if "mixes" not in inspector.get_table_names():
+                return
+
+            existing_cols = {col["name"] for col in inspector.get_columns("mixes")}
             if "play_count" not in existing_cols:
                 conn.execute(text("ALTER TABLE mixes ADD COLUMN play_count INTEGER DEFAULT 0"))
             if "download_count" not in existing_cols:
                 conn.execute(text("ALTER TABLE mixes ADD COLUMN download_count INTEGER DEFAULT 0"))
+            if "file_hash" not in existing_cols:
+                conn.execute(text("ALTER TABLE mixes ADD COLUMN file_hash VARCHAR(64)"))
+
+            existing_indexes = {idx["name"] for idx in inspect(conn).get_indexes("mixes")}
+            if "ix_mixes_file_hash" not in existing_indexes:
+                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_mixes_file_hash ON mixes (file_hash)"))
     except Exception:
         # Never crash server on startup; just log for diagnostics
         logger.exception("Failed to ensure extra columns on 'mixes' table")
@@ -79,9 +90,24 @@ def _db_ping() -> bool:
         logger.exception("Database ping failed")
         return False
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    os.makedirs(os.getenv("UPLOAD_DIR", "uploads"), exist_ok=True)
+
+    should_bootstrap = _env_bool("DB_AUTO_MIGRATE", default=False) or get_db_diagnostics().get("source") == "pytest"
+    if should_bootstrap:
+        try:
+            models.Base.metadata.create_all(bind=engine)
+            _ensure_mix_extra_columns()
+        except Exception:
+            logger.exception("Legacy DB bootstrap failed during startup")
+    yield
+
+
 app = FastAPI(title="PapzinCrew Music Streaming API",
               description="API for PapzinCrew Music Streaming Platform",
-              version="0.1.0")
+              version="0.1.0",
+              lifespan=lifespan)
 
 # CORS middleware configuration
 # Compose allowed origins from environment, fallback to dev localhost values.
@@ -233,6 +259,16 @@ UPLOAD_DIR = os.getenv("UPLOAD_DIR", "uploads")
 # Mount the upload directory to serve static files consistently at /uploads
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR, check_dir=False), name="uploads")
 
+# Pytest imports may instantiate TestClient without lifespan startup, so ensure
+# temporary test databases have schema eagerly when running under pytest.
+if get_db_diagnostics().get("source") == "pytest":
+    try:
+        os.makedirs(UPLOAD_DIR, exist_ok=True)
+        models.Base.metadata.create_all(bind=engine)
+        _ensure_mix_extra_columns()
+    except Exception:
+        logger.exception("Pytest eager DB bootstrap failed")
+
 
 def _env_bool(name: str, default: bool = False) -> bool:
     raw = os.getenv(name)
@@ -240,17 +276,6 @@ def _env_bool(name: str, default: bool = False) -> bool:
         return default
     return raw.strip().lower() in {"1", "true", "yes", "on"}
 
-
-@app.on_event("startup")
-def startup_event():
-    os.makedirs(UPLOAD_DIR, exist_ok=True)
-
-    if _env_bool("DB_AUTO_MIGRATE", default=False):
-        try:
-            models.Base.metadata.create_all(bind=engine)
-            _ensure_mix_extra_columns()
-        except Exception:
-            logger.exception("Legacy DB bootstrap failed during startup")
 
 @app.get("/")
 def read_root():

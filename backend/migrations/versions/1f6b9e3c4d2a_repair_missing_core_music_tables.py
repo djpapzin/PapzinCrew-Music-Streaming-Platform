@@ -1,7 +1,7 @@
 """repair missing core music tables
 
 Revision ID: 1f6b9e3c4d2a
-Revises: 8f3f2e7f71c1
+Revises: 
 Create Date: 2026-03-12 20:05:00.000000
 
 """
@@ -14,7 +14,7 @@ from sqlalchemy import inspect
 
 # revision identifiers, used by Alembic.
 revision: str = "1f6b9e3c4d2a"
-down_revision: Union[str, Sequence[str], None] = "8f3f2e7f71c1"
+down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

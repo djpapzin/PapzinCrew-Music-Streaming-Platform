@@ -52,6 +52,18 @@ services:
         value: "0"  # Set to 1 for debug upload logging
       - key: ENFORCE_B2_ONLY
         value: "1"  # Prod safety: refuse local filesystem fallback when B2 is unavailable
+      - key: ENABLE_INPROCESS_RATE_LIMITING
+        value: "1"
+      - key: UPLOAD_RATE_LIMIT
+        value: "20"
+      - key: UPLOAD_RATE_LIMIT_WINDOW_SECONDS
+        value: "60"
+      - key: STREAM_RATE_LIMIT
+        value: "120"
+      - key: STREAM_RATE_LIMIT_WINDOW_SECONDS
+        value: "60"
+      - key: RATE_LIMIT_TRUSTED_PROXIES
+        value: ""  # Leave empty unless traffic comes through a proxy you control that overwrites forwarded IP headers
 
   # Frontend Static Site (Note: This would be deployed separately on Netlify)
   # Keeping this for reference/alternative deployment option

@@ -2,6 +2,7 @@
   "CORSRules": [
     {
       "AllowedOrigins": [
+        "https://papzincrew.netlify.app",
         "http://localhost:5173",
         "http://127.0.0.1:5173"
       ],
@@ -9,12 +10,14 @@
       "AllowedHeaders": [
         "origin",
         "range",
+        "accept",
         "content-type"
       ],
       "ExposeHeaders": [
         "Accept-Ranges",
         "Content-Range",
         "Content-Length",
+        "Content-Type",
         "ETag"
       ],
       "MaxAgeSeconds": 3600

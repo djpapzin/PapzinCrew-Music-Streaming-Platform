@@ -45,6 +45,7 @@ from ..db.database import get_db
 from ..models import models
 from ..services.ai_art_generator import AIArtGenerator
 from ..services.b2_storage import B2Storage
+from ..rate_limit import enforce_rate_limit
 from .file_management import sanitize_filename
 
 router = APIRouter(prefix="/upload", tags=["upload"])
@@ -661,12 +662,16 @@ async def upload_mix(
     cover_art: Optional[UploadFile] = File(None),
     custom_prompt: Optional[str] = Form(None),
     skip_duplicate_check: bool = Form(False),  # Allow skipping duplicate check
+    request: Request = None,
     db: Session = Depends(get_db)
 ):
     """
     Upload a new mix file with metadata.
     Validates the file and checks for duplicates before saving.
     """
+    if request is not None:
+        enforce_rate_limit(request, bucket="upload", limit_env="UPLOAD_RATE_LIMIT", window_env="UPLOAD_RATE_LIMIT_WINDOW_SECONDS")
+
     logger.info(
         "[upload] start title='%s' artist='%s' filename='%s'",
         title,
@@ -1054,6 +1059,7 @@ async def upload_mix(
             quality_kbps=quality_kbps,
             bpm=bpm,
             file_path=final_audio_path,
+            file_hash=file_hash,
             cover_art_url=final_cover_url,
             description=description,
             tracklist=tracklist,

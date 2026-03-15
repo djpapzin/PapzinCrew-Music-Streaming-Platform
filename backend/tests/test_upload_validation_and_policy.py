@@ -132,6 +132,38 @@ def test_upload_duplicate_returns_409_pre_storage(test_app, tmp_path):
     assert body.get("detail", {}).get("error_code") == "duplicate_track"
 
 
+def test_upload_duplicate_same_bytes_different_metadata_returns_exact_hash_match(test_app, tmp_path):
+    client = TestClient(test_app)
+    original_data, original_files = _form_data(file_name="orig.mp3", content=b"identical-audio")
+    renamed_data, renamed_files = _form_data(file_name="renamed.mp3", content=b"identical-audio")
+    renamed_data["title"] = "Completely Different Title"
+    renamed_data["artist_name"] = "Another Artist Entirely"
+
+    base_validate_ok = (
+        True,
+        {
+            "valid": True,
+            "mime_type": "audio/mpeg",
+            "file_extension": ".mp3",
+            "file_size_bytes": len(original_files["file"][1].getvalue()),
+        },
+    )
+
+    with patch("app.routers.uploads.validate_audio_file", return_value=base_validate_ok):
+        with patch("app.routers.uploads.AIArtGenerator.generate_cover_art_from_metadata", return_value=None):
+            with patch("app.routers.uploads.B2Storage.is_configured", return_value=False):
+                first = client.post("/upload", data=original_data, files=original_files)
+                assert first.status_code == 201, first.text
+
+                second = client.post("/upload", data=renamed_data, files=renamed_files)
+
+    assert second.status_code == 409, second.text
+    detail = second.json().get("detail", {})
+    assert detail.get("error_code") == "duplicate_track"
+    assert detail.get("duplicate_info", {}).get("match_type") == "exact_file"
+    assert detail.get("duplicate_info", {}).get("reason") == "Identical file content detected"
+
+
 def test_enforce_b2_only_returns_503_when_unconfigured(test_app, tmp_path, monkeypatch):
     client = TestClient(test_app)
     data, files = _form_data(file_name="policy.mp3")

@@ -26,6 +26,7 @@ def create_mix(db: Session, mix: schemas.MixCreate):
         file_size_mb=mix.file_size_mb,
         quality_kbps=mix.quality_kbps,
         file_path=mix.file_path,
+        file_hash=mix.file_hash,
         cover_art_url=mix.cover_art_url,
         description=mix.description,
         tracklist=mix.tracklist,

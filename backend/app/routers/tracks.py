@@ -18,6 +18,7 @@ from ..models.models import Mix
 def get_current_user():
     return None
 from ..services.b2_storage import B2Storage
+from ..rate_limit import enforce_rate_limit
 import inspect
 
 router = APIRouter(prefix="/tracks", tags=["tracks"])
@@ -189,6 +190,7 @@ def read_track(track_id: int, db: Session = Depends(_get_db_dyn), current_user: 
 
 @router.api_route("/{track_id}/stream", methods=["GET", "HEAD"])
 async def stream_track(track_id: int, request: Request, db: Session = Depends(_get_db_dyn), current_user: object = Depends(_get_current_user_dyn)):
+    enforce_rate_limit(request, bucket="stream", limit_env="STREAM_RATE_LIMIT", window_env="STREAM_RATE_LIMIT_WINDOW_SECONDS")
     """
     Stream audio for a specific track.
     """
@@ -697,6 +699,7 @@ async def cleanup_b2(payload: Dict[str, Optional[object]] = None, db: Session = 
 
 @router.api_route("/{track_id}/stream/proxy", methods=["GET", "HEAD"])
 async def proxy_stream_track(track_id: int, request: Request, db: Session = Depends(get_db)):
+    enforce_rate_limit(request, bucket="stream_proxy", limit_env="STREAM_RATE_LIMIT", window_env="STREAM_RATE_LIMIT_WINDOW_SECONDS")
     """
     Proxy the audio stream to avoid CORS and support Range requests for remote (B2) URLs.
     Local files fall back to FileResponse/redirect as usual.
@@ -779,10 +782,12 @@ async def proxy_stream_track(track_id: int, request: Request, db: Session = Depe
                 if total_size is not None:
                     resp_headers["Content-Length"] = str(total_size)
 
-            # Add permissive CORS for local dev playback and expose range-related headers
-            resp_headers["Access-Control-Allow-Origin"] = os.getenv("DEV_CORS_ORIGIN", "*")
+            # Let the app-wide CORSMiddleware decide whether to echo the request
+            # origin. Setting `Access-Control-Allow-Origin: *` here can conflict
+            # with credentialed requests and accidentally widen the route beyond
+            # the configured allowlist.
             resp_headers["Access-Control-Expose-Headers"] = "Content-Range, Accept-Ranges, Content-Length"
-            resp_headers["Vary"] = "Origin, Range"
+            resp_headers["Vary"] = "Range"
             resp_headers["X-Accel-Buffering"] = "no"
 
         logger.info("proxy stream headers prepared", extra={"action": "proxy_stream_headers_prepared", "track_id": track_id, "status": status_code, "media_type": media_type, "content_length": resp_headers.get("Content-Length")})

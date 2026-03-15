@@ -52,6 +52,7 @@ class Mix(Base):
     original_filename = Column(String, nullable=True)
     duration_seconds = Column(Integer, nullable=False)
     file_path = Column(String, unique=True, nullable=False)
+    file_hash = Column(String(64), index=True, nullable=True)
     cover_art_url = Column(String, nullable=True)
     file_size_mb = Column(Float, nullable=False)
     quality_kbps = Column(Integer, nullable=False)
