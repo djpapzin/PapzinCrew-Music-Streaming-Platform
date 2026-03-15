@@ -10,7 +10,6 @@ import {
   VolumeX,
   Heart,
   Maximize2,
-  ChevronUp,
   Minimize2,
   MoreHorizontal
 } from 'lucide-react';
@@ -76,7 +75,10 @@ const Player: React.FC<PlayerProps> = ({
   return (
     <>
       {/* Mobile Mini Player */}
-      <div className="lg:hidden fixed bottom-16 left-0 right-0 bg-black/95 backdrop-blur-xl border-t border-white/20 p-3 z-40">
+      <div
+        className="lg:hidden fixed bottom-16 left-0 right-0 bg-black/95 backdrop-blur-xl border-t border-white/20 px-3 pt-3 z-40"
+        style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom, 0px))' }}
+      >
         <div 
           className="flex items-center space-x-3 cursor-pointer"
           onClick={() => setShowMobilePlayer(true)}
@@ -127,12 +129,18 @@ const Player: React.FC<PlayerProps> = ({
 
       {/* Mobile Full Player */}
       {showMobilePlayer && (
-        <div className="lg:hidden fixed inset-0 bg-black z-50 flex flex-col">
+        <div
+          className="lg:hidden fixed inset-0 bg-black z-50 flex flex-col overflow-y-auto"
+          style={{ height: '100dvh', minHeight: '100dvh' }}
+        >
           {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b border-white/20">
+          <div
+            className="flex items-center justify-between px-4 pb-4 border-b border-white/20"
+            style={{ paddingTop: 'calc(1rem + env(safe-area-inset-top, 0px))' }}
+          >
             <button
               onClick={() => setShowMobilePlayer(false)}
-              className="text-white"
+              className="text-white flex-shrink-0"
             >
               {/* Minimize to mini-player */}
               <Minimize2 className="w-6 h-6" />
@@ -144,22 +152,22 @@ const Player: React.FC<PlayerProps> = ({
           </div>
 
           {/* Album Art */}
-          <div className="flex-1 flex items-center justify-center p-8">
+          <div className="flex-1 min-h-0 flex items-center justify-center px-6 py-4 sm:px-8 sm:py-6">
             <img
               src={currentSong.imageUrl}
               alt={currentSong.album}
-              className="w-80 h-80 max-w-full max-h-full rounded-lg object-cover shadow-2xl"
+              className="w-full max-w-[min(80vw,20rem)] aspect-square max-h-[38vh] sm:max-h-[42vh] rounded-lg object-cover shadow-2xl"
             />
           </div>
 
           {/* Song Info */}
-          <div className="px-6 pb-4">
-            <h1 className="text-white text-2xl font-bold mb-2">{currentSong.title}</h1>
-            <p className="text-gray-400 text-lg">{currentSong.artist}</p>
+          <div className="px-6 pb-4 flex-shrink-0">
+            <h1 className="text-white text-2xl font-bold mb-2 break-words">{currentSong.title}</h1>
+            <p className="text-gray-400 text-lg truncate">{currentSong.artist}</p>
           </div>
 
           {/* Progress */}
-          <div className="px-6 pb-4">
+          <div className="px-6 pb-4 flex-shrink-0">
             <input
               type="range"
               min="0"
@@ -182,8 +190,11 @@ const Player: React.FC<PlayerProps> = ({
           </div>
 
           {/* Controls */}
-          <div className="px-6 pb-8">
-            <div className="flex items-center justify-center space-x-8 mb-6">
+          <div
+            className="px-6 pt-2 flex-shrink-0"
+            style={{ paddingBottom: 'calc(2rem + env(safe-area-inset-bottom, 0px))' }}
+          >
+            <div className="flex items-center justify-center space-x-6 sm:space-x-8 mb-6">
               <button
                 onClick={onToggleShuffle}
                 className={`transition-colors duration-200 ${
