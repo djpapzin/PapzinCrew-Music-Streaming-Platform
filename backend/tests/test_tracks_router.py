@@ -17,6 +17,7 @@ from app.routers.tracks import router
 from app import schemas
 from app.models import models
 from app.db.database import SessionLocal
+from app.security import require_admin
 
 # Create test app
 app = FastAPI()
@@ -335,6 +336,7 @@ class TestPlayCountStatistics:
                  patch('os.remove', return_value=None):
                 
                 # Call the endpoint
+                app.dependency_overrides[require_admin] = lambda: MagicMock(username="admin", email="admin@example.com")
                 response = client.delete("/tracks/admin/1")
                 
                 # Verify response

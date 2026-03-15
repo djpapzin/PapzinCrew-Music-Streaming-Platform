@@ -129,10 +129,14 @@ def require_admin(current_user: User = Depends(get_current_user)) -> User:
     raw_admins = os.getenv("ADMIN_USERNAMES", "")
     allowed_admins = {item.strip().lower() for item in raw_admins.split(",") if item.strip()}
 
-    # If no explicit admin list is provided, allow active authenticated users for now.
     if not allowed_admins:
-        return current_user
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access is not configured",
+        )
 
-    if current_user.username.lower() not in allowed_admins and current_user.email.lower() not in allowed_admins:
+    username = (current_user.username or "").lower()
+    email = (current_user.email or "").lower()
+    if username not in allowed_admins and email not in allowed_admins:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
     return current_user

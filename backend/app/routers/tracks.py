@@ -19,6 +19,7 @@ def get_current_user():
     return None
 from ..services.b2_storage import B2Storage
 from ..rate_limit import enforce_rate_limit
+from ..security import require_admin
 import inspect
 
 router = APIRouter(prefix="/tracks", tags=["tracks"])
@@ -297,7 +298,7 @@ async def stream_track(track_id: int, request: Request, db: Session = Depends(_g
     return StreamingResponse(empty_iter, media_type=media_type, headers=headers)
 
 
-@router.post("/admin/repair-b2-urls")
+@router.post("/admin/repair-b2-urls", dependencies=[Depends(require_admin)])
 async def repair_b2_urls(payload: Dict[str, Optional[object]] = None, db: Session = Depends(get_db)):
     """
     Attempt to repair broken remote (B2) URLs by locating hashed variants in the bucket.
@@ -409,7 +410,7 @@ async def repair_b2_urls(payload: Dict[str, Optional[object]] = None, db: Sessio
     return {"mode": mode, "results": results}
 
 
-@router.post("/admin/set-file-path")
+@router.post("/admin/set-file-path", dependencies=[Depends(require_admin)])
 async def set_file_path(payload: Dict[str, Any], db: Session = Depends(get_db)):
     """
     Set a specific track's file_path.
@@ -442,7 +443,7 @@ async def set_file_path(payload: Dict[str, Any], db: Session = Depends(get_db)):
 
     return {"id": track_id, "file_path": db_track.file_path}
 
-@router.delete("/admin/{track_id}")
+@router.delete("/admin/{track_id}", dependencies=[Depends(require_admin)])
 async def delete_track(track_id: int, db: Session = Depends(_get_db_dyn)):
     """
     Admin endpoint to delete a track by ID.
@@ -519,7 +520,7 @@ async def delete_track(track_id: int, db: Session = Depends(_get_db_dyn)):
     
     return result
 
-@router.get("/admin/audit")
+@router.get("/admin/audit", dependencies=[Depends(require_admin)])
 async def audit_tracks(skip: int = 0, limit: int = 200, db: Session = Depends(get_db)):
     """
     Audit mixes to find missing/broken file paths.
@@ -619,7 +620,7 @@ async def audit_tracks(skip: int = 0, limit: int = 200, db: Session = Depends(ge
     return {"count": len(results), "broken_count": len(broken), "broken": broken, "items": results}
 
 
-@router.post("/admin/cleanup-b2")
+@router.post("/admin/cleanup-b2", dependencies=[Depends(require_admin)])
 async def cleanup_b2(payload: Dict[str, Optional[object]] = None, db: Session = Depends(get_db)):
     """
     Delete broken remote (B2) audio objects.
