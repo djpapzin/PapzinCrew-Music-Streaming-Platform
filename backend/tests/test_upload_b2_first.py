@@ -54,6 +54,7 @@ def test_upload_b2_success(test_app, tmp_path):
     client = TestClient(test_app)
 
     data, files = _form_data()
+    returned_key = "audio/unittest-artist-unittest-title-hash-token.mp3"
 
     # Patch validate to skip real parsing; patch B2 to succeed; block AI cover generation
     with patch("app.routers.uploads.validate_audio_file", return_value=(True, {
@@ -66,17 +67,20 @@ def test_upload_b2_success(test_app, tmp_path):
             with patch("app.routers.uploads.B2Storage.is_configured", return_value=True):
                 with patch("app.routers.uploads.B2Storage.put_bytes_safe", return_value={
                     "ok": True,
-                    "key": "audio/UnitTest Artist - UnitTest Title.mp3",
+                    "key": returned_key,
                     "url": "https://b2.example/audio/UnitTest%20Artist%20-%20UnitTest%20Title.mp3",
-                }):
+                }) as mock_put:
                     resp = client.post("/upload", data=data, files=files)
 
     assert resp.status_code == 201, resp.text
     body = resp.json()
     assert body.get("storage") == "b2"
     # Location should prefer key when present
-    assert body.get("location") == "audio/UnitTest Artist - UnitTest Title.mp3"
+    assert body.get("location") == returned_key
     assert "fallback_from_b2" not in body
+    upload_key = mock_put.call_args.args[0]
+    assert upload_key.startswith("audio/unittest-artist-unittest-title-")
+    assert upload_key.endswith(".mp3")
 
 
 def test_upload_b2_failure_fallback_local(test_app, tmp_path):
@@ -130,3 +134,41 @@ def test_upload_without_b2_uses_local_no_fallback_flag(test_app, tmp_path):
     assert "fallback_from_b2" not in body
     loc = body.get("location")
     assert loc and os.path.exists(loc)
+
+
+def test_upload_b2_generates_distinct_keys_for_same_metadata(test_app, tmp_path):
+    client = TestClient(test_app)
+
+    data1, files1 = _form_data(file_name="first.mp3", content=b"first-audio")
+    data2, files2 = _form_data(file_name="second.mp3", content=b"second-audio")
+
+    def fake_put(key, *_args, **_kwargs):
+        return {"ok": True, "key": key, "url": f"https://b2.example/{key}"}
+
+    with patch("app.routers.uploads.validate_audio_file", side_effect=[
+        (True, {
+            "valid": True,
+            "mime_type": "audio/mpeg",
+            "file_extension": ".mp3",
+            "file_size_bytes": len(files1["file"][1].getvalue()),
+        }),
+        (True, {
+            "valid": True,
+            "mime_type": "audio/mpeg",
+            "file_extension": ".mp3",
+            "file_size_bytes": len(files2["file"][1].getvalue()),
+        }),
+    ]):
+        with patch("app.routers.uploads.AIArtGenerator.generate_cover_art_from_metadata", return_value=None):
+            with patch("app.routers.uploads.B2Storage.is_configured", return_value=True):
+                with patch("app.routers.uploads.B2Storage.put_bytes_safe", side_effect=fake_put) as mock_put:
+                    resp1 = client.post("/upload", data={**data1, "skip_duplicate_check": "true"}, files=files1)
+                    resp2 = client.post("/upload", data={**data2, "skip_duplicate_check": "true"}, files=files2)
+
+    assert resp1.status_code == 201, resp1.text
+    assert resp2.status_code == 201, resp2.text
+    first_key = mock_put.call_args_list[0].args[0]
+    second_key = mock_put.call_args_list[1].args[0]
+    assert first_key != second_key
+    assert first_key.startswith("audio/unittest-artist-unittest-title-")
+    assert second_key.startswith("audio/unittest-artist-unittest-title-")

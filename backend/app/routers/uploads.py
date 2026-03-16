@@ -6,7 +6,7 @@ import base64
 import mimetypes
 import hashlib
 from io import BytesIO
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile, status, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError
@@ -20,6 +20,7 @@ from difflib import SequenceMatcher
 import asyncio
 import time
 import logging
+import uuid
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +42,7 @@ except Exception:  # pragma: no cover - environment dependent
     HAS_MAGIC = False
 
 from .. import schemas, crud
-from ..db.database import get_db
+from ..db.database import SessionLocal, get_db
 from ..models import models
 from ..services.ai_art_generator import AIArtGenerator
 from ..services.b2_storage import B2Storage
@@ -460,6 +461,136 @@ def validate_audio_file(file_or_bytes, filename: Optional[str] = None, lightweig
 
 # Using centralized sanitize_filename from file_management
 
+def _get_exact_hash_duplicate(db: Session, file_hash: Optional[str]) -> Optional[Dict[str, Any]]:
+    """Fast exact-duplicate lookup used on the upload critical path."""
+    if not file_hash or not hasattr(models.Mix, "file_hash"):
+        return None
+
+    hash_match = db.query(models.Mix).filter(models.Mix.file_hash == file_hash).first()
+    if not hash_match:
+        return None
+
+    return {
+        "id": hash_match.id,
+        "title": hash_match.title,
+        "artist_name": hash_match.artist.name if hash_match.artist else "",
+        "file_size_mb": hash_match.file_size_mb,
+        "uploaded_at": hash_match.release_date.isoformat() if getattr(hash_match, "release_date", None) else None,
+        "match_type": "exact_file",
+        "confidence": 1.0,
+        "reason": "Identical file content detected",
+    }
+
+
+def _extract_authoritative_audio_details(audio_bytes: bytes) -> Dict[str, Any]:
+    """Extract authoritative metadata off the request critical path."""
+    details: Dict[str, Any] = {
+        "duration_seconds": 0,
+        "quality_kbps": 0,
+        "bpm": None,
+        "cover_art_bytes": None,
+    }
+
+    tags_source = None
+    try:
+        try:
+            audio_mp3 = MP3(BytesIO(audio_bytes))
+            details["duration_seconds"] = int(audio_mp3.info.length)
+            details["quality_kbps"] = int(audio_mp3.info.bitrate / 1000) if hasattr(audio_mp3.info, 'bitrate') and audio_mp3.info.bitrate else 0
+            tags_source = audio_mp3
+        except Exception:
+            audio_generic = mutagen.File(BytesIO(audio_bytes))
+            if hasattr(audio_generic, 'info') and hasattr(audio_generic.info, 'length'):
+                details["duration_seconds"] = int(audio_generic.info.length)
+            tags_source = audio_generic
+
+        try:
+            if getattr(tags_source, 'tags', None) and 'TBPM' in tags_source.tags:
+                bpm_str = str(tags_source.tags['TBPM'])
+                details["bpm"] = int(float(bpm_str))
+        except Exception as e:
+            logger.debug('[upload] background BPM parse error: %s', e)
+
+        try:
+            tags = getattr(tags_source, 'tags', None)
+            if tags:
+                if 'APIC:' in tags:
+                    details["cover_art_bytes"] = tags['APIC:'].data
+                elif 'APIC' in tags:
+                    details["cover_art_bytes"] = tags['APIC'].data
+                elif 'covr' in tags:
+                    details["cover_art_bytes"] = tags['covr'][0]
+            elif hasattr(tags_source, 'pictures') and tags_source.pictures:
+                details["cover_art_bytes"] = tags_source.pictures[0].data
+        except Exception as e:
+            logger.debug('[upload] background cover extraction error: %s', e)
+    except Exception as e:
+        logger.warning('[upload] background metadata extraction error: %s', e, extra={"action": "background_metadata_extraction_error", "error": str(e)})
+
+    return details
+
+
+async def _finalize_mix_processing(
+    *,
+    mix_id: int,
+    audio_bytes: bytes,
+    upload_dir: str,
+    base_name: str,
+    title: str,
+    artist_name: str,
+    genre: Optional[str],
+    custom_prompt: Optional[str],
+    uploaded_cover_bytes: Optional[bytes],
+) -> None:
+    """Best-effort post-response metadata and cover processing."""
+    db = SessionLocal()
+    try:
+        mix = db.query(models.Mix).filter(models.Mix.id == mix_id).first()
+        if mix is None:
+            return
+
+        details = await asyncio.to_thread(_extract_authoritative_audio_details, audio_bytes)
+        mix.duration_seconds = int(details.get('duration_seconds') or 0)
+        mix.quality_kbps = int(details.get('quality_kbps') or 0)
+        mix.bpm = details.get('bpm')
+
+        public_cover_url = mix.cover_art_url
+        cover_bytes = uploaded_cover_bytes or details.get('cover_art_bytes')
+        if cover_bytes and not public_cover_url:
+            public_cover_url = await _save_cover_art(cover_bytes, base_name, upload_dir, source='uploaded' if uploaded_cover_bytes else 'extracted')
+
+        if not public_cover_url:
+            try:
+                ai_generator = AIArtGenerator()
+                ai_timeout = float(os.getenv('AI_COVER_TIMEOUT_SECONDS', '45.0'))
+                ai_cover_bytes = await asyncio.wait_for(
+                    asyncio.to_thread(
+                        ai_generator.generate_cover_art_from_metadata,
+                        title=title, artist=artist_name, genre=genre, custom_prompt=custom_prompt
+                    ),
+                    timeout=ai_timeout
+                )
+                if ai_cover_bytes:
+                    public_cover_url = await _save_cover_art(ai_cover_bytes, base_name, upload_dir, source='ai')
+                else:
+                    logger.warning('[upload] background AI generation returned no data', extra={"action": "background_ai_cover_empty", "mix_id": mix_id})
+            except asyncio.TimeoutError:
+                logger.warning('[upload] background AI cover generation timed out after %ss', ai_timeout, extra={"action": "background_ai_cover_timeout", "mix_id": mix_id, "timeout_seconds": ai_timeout})
+            except Exception as e:
+                logger.warning('[upload] background AI cover generation failed: %s', e, extra={"action": "background_ai_cover_error", "mix_id": mix_id, "error": str(e)})
+
+        if public_cover_url and mix.cover_art_url != public_cover_url:
+            mix.cover_art_url = public_cover_url
+
+        db.commit()
+        logger.info('[upload] background finalize complete for mix_id=%s', mix_id, extra={"action": "background_finalize_complete", "mix_id": mix_id})
+    except Exception as e:
+        db.rollback()
+        logger.warning('[upload] background finalize failed for mix_id=%s: %s', mix_id, e, extra={"action": "background_finalize_failed", "mix_id": mix_id, "error": str(e)})
+    finally:
+        db.close()
+
+
 def calculate_file_hash(file_content: bytes) -> str:
     """
     Calculate SHA-256 hash of file content for exact duplicate detection.
@@ -526,6 +657,15 @@ def get_unique_filepath(db: Session, directory: str, filename:str) -> str:
             break
 
     return new_filename
+
+
+def build_unique_b2_audio_key(base_name: str, file_extension: str, file_hash: Optional[str] = None) -> str:
+    """Build a collision-resistant B2 key so one upload never reuses another mix's object."""
+    clean_base = re.sub(r'[^a-zA-Z0-9\-]', '-', (base_name or '').lower())
+    clean_base = re.sub(r'-+', '-', clean_base).strip('-') or 'upload'
+    hash_prefix = (file_hash or 'nohash')[:12]
+    upload_token = uuid.uuid4().hex[:12]
+    return f"audio/{clean_base}-{hash_prefix}-{upload_token}{file_extension}"
 
 # (Removed duplicate extract-metadata route definition)
 
@@ -729,6 +869,7 @@ async def upload_mix(
     custom_prompt: Optional[str] = Form(None),
     skip_duplicate_check: bool = Form(False),  # Allow skipping duplicate check
     request: Request = None,
+    background_tasks: BackgroundTasks = None,
     db: Session = Depends(get_db)
 ):
     """
@@ -830,51 +971,17 @@ async def upload_mix(
     file.file.seek(0)
     audio_bytes = file.file.read()
     file_hash = calculate_file_hash(audio_bytes)
-    audio_fileobj = BytesIO(audio_bytes)
     logger.info("[upload] read bytes size=%d hash=%s", len(audio_bytes), file_hash, extra={"action": "audio_read", "size_bytes": len(audio_bytes), "file_hash": file_hash})
     termprint(f"[upload] read bytes size={len(audio_bytes)} hash={file_hash}")
     
-    # Extract metadata directly from in-memory bytes
-    try:
-        # Try MP3-specific first to get bitrate when possible
-        try:
-            audio_mp3 = MP3(audio_fileobj)
-            duration_seconds = int(audio_mp3.info.length)
-            quality_kbps = int(audio_mp3.info.bitrate / 1000) if hasattr(audio_mp3.info, 'bitrate') and audio_mp3.info.bitrate else 0
-            tags_source = audio_mp3
-        except Exception:
-            audio_generic = mutagen.File(BytesIO(audio_bytes))
-            duration_seconds = int(audio_generic.info.length) if hasattr(audio_generic, 'info') and hasattr(audio_generic, 'length') else 0
-            quality_kbps = 0
-            tags_source = audio_generic
-        file_size_mb = validation_result['file_size_bytes'] / (1024 * 1024)
+    file_size_mb = validation_result['file_size_bytes'] / (1024 * 1024)
+    duration_seconds = 0
+    quality_kbps = 0
+    bpm = None
+    uploaded_cover_bytes = None
 
-        bpm = None
-        try:
-            if getattr(tags_source, 'tags', None) and 'TBPM' in tags_source.tags:
-                bpm_str = str(tags_source.tags['TBPM'])
-                bpm = int(float(bpm_str))
-                logger.info("[upload] extracted BPM=%s", bpm)
-        except Exception as e:
-            logger.debug("[upload] BPM parse error: %s", e)
-        logger.info("🔍 Extracted track metadata: %ss, %s kbps, %.2f MB", duration_seconds, quality_kbps, file_size_mb, extra={"action": "metadata_extracted", "duration_seconds": duration_seconds, "quality_kbps": quality_kbps, "file_size_mb": file_size_mb})
-    except Exception as e:
-        logger.warning("[upload] metadata extraction error: %s", e, extra={"action": "metadata_extraction_error", "error": str(e)})
-        duration_seconds = 0
-        file_size_mb = validation_result['file_size_bytes'] / (1024 * 1024)
-        quality_kbps = 0
-        bpm = None
-    
     # --- Early Duplicate Detection (before any storage writes) ---
-    duplicate_info = check_for_duplicate_track(
-        db=db,
-        title=title,
-        artist_name=artist_name,
-        file_size=validation_result['file_size_bytes'],
-        file_hash=file_hash,
-        duration_seconds=duration_seconds,
-        album=album
-    )
+    duplicate_info = _get_exact_hash_duplicate(db=db, file_hash=file_hash)
     if duplicate_info and not skip_duplicate_check:
         logger.info("[upload] duplicate detected (pre-storage): %s", duplicate_info.get('reason'), extra={"action": "duplicate_detected_pre_storage", "reason": duplicate_info.get('reason'), "match_type": duplicate_info.get('match_type')})
         raise HTTPException(
@@ -886,60 +993,15 @@ async def upload_mix(
             }
         )
 
-    # --- Cover Art Handling (B2-First with retries, local fallback only after B2 failures) ---
+    # --- Deferred cover processing payload capture ---
     public_cover_url = None
     try:
-        # 1. Check for user-uploaded cover art first
         if cover_art and cover_art.filename:
-            logger.info("🎵 Processing track: %s", file.filename, extra={"action": "cover_art_user_uploaded", "file_name": file.filename})
+            logger.info("🎵 Queuing uploaded cover art for background processing: %s", file.filename, extra={"action": "cover_art_background_queued", "file_name": file.filename})
             cover_art.file.seek(0)
-            cover_bytes = cover_art.file.read()
-            if cover_bytes:
-                public_cover_url = await _save_cover_art(cover_bytes, base_name, UPLOAD_DIR, source="uploaded")
-
-        # 2. If no uploaded cover, try to extract from audio metadata
-        if not public_cover_url:
-            cover_art_data = None
-            try:
-                tags = getattr(tags_source, 'tags', None)
-                if tags:
-                    if 'APIC:' in tags: cover_art_data = tags['APIC:'].data
-                    elif 'APIC' in tags: cover_art_data = tags['APIC'].data
-                    elif 'covr' in tags: cover_art_data = tags['covr'][0]
-                elif hasattr(tags_source, 'pictures') and tags_source.pictures:
-                    cover_art_data = tags_source.pictures[0].data
-                
-                if cover_art_data:
-                    logger.info("[upload] found extracted cover art in metadata (%d bytes)", len(cover_art_data), extra={"action": "cover_art_extracted", "bytes": len(cover_art_data)})
-                    public_cover_url = await _save_cover_art(cover_art_data, base_name, UPLOAD_DIR, source="extracted")
-            except Exception as e:
-                logger.debug("[upload] could not extract cover from metadata: %s", e)
-
-        # 3. If still no cover art, generate one with AI
-        if not public_cover_url:
-            try:
-                ai_generator = AIArtGenerator()
-                ai_timeout = float(os.getenv('AI_COVER_TIMEOUT_SECONDS', '45.0'))
-                cover_art_bytes = await asyncio.wait_for(
-                    asyncio.to_thread(
-                        ai_generator.generate_cover_art_from_metadata,
-                        title=title, artist=artist_name, genre=genre, custom_prompt=custom_prompt
-                    ),
-                    timeout=ai_timeout
-                )
-                if cover_art_bytes:
-                    logger.info("[upload] AI generation successful (%d bytes)", len(cover_art_bytes), extra={"action": "ai_cover_generated", "bytes": len(cover_art_bytes)})
-                    public_cover_url = await _save_cover_art(cover_art_bytes, base_name, UPLOAD_DIR, source="ai")
-                else:
-                    logger.warning("[upload] AI generation returned no data", extra={"action": "ai_cover_empty"})
-            except asyncio.TimeoutError:
-                logger.warning("[upload] AI cover generation timed out after %ss", ai_timeout, extra={"action": "ai_cover_timeout", "timeout_seconds": ai_timeout})
-            except Exception as e:
-                logger.error("[upload] AI cover generation failed: %s", e, extra={"action": "ai_cover_error", "error": str(e)})
-
+            uploaded_cover_bytes = cover_art.file.read()
     except Exception as e:
-        # Don't fail the entire upload if cover art handling fails
-        logger.warning("[upload] cover art processing error: %s", e, extra={"action": "cover_art_processing_error", "error": str(e)})
+        logger.warning("[upload] failed reading uploaded cover art for background processing: %s", e, extra={"action": "cover_art_background_read_failed", "error": str(e)})
 
     # B2-first: upload audio bytes directly when configured
     public_audio_url = None
@@ -951,22 +1013,12 @@ async def upload_mix(
     b2 = B2Storage()
     try:
         if b2.is_configured():
-            # Clean the base name to remove problematic characters
-            import re
-            import uuid
-            clean_base = re.sub(r'[^a-zA-Z0-9\-]', '-', base_name.lower())
-            clean_base = re.sub(r'-+', '-', clean_base).strip('-')
-            
-            if skip_duplicate_check:
-                # Generate a more unique key with timestamp and random component
-                timestamp = int(time.time())
-                random_str = str(uuid.uuid4())[:8]
-                safe_hash = (file_hash or f"{timestamp}-{random_str}").replace("/", "_")[:32]
-                audio_key = f"audio/{clean_base}-{safe_hash}{file_extension}"
-                logger.info("[upload] Using unique key for forced upload: %s", audio_key, extra={"action": "b2_unique_key_forced", "audio_key": audio_key})
-            else:
-                # Use descriptive filename for normal uploads
-                audio_key = f"audio/{clean_base}{file_extension}"
+            audio_key = build_unique_b2_audio_key(
+                base_name=base_name,
+                file_extension=file_extension,
+                file_hash=file_hash,
+            )
+            logger.info("[upload] Using unique B2 audio key: %s", audio_key, extra={"action": "b2_unique_audio_key", "audio_key": audio_key, "skip_duplicate_check": skip_duplicate_check})
             logger.info("[upload] B2 audio upload start key=%s size=%dB", audio_key, len(audio_bytes), extra={"action": "b2_audio_upload_start", "audio_key": audio_key, "size_bytes": len(audio_bytes)})
             termprint(f"[upload] B2 audio upload start key={audio_key} size={len(audio_bytes)}B")
             b2_timeout = float(os.getenv('B2_PUT_TIMEOUT', '20'))
@@ -1153,7 +1205,8 @@ async def upload_mix(
         
         # Add frontend-expected properties
         response_content['success'] = True
-        response_content['generating_art'] = bool(public_cover_url)  # True if we generated/processed cover art
+        response_content['generating_art'] = True
+        response_content['processing_status'] = 'pending'
         response_content['metadata'] = {
             'title': title,
             'artist': artist_name,
@@ -1164,6 +1217,10 @@ async def upload_mix(
             'quality_kbps': quality_kbps,
             'bpm': bpm
         }
+        response_content['authoritative_processing'] = {
+            'status': 'pending',
+            'fields_pending': ['duration_seconds', 'quality_kbps', 'bpm', 'cover_art_url']
+        }
         
         # Include storage details in response for observability
         if storage_provider:
@@ -1173,6 +1230,20 @@ async def upload_mix(
         if fallback_from_b2:
             response_content['fallback_from_b2'] = True
         logger.info("✅ Success! Track saved with ID: %s", db_mix.id, extra={"action": "db_save_success", "mix_id": db_mix.id, "storage_provider": storage_provider, "storage_location": storage_location})
+        if background_tasks is not None:
+            background_tasks.add_task(
+                _finalize_mix_processing,
+                mix_id=db_mix.id,
+                audio_bytes=audio_bytes,
+                upload_dir=UPLOAD_DIR,
+                base_name=base_name,
+                title=title,
+                artist_name=artist_name,
+                genre=genre,
+                custom_prompt=custom_prompt,
+                uploaded_cover_bytes=uploaded_cover_bytes,
+            )
+
         from fastapi.encoders import jsonable_encoder
         resp = JSONResponse(status_code=status.HTTP_201_CREATED, content=jsonable_encoder(response_content))
         # Surface storage details to clients (for UI warnings/telemetry)
