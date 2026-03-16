@@ -8,6 +8,8 @@ const API_BASE = import.meta.env.VITE_API_URL || (window.location.origin.include
 
 // Ensure API_BASE doesn't end with a slash
 const API_URL = API_BASE.endsWith('/') ? API_BASE.slice(0, -1) : API_BASE;
+const MAX_UPLOAD_SIZE_MB = 200;
+const MAX_UPLOAD_SIZE_BYTES = MAX_UPLOAD_SIZE_MB * 1024 * 1024;
 
 // Add fade-in animation
 const fadeInKeyframes = `
@@ -92,6 +94,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
   const [publishStatus, setPublishStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [showStatusModal, setShowStatusModal] = useState(false);
   const statusModalRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const currentXhrRef = useRef<XMLHttpRequest | null>(null);
   const artGenerationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const refreshLibrary = useCallback(() => {
@@ -105,6 +108,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
     title: '',
     description: '',
     tracklist: '',
+    primaryArtist: '',
     tagArtists: '',
     tags: '',
     genre: 'Podcast Shows',
@@ -131,11 +135,11 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
     setUploadError(null);
     
     // Basic client-side validation
-    const maxSize = 100 * 1024 * 1024; // 100MB
+    const maxSize = MAX_UPLOAD_SIZE_BYTES;
     if (file.size > maxSize) {
       setFileValidation({
         valid: false,
-        error: `File is too large. Maximum size is 100MB.`,
+        error: `File is too large. Maximum size is ${MAX_UPLOAD_SIZE_MB}MB.`,
         error_code: 'file_too_large'
       });
       return false;
@@ -186,7 +190,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
         // Update form fields with extracted metadata
         const updatedFormData = {
           title: extractedMetadata.title || '',
-          tagArtists: extractedMetadata.artist || '',
+          primaryArtist: extractedMetadata.artist || '',
           genre: extractedMetadata.genre || 'Podcast Shows',
           description: extractedMetadata.album ? `Album: ${extractedMetadata.album}${extractedMetadata.year ? ` (${extractedMetadata.year})` : ''}` : ''
         };
@@ -395,7 +399,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
       setShowStatusModal(true);
       const isDuplicate = await checkForDuplicateTrack(
         formData.title || uploadedFile.name.replace(/\.[^/.]+$/, ''), // Use filename without extension as fallback title
-        formData.tagArtists || 'Unknown Artist',
+        formData.primaryArtist || 'Unknown Artist',
         uploadedFile.size
       );
       
@@ -421,7 +425,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
       return;
     }
 
-    if (!formData.tagArtists.trim()) {
+    if (!formData.primaryArtist.trim()) {
       setUploadError({
         error: 'Please enter the artist name.',
         error_code: 'missing_artist'
@@ -458,7 +462,9 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
       
       // Add all form fields
       uploadFormData.append('title', formData.title);
-      uploadFormData.append('artist_name', formData.tagArtists);
+      uploadFormData.append('artist_name', formData.primaryArtist);
+      uploadFormData.append('primary_artist', formData.primaryArtist);
+      uploadFormData.append('tag_artists', formData.tagArtists);
       uploadFormData.append('description', formData.description);
       uploadFormData.append('tracklist', formData.tracklist);
       uploadFormData.append('tags', formData.tags);
@@ -896,6 +902,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
               title: '',
               description: '',
               tracklist: '',
+              primaryArtist: '',
               tagArtists: '',
               tags: '',
               genre: 'Podcast Shows',
@@ -979,71 +986,62 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
         
         {/* Enhanced Duplicate Track Warning */}
         {duplicateTrack && (
-          <div className={`border px-4 py-3 rounded-lg animate-fade-in ${
-            duplicateTrack.match_type === 'exact_file' 
-              ? 'bg-red-500/10 border-red-500/50 text-red-300'
-              : duplicateTrack.confidence >= 0.9
-              ? 'bg-orange-500/10 border-orange-500/50 text-orange-300'
-              : 'bg-yellow-500/10 border-yellow-500/50 text-yellow-300'
-          }`}>
-            <div className="flex items-start space-x-3">
+          <div
+            className={`border px-4 py-4 rounded-xl animate-fade-in ${
+              duplicateTrack.match_type === 'exact_file'
+                ? 'bg-red-500/10 border-red-500/50 text-red-300'
+                : duplicateTrack.confidence >= 0.9
+                  ? 'bg-orange-500/10 border-orange-500/50 text-orange-300'
+                  : 'bg-yellow-500/10 border-yellow-500/50 text-yellow-300'
+            }`}
+            role="alert"
+            aria-live="polite"
+          >
+            <div className="flex items-start gap-3">
               <AlertCircle className={`w-5 h-5 mt-0.5 flex-shrink-0 ${
                 duplicateTrack.match_type === 'exact_file' ? 'text-red-400'
                 : duplicateTrack.confidence >= 0.9 ? 'text-orange-400'
                 : 'text-yellow-400'
               }`} />
-              <div className="flex-1">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <p className={`font-medium ${
+              <div className="flex-1 min-w-0">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className={`font-semibold ${
                       duplicateTrack.match_type === 'exact_file' ? 'text-red-200'
                       : duplicateTrack.confidence >= 0.9 ? 'text-orange-200'
                       : 'text-yellow-200'
                     }`}>
-                      {duplicateTrack.match_type === 'exact_file' ? 'Exact Duplicate Detected' 
-                       : duplicateTrack.confidence >= 0.9 ? 'Very Similar Track Found'
-                       : 'Possible Duplicate Track'}
+                      {duplicateTrack.match_type === 'exact_file'
+                        ? 'This file already looks uploaded'
+                        : duplicateTrack.confidence >= 0.9
+                          ? 'This track looks very similar'
+                          : 'Possible duplicate found'}
                     </p>
-                    {duplicateTrack.confidence && (
-                      <div className="flex items-center space-x-2 mt-1">
-                        <span className="text-xs opacity-80">Confidence:</span>
-                        <div className="flex items-center space-x-1">
-                          <div className="w-16 h-1.5 bg-gray-700 rounded-full overflow-hidden">
-                            <div 
-                              className={`h-full rounded-full ${
-                                duplicateTrack.confidence >= 0.9 ? 'bg-red-400'
-                                : duplicateTrack.confidence >= 0.8 ? 'bg-orange-400'
-                                : 'bg-yellow-400'
-                              }`}
-                              style={{ width: `${duplicateTrack.confidence * 100}%` }}
-                            />
-                          </div>
-                          <span className="text-xs font-mono">{(duplicateTrack.confidence * 100).toFixed(0)}%</span>
-                        </div>
-                      </div>
-                    )}
+                    <p className="text-sm mt-1 opacity-90">
+                      {duplicateTrack.reason || 'A similar track was found in the library.'}
+                    </p>
                   </div>
-                  <button 
+                  <button
+                    type="button"
                     onClick={() => setDuplicateTrack(null)}
-                    className={`hover:opacity-75 transition-colors ${
-                      duplicateTrack.match_type === 'exact_file' ? 'text-red-400'
-                      : duplicateTrack.confidence >= 0.9 ? 'text-orange-400'
-                      : 'text-yellow-400'
+                    className={`min-h-11 min-w-11 inline-flex items-center justify-center rounded-full border transition-colors ${
+                      duplicateTrack.match_type === 'exact_file' ? 'border-red-500/30 text-red-300 hover:bg-red-500/10'
+                      : duplicateTrack.confidence >= 0.9 ? 'border-orange-500/30 text-orange-300 hover:bg-orange-500/10'
+                      : 'border-yellow-500/30 text-yellow-300 hover:bg-yellow-500/10'
                     }`}
+                    aria-label="Dismiss duplicate warning"
                   >
                     <XCircle className="w-5 h-5" />
                   </button>
                 </div>
-                <p className="text-sm mt-2 opacity-90">
-                  {duplicateTrack.reason || 'A similar track was found in the library:'}
-                </p>
-                <div className={`mt-3 bg-black/20 p-4 rounded-lg border ${
+
+                <div className={`mt-3 rounded-xl border bg-black/20 p-4 ${
                   duplicateTrack.match_type === 'exact_file' ? 'border-red-500/20'
                   : duplicateTrack.confidence >= 0.9 ? 'border-orange-500/20'
                   : 'border-yellow-500/20'
                 }`}>
-                  <div className="flex items-start space-x-3">
-                    <div className={`w-12 h-12 rounded flex items-center justify-center flex-shrink-0 ${
+                  <div className="flex items-start gap-3">
+                    <div className={`mt-0.5 h-11 w-11 rounded-lg flex items-center justify-center flex-shrink-0 ${
                       duplicateTrack.match_type === 'exact_file' ? 'bg-red-500/10'
                       : duplicateTrack.confidence >= 0.9 ? 'bg-orange-500/10'
                       : 'bg-yellow-500/10'
@@ -1059,52 +1057,63 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
                         duplicateTrack.match_type === 'exact_file' ? 'text-red-100'
                         : duplicateTrack.confidence >= 0.9 ? 'text-orange-100'
                         : 'text-yellow-100'
-                      }`}>{duplicateTrack.title}</p>
+                      }`}>
+                        {duplicateTrack.title}
+                      </p>
                       <p className={`text-sm truncate ${
                         duplicateTrack.match_type === 'exact_file' ? 'text-red-300/80'
                         : duplicateTrack.confidence >= 0.9 ? 'text-orange-300/80'
                         : 'text-yellow-300/80'
-                      }`}>{duplicateTrack.artist_name}</p>
-                      
-                      {/* Basic Info */}
-                      <div className={`flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs ${
-                        duplicateTrack.match_type === 'exact_file' ? 'text-red-400/80'
-                        : duplicateTrack.confidence >= 0.9 ? 'text-orange-400/80'
-                        : 'text-yellow-400/80'
                       }`}>
-                        <span>Size: {duplicateTrack.file_size_mb?.toFixed(1)}MB</span>
-                        <span>Uploaded: {new Date(duplicateTrack.uploaded_at).toLocaleDateString()}</span>
-                        {duplicateTrack.size_difference_pct && (
-                          <span>Size difference: {duplicateTrack.size_difference_pct}%</span>
-                        )}
+                        {duplicateTrack.artist_name}
+                      </p>
+
+                      <div className={`mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs ${
+                        duplicateTrack.match_type === 'exact_file' ? 'text-red-300/90'
+                        : duplicateTrack.confidence >= 0.9 ? 'text-orange-300/90'
+                        : 'text-yellow-300/90'
+                      }`}>
+                        <div className="rounded-lg bg-white/5 px-3 py-2">
+                          <span className="block opacity-70">Uploaded</span>
+                          <span className="font-medium">{new Date(duplicateTrack.uploaded_at).toLocaleDateString()}</span>
+                        </div>
+                        <div className="rounded-lg bg-white/5 px-3 py-2">
+                          <span className="block opacity-70">File size</span>
+                          <span className="font-medium">{duplicateTrack.file_size_mb?.toFixed(1)}MB</span>
+                        </div>
+                        {duplicateTrack.confidence ? (
+                          <div className="rounded-lg bg-white/5 px-3 py-2">
+                            <span className="block opacity-70">Match confidence</span>
+                            <span className="font-medium">{(duplicateTrack.confidence * 100).toFixed(0)}%</span>
+                          </div>
+                        ) : null}
                       </div>
-                      
-                      {/* Similarity Metrics */}
-                      {(duplicateTrack.title_similarity || duplicateTrack.artist_similarity || duplicateTrack.duration_similarity) && (
-                        <div className="mt-3 space-y-2">
-                          <p className="text-xs font-medium opacity-80">Similarity Breakdown:</p>
+
+                      {(duplicateTrack.title_similarity || duplicateTrack.artist_similarity || duplicateTrack.duration_similarity || duplicateTrack.album_similarity) && (
+                        <div className="hidden sm:block mt-3 space-y-2">
+                          <p className="text-xs font-medium opacity-80">Similarity breakdown</p>
                           <div className="grid grid-cols-2 gap-2 text-xs">
                             {duplicateTrack.title_similarity && (
                               <div className="flex justify-between">
-                                <span>Title:</span>
+                                <span>Title</span>
                                 <span className="font-mono">{(duplicateTrack.title_similarity * 100).toFixed(0)}%</span>
-                    </div>
+                              </div>
                             )}
                             {duplicateTrack.artist_similarity && (
                               <div className="flex justify-between">
-                                <span>Artist:</span>
+                                <span>Artist</span>
                                 <span className="font-mono">{(duplicateTrack.artist_similarity * 100).toFixed(0)}%</span>
                               </div>
                             )}
                             {duplicateTrack.duration_similarity && (
                               <div className="flex justify-between">
-                                <span>Duration:</span>
+                                <span>Duration</span>
                                 <span className="font-mono">{(duplicateTrack.duration_similarity * 100).toFixed(0)}%</span>
                               </div>
                             )}
                             {duplicateTrack.album_similarity && (
                               <div className="flex justify-between">
-                                <span>Album:</span>
+                                <span>Album</span>
                                 <span className="font-mono">{(duplicateTrack.album_similarity * 100).toFixed(0)}%</span>
                               </div>
                             )}
@@ -1114,16 +1123,19 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
                     </div>
                   </div>
                 </div>
-                <div className="mt-4 flex flex-wrap gap-3">
+
+                <div className="mt-4 flex flex-col sm:flex-row gap-3">
                   <button
+                    type="button"
                     onClick={(e) => { e.preventDefault(); e.stopPropagation(); console.log('[Upload] Upload Anyway clicked'); handlePublish(true); }}
                     disabled={isPublishing}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors border flex items-center space-x-2 ${isPublishing ? 'opacity-50 cursor-not-allowed bg-yellow-500/10 border-yellow-500/20 text-yellow-400/70' : 'bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-300 border-yellow-500/30 hover:border-yellow-500/50'}`}
+                    className={`min-h-12 px-4 py-3 rounded-xl text-sm font-semibold transition-colors border inline-flex items-center justify-center space-x-2 ${isPublishing ? 'opacity-50 cursor-not-allowed bg-yellow-500/10 border-yellow-500/20 text-yellow-400/70' : 'bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-200 border-yellow-500/30 hover:border-yellow-500/50'}`}
                   >
                     <Upload className="w-4 h-4" />
-                    <span>Upload Anyway</span>
+                    <span>Upload anyway</span>
                   </button>
                   <button
+                    type="button"
                     onClick={() => {
                       setDuplicateTrack(null);
                       setUploadStatus({
@@ -1132,53 +1144,78 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
                         message: '',
                         details: '',
                         speed: '',
-                        timeRemaining: ''
+                        timeRemaining: '',
+                        phase: 'none',
+                        phaseProgress: 0,
+                        canCancel: false,
+                        extractedMetadata: null
                       });
                     }}
-                    className="px-4 py-2 bg-white/5 hover:bg-white/10 text-white rounded-lg text-sm font-medium transition-colors border border-white/10 hover:border-white/20 flex items-center space-x-2"
+                    className="min-h-12 px-4 py-3 bg-white/5 hover:bg-white/10 text-white rounded-xl text-sm font-semibold transition-colors border border-white/10 hover:border-white/20 inline-flex items-center justify-center space-x-2"
                   >
                     <XCircle className="w-4 h-4" />
-                    <span>Cancel</span>
+                    <span>Keep editing</span>
                   </button>
                 </div>
-                <p className="text-xs mt-3 text-yellow-400/70">
-                  If this is a different version or remix, consider updating the title to reflect the difference.
+
+                <p className="text-xs mt-3 text-yellow-400/80">
+                  If this is a different version or remix, update the title so listeners can tell them apart.
                 </p>
               </div>
             </div>
           </div>
         )}
         <div
-          className={`relative border-2 border-dashed rounded-xl p-12 text-center transition-all duration-200 ${
-            dragActive 
-              ? 'border-purple-500 bg-purple-500/10' 
-              : 'border-gray-600 hover:border-gray-500'
-          }`}
+          className={`relative border-2 rounded-2xl p-5 sm:p-8 text-center transition-all duration-200 ${
+            dragActive
+              ? 'border-purple-500 bg-purple-500/10'
+              : 'border-gray-600/80 hover:border-gray-500'
+          } ${uploadedFile ? 'border-solid' : 'border-dashed'}`}
           onDragEnter={handleDrag}
           onDragLeave={handleDrag}
           onDragOver={handleDrag}
           onDrop={handleDrop}
+          role="group"
+          aria-label="Audio file upload"
         >
           <input
+            ref={fileInputRef}
+            id="upload-audio-file"
             type="file"
             accept="audio/*"
             onChange={handleFileChange}
-            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+            className="sr-only"
+            aria-label="Choose audio file to upload"
           />
           <div className="space-y-4">
-            <div className="w-16 h-16 mx-auto bg-gray-600 rounded-lg flex items-center justify-center">
+            <div className="w-14 h-14 sm:w-16 sm:h-16 mx-auto bg-gray-700 rounded-2xl flex items-center justify-center">
               {extractingMetadata ? (
-                <Loader2 className="w-8 h-8 text-purple-400 animate-spin" />
+                <Loader2 className="w-7 h-7 sm:w-8 sm:h-8 text-purple-400 animate-spin" />
               ) : (
-                <Music className="w-8 h-8 text-gray-400" />
+                <Music className="w-7 h-7 sm:w-8 sm:h-8 text-gray-300" />
               )}
             </div>
-            <div>
-              <p className="text-white font-medium text-lg">
-                {uploadedFile ? uploadedFile.name : 'Select 100MB file(s) or less to upload'}
+            <div className="space-y-2">
+              <p className="text-white font-semibold text-base sm:text-lg break-words">
+                {uploadedFile ? uploadedFile.name : 'Choose an audio file to upload'}
               </p>
-              <p className="text-gray-400 mt-2">
-                {extractingMetadata ? 'Extracting metadata...' : 'or drag & drop file(s) here'}
+              <p className="text-gray-300 text-sm sm:text-base">
+                {extractingMetadata ? 'Extracting metadata…' : 'Best on mobile: tap below to pick a file from your device.'}
+              </p>
+              <p className="text-gray-500 text-xs sm:text-sm">Supports audio files up to {MAX_UPLOAD_SIZE_MB}MB.</p>
+            </div>
+
+            <div className="flex flex-col items-center gap-3">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="min-h-12 w-full sm:w-auto px-5 py-3 rounded-xl bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-semibold shadow-lg shadow-purple-900/20 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:ring-offset-2 focus:ring-offset-gray-900"
+                aria-controls="upload-audio-file"
+              >
+                {uploadedFile ? 'Choose a different file' : 'Choose file'}
+              </button>
+              <p className="hidden md:block text-sm text-gray-400">
+                {extractingMetadata ? 'Reading your audio file…' : 'You can also drag and drop a file here from desktop.'}
               </p>
             </div>
           </div>
@@ -1301,9 +1338,22 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
             />
           </div>
 
+          {/* Primary Artist */}
+          <div className="space-y-2">
+            <label className="text-white font-medium">Primary Artist</label>
+            <input
+              type="text"
+              value={formData.primaryArtist}
+              onChange={(e) => handleInputChange('primaryArtist', e.target.value)}
+              placeholder="Enter the main artist name"
+              className="w-full bg-white/10 border border-white/20 rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+            />
+            <p className="text-gray-400 text-sm">Required. This is the artist name saved on the track.</p>
+          </div>
+
           {/* Tag Artists */}
           <div className="space-y-2">
-            <label className="text-white font-medium">Tag Artists</label>
+            <label className="text-white font-medium">Tag Other Artists</label>
             <input
               type="text"
               value={formData.tagArtists}
@@ -1419,7 +1469,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
 
           {showStatusModal ? (
             <div 
-              className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+              className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-3 sm:p-4"
               onClick={(e) => {
                 if (e.target === e.currentTarget && uploadStatus.stage !== 'uploading' && uploadStatus.stage !== 'processing' && uploadStatus.stage !== 'generating_art') {
                   setShowStatusModal(false);
@@ -1428,7 +1478,10 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
             >
               <div 
                 ref={statusModalRef}
-                className="bg-gray-900/95 rounded-2xl p-6 max-w-lg w-full mx-4 border border-white/10 shadow-2xl shadow-black/50 transform transition-all duration-300 animate-fade-in relative"
+                className="bg-gray-900/95 rounded-3xl sm:rounded-2xl p-5 sm:p-6 max-w-lg w-full mx-0 sm:mx-4 border border-white/10 shadow-2xl shadow-black/50 transform transition-all duration-300 animate-fade-in relative max-h-[92vh] overflow-y-auto"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="upload-status-title"
               >
                 <button 
                   onClick={() => {
@@ -1436,9 +1489,9 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
                       setShowStatusModal(false);
                     }
                   }}
-                  className={`absolute top-4 right-4 p-1 rounded-full ${uploadStatus.stage === 'uploading' || uploadStatus.stage === 'processing' || uploadStatus.stage === 'generating_art' 
-                    ? 'text-gray-500 cursor-not-allowed' 
-                    : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}
+                  className={`absolute top-4 right-4 min-h-11 min-w-11 inline-flex items-center justify-center rounded-full border ${uploadStatus.stage === 'uploading' || uploadStatus.stage === 'processing' || uploadStatus.stage === 'generating_art' 
+                    ? 'text-gray-500 border-white/5 cursor-not-allowed' 
+                    : 'text-gray-300 border-white/10 hover:bg-gray-800 hover:text-white'}`}
                   disabled={uploadStatus.stage === 'uploading' || uploadStatus.stage === 'processing' || uploadStatus.stage === 'generating_art'}
                   aria-label="Close"
                 >
@@ -1490,7 +1543,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
                     </div>
                     
                     <div className="flex-1 min-w-0">
-                      <h3 className="text-xl font-bold text-white leading-tight">
+                      <h3 id="upload-status-title" className="text-lg sm:text-xl font-bold text-white leading-tight pr-10">
                         {uploadStatus.message}
                       </h3>
                       {uploadStatus.details && (
@@ -1604,10 +1657,12 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
                   )}
                   
                   {uploadStatus.canCancel && (
-                    <div className="pt-2 flex justify-end">
+                    <div className="pt-2 flex flex-col sm:flex-row sm:justify-end gap-3">
+                      <div className="text-xs text-gray-400 sm:mr-auto">You can safely stop this upload before it finishes.</div>
                       <button
+                        type="button"
                         onClick={cancelUpload}
-                        className="px-3 py-2 text-sm rounded-lg bg-white/5 hover:bg-white/10 text-gray-200 border border-white/10 transition-colors"
+                        className="min-h-12 w-full sm:w-auto px-4 py-3 text-sm font-semibold rounded-xl bg-white/5 hover:bg-white/10 text-gray-100 border border-white/10 transition-colors"
                       >
                         Cancel upload
                       </button>
@@ -1642,9 +1697,11 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
           {/* Publish Button */}
           <div className="pt-4">
             <button
+              type="button"
               onClick={handlePublish}
               disabled={isPublishing || !uploadedFile}
-              className={`px-8 py-3 rounded-lg font-semibold transition-all duration-200 flex items-center space-x-2 ${
+              aria-disabled={isPublishing || !uploadedFile}
+              className={`w-full sm:w-auto min-h-12 px-8 py-3 rounded-xl font-semibold transition-all duration-200 inline-flex items-center justify-center space-x-2 ${
                 isPublishing || !uploadedFile
                   ? 'bg-gray-600 cursor-not-allowed'
                   : publishStatus === 'success'

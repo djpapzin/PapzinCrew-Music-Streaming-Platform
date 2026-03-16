@@ -85,7 +85,7 @@ const UploadPage: React.FC = () => {
             </div>
             <div>
               <p className="text-white font-medium text-lg">
-                {uploadedFile ? uploadedFile.name : 'Select 100MB file(s) or less to upload'}
+                {uploadedFile ? uploadedFile.name : 'Select 200MB file(s) or less to upload'}
               </p>
               <p className="text-gray-400 mt-2">or drag & drop file(s) here</p>
             </div>

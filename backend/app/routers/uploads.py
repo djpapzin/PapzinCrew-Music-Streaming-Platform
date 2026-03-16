@@ -233,7 +233,7 @@ async def extract_metadata(
 
 # Constants
 UPLOAD_DIR = os.getenv("UPLOAD_DIR", "uploads")
-MAX_FILE_SIZE_MB = 100  # 100MB max file size
+MAX_FILE_SIZE_MB = 200  # 200MB max file size
 SUPPORTED_MIME_TYPES = {
     'audio/mpeg': '.mp3',
     'audio/wav': '.wav',
@@ -248,7 +248,55 @@ SUPPORTED_MIME_TYPES = {
     'audio/x-ms-wma': '.wma'
 }
 
+# Guardrails for likely accidental Telegram voice/TTS uploads.
+# These are intentionally scoped to short/small OGG uploads so normal music files
+# in MP3/WAV/FLAC/etc. are unaffected, and larger OGG uploads can still pass.
+VOICE_STYLE_OGG_MAX_DURATION_SECONDS = float(os.getenv("VOICE_STYLE_OGG_MAX_DURATION_SECONDS", "90"))
+VOICE_STYLE_OGG_MAX_FILE_SIZE_BYTES = int(os.getenv("VOICE_STYLE_OGG_MAX_FILE_SIZE_BYTES", str(5 * 1024 * 1024)))
+VOICE_STYLE_OGG_STRONG_FILE_SIZE_BYTES = int(os.getenv("VOICE_STYLE_OGG_STRONG_FILE_SIZE_BYTES", str(1024 * 1024)))
+
 # Prefer B2 storage; create local upload directories only for fallback or when B2 is disabled
+
+
+def _classify_voice_style_audio(
+    *,
+    extension: str,
+    mime_type: str,
+    file_size_bytes: int,
+    duration_seconds: Optional[float],
+) -> Optional[Dict[str, Any]]:
+    """Return a structured rejection when an upload looks like a short Telegram voice/TTS OGG."""
+    if extension != '.ogg' or mime_type != 'audio/ogg':
+        return None
+
+    if duration_seconds is None:
+        if file_size_bytes <= VOICE_STYLE_OGG_STRONG_FILE_SIZE_BYTES:
+            return {
+                'valid': False,
+                'error': (
+                    'This OGG looks like a small voice/TTS clip, not a full music mix. '
+                    'Please resend the original track as the actual audio/document file.'
+                ),
+                'error_code': 'likely_voice_note_upload',
+                'guardrail': 'voice_style_ogg_small_without_duration',
+                'voice_style_detected': True,
+            }
+        return None
+
+    if duration_seconds <= VOICE_STYLE_OGG_MAX_DURATION_SECONDS and file_size_bytes <= VOICE_STYLE_OGG_MAX_FILE_SIZE_BYTES:
+        return {
+            'valid': False,
+            'error': (
+                'This OGG looks like a short voice/TTS clip, not the intended music mix. '
+                'Please resend the original mix as an audio/document upload instead of a voice note.'
+            ),
+            'error_code': 'likely_voice_note_upload',
+            'guardrail': 'voice_style_ogg_short_and_small',
+            'voice_style_detected': True,
+            'duration_seconds': duration_seconds,
+        }
+
+    return None
 
 def validate_audio_file(file_or_bytes, filename: Optional[str] = None, lightweight: bool = False) -> Tuple[bool, Dict[str, Any]]:
     """
@@ -368,6 +416,20 @@ def validate_audio_file(file_or_bytes, filename: Optional[str] = None, lightweig
                 quality_kbps = int(br if br <= 1000 else round(br / 1000))
         except Exception:
             pass
+
+        voice_style_rejection = _classify_voice_style_audio(
+            extension=extension,
+            mime_type=detected_mime,
+            file_size_bytes=file_size,
+            duration_seconds=duration_seconds,
+        )
+        if voice_style_rejection:
+            return False, {
+                **voice_style_rejection,
+                'file_extension': extension,
+                'mime_type': detected_mime,
+                'file_size_bytes': file_size,
+            }
 
         result: Dict[str, Any] = {
             'valid': True,
@@ -590,7 +652,7 @@ async def api_check_duplicate(
 ):
     """Enhanced endpoint to check for potential duplicates using multiple detection methods."""
     title = str(payload.get("title", "")).strip()
-    artist_name = str(payload.get("artist_name", "")).strip()
+    artist_name = str(payload.get("artist_name") or payload.get("primary_artist") or "").strip()
     file_size = int(payload.get("file_size", 0))
     file_hash = payload.get("file_hash")  # Optional file hash for exact matching
     duration_seconds = payload.get("duration_seconds")  # Optional duration
@@ -600,7 +662,7 @@ async def api_check_duplicate(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
-                "error": "Missing or invalid fields: 'title', 'artist_name', 'file_size'",
+                "error": "Missing or invalid fields: 'title', 'artist_name' (or 'primary_artist'), 'file_size'",
                 "error_code": "invalid_request",
             },
         )
@@ -642,12 +704,16 @@ async def api_check_duplicate(
             }
         )
 
+    return {"duplicate": False}
+
 @router.post("", status_code=201)
 @router.post("/", status_code=201)
 @router.post("/upload-mix")
 async def upload_mix(
     title: str = Form(...),
-    artist_name: str = Form(...),
+    artist_name: Optional[str] = Form(None),
+    primary_artist: Optional[str] = Form(None),
+    tag_artists: Optional[str] = Form(None),
     album: Optional[str] = Form(None),
     year: Optional[int] = Form(None),
     description: Optional[str] = Form(None),
@@ -669,6 +735,8 @@ async def upload_mix(
     Upload a new mix file with metadata.
     Validates the file and checks for duplicates before saving.
     """
+    artist_name = (primary_artist or artist_name or '').strip()
+
     if request is not None:
         enforce_rate_limit(request, bucket="upload", limit_env="UPLOAD_RATE_LIMIT", window_env="UPLOAD_RATE_LIMIT_WINDOW_SECONDS")
 
@@ -684,6 +752,7 @@ async def upload_mix(
             "file_name": getattr(file, 'filename', None),
             "availability": availability,
             "allow_downloads": allow_downloads,
+            "tag_artists": tag_artists,
         },
     )
     termprint(f"[upload] start title='{title}' artist='{artist_name}' filename='{getattr(file, 'filename', None)}'")

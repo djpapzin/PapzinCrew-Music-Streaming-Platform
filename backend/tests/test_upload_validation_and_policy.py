@@ -62,7 +62,7 @@ def test_upload_file_too_large_returns_400(test_app, tmp_path):
             False,
             {
                 "valid": False,
-                "error": "File too large. Maximum size is 100MB",
+                "error": "File too large. Maximum size is 200MB",
                 "error_code": "file_too_large",
                 "file_extension": ".mp3",
                 "file_size_bytes": 150 * 1024 * 1024,
@@ -100,6 +100,33 @@ def test_upload_unsupported_file_type_returns_400(test_app, tmp_path):
     assert resp.status_code == 400, resp.text
     body = resp.json()
     assert body.get("detail", {}).get("error_code") == "unsupported_file_type"
+
+
+def test_upload_likely_voice_note_returns_400_and_skips_storage(test_app, tmp_path):
+    client = TestClient(test_app)
+    data, files = _form_data(file_name="voice-note.ogg", content=b"OggS" + b"x" * 4096)
+
+    with patch(
+        "app.routers.uploads.validate_audio_file",
+        return_value=(
+            False,
+            {
+                "valid": False,
+                "error": "This OGG looks like a short voice/TTS clip, not the intended music mix.",
+                "error_code": "likely_voice_note_upload",
+                "file_extension": ".ogg",
+                "mime_type": "audio/ogg",
+                "file_size_bytes": len(files["file"][1].getvalue()),
+                "voice_style_detected": True,
+            },
+        ),
+    ), patch("app.routers.uploads.B2Storage.is_configured") as mock_b2_configured:
+        resp = client.post("/upload", data={**data, "skip_duplicate_check": "true"}, files=files)
+
+    assert resp.status_code == 400, resp.text
+    body = resp.json()
+    assert body.get("detail", {}).get("error_code") == "likely_voice_note_upload"
+    mock_b2_configured.assert_not_called()
 
 
 def test_upload_duplicate_returns_409_pre_storage(test_app, tmp_path):
@@ -162,6 +189,49 @@ def test_upload_duplicate_same_bytes_different_metadata_returns_exact_hash_match
     assert detail.get("error_code") == "duplicate_track"
     assert detail.get("duplicate_info", {}).get("match_type") == "exact_file"
     assert detail.get("duplicate_info", {}).get("reason") == "Identical file content detected"
+
+
+def test_upload_accepts_primary_artist_alias(test_app, tmp_path):
+    client = TestClient(test_app)
+    data, files = _form_data(file_name="alias.mp3", content=b"alias-content")
+    data.pop("artist_name")
+    data["primary_artist"] = "Alias Artist"
+    data["tag_artists"] = "Featured Friend"
+
+    base_validate_ok = (
+        True,
+        {
+            "valid": True,
+            "mime_type": "audio/mpeg",
+            "file_extension": ".mp3",
+            "file_size_bytes": len(files["file"][1].getvalue()),
+        },
+    )
+
+    with patch("app.routers.uploads.validate_audio_file", return_value=base_validate_ok):
+        with patch("app.routers.uploads.AIArtGenerator.generate_cover_art_from_metadata", return_value=None):
+            with patch("app.routers.uploads.B2Storage.is_configured", return_value=False):
+                resp = client.post("/upload", data={**data, "skip_duplicate_check": "true"}, files=files)
+
+    assert resp.status_code == 201, resp.text
+    body = resp.json()
+    assert body.get("artist", {}).get("name") == "Alias Artist"
+
+
+def test_check_duplicate_accepts_primary_artist_alias(test_app):
+    client = TestClient(test_app)
+
+    resp = client.post(
+        "/upload/check-duplicate",
+        json={
+            "title": "Alias Title",
+            "primary_artist": "Alias Artist",
+            "file_size": 12345,
+        },
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json().get("duplicate") is False
 
 
 def test_enforce_b2_only_returns_503_when_unconfigured(test_app, tmp_path, monkeypatch):

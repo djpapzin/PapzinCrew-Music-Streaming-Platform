@@ -75,7 +75,7 @@ export default function Home() {
       'audio/ogg': ['.ogg'],
     },
     maxFiles: 1,
-    maxSize: 100 * 1024 * 1024, // 100MB
+    maxSize: 200 * 1024 * 1024, // 200MB
   });
 
   const handleCoverArtChange = (file: File | null) => {
@@ -151,7 +151,7 @@ export default function Home() {
                   Upload single stream
                 </h1>
                 <p className="text-muted-foreground">
-                  Select 100MB file(s) or less to upload<br />
+                  Select 200MB file(s) or less to upload<br />
                   or drag & drop file(s) here
                 </p>
               </div>
