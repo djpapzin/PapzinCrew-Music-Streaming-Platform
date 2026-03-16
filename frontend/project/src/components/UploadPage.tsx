@@ -10,6 +10,8 @@ const API_BASE = import.meta.env.VITE_API_URL || (window.location.origin.include
 const API_URL = API_BASE.endsWith('/') ? API_BASE.slice(0, -1) : API_BASE;
 const MAX_UPLOAD_SIZE_MB = 200;
 const MAX_UPLOAD_SIZE_BYTES = MAX_UPLOAD_SIZE_MB * 1024 * 1024;
+const NON_BLOCKING_METADATA_MAX_MB = 25;
+const NON_BLOCKING_METADATA_MAX_BYTES = NON_BLOCKING_METADATA_MAX_MB * 1024 * 1024;
 
 // Add fade-in animation
 const fadeInKeyframes = `
@@ -97,6 +99,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const currentXhrRef = useRef<XMLHttpRequest | null>(null);
   const artGenerationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const metadataRequestIdRef = useRef(0);
   const refreshLibrary = useCallback(() => {
     try {
       window.dispatchEvent(new Event('library:refresh'));
@@ -128,6 +131,26 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
     }
   };
 
+  const deriveFallbackMetadata = useCallback((file: File) => {
+    const extension = file.name.lastIndexOf('.') > 0 ? file.name.slice(file.name.lastIndexOf('.')) : '';
+    const stem = extension ? file.name.slice(0, -extension.length) : file.name;
+    const cleanedStem = stem.replace(/\s*[\[(].*?[\])]\s*/g, ' ').trim();
+    const separators = [' - ', ' – ', '-', '–', '—', '|', '•'];
+
+    for (const separator of separators) {
+      if (cleanedStem.includes(separator)) {
+        const [artistPart, ...titleParts] = cleanedStem.split(separator);
+        const artist = artistPart?.trim();
+        const title = titleParts.join(separator).trim();
+        if (artist && title) {
+          return { title, artist };
+        }
+      }
+    }
+
+    return { title: stem, artist: '' };
+  }, []);
+
   const validateAndSetFile = useCallback(async (file: File) => {
     // Reset states
     setFileValidation(null);
@@ -144,14 +167,38 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
       });
       return false;
     }
+
+    const fallbackMetadata = deriveFallbackMetadata(file);
+    const shouldPrefetchMetadata = file.size <= NON_BLOCKING_METADATA_MAX_BYTES;
+    metadataRequestIdRef.current += 1;
     
-    // Set file for metadata extraction
+    // Set file immediately so the form stays responsive and Publish is available.
     setUploadedFile(file);
+    setCoverArt(null);
+    setFormData(prev => ({
+      ...prev,
+      title: fallbackMetadata.title || prev.title,
+      primaryArtist: fallbackMetadata.artist || prev.primaryArtist,
+      description: '',
+      genre: prev.genre || 'Podcast Shows'
+    }));
+    setFileValidation({
+      valid: true,
+      mime_type: file.type,
+      file_extension: file.name.split('.').pop()?.toLowerCase() || '',
+      file_size_bytes: file.size
+    });
+
+    // Large files should not be uploaded twice just to prefill metadata.
+    if (!shouldPrefetchMetadata) {
+      setExtractingMetadata(false);
+      return true;
+    }
     
-    // Extract metadata which will also validate the file
-    await extractMetadata(file);
+    // Metadata extraction is helpful, but it should never block the user.
+    void extractMetadata(file, metadataRequestIdRef.current, fallbackMetadata);
     return true;
-  }, []);
+  }, [deriveFallbackMetadata]);
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
@@ -163,21 +210,25 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
     }
   };
 
-  const extractMetadata = async (file: File) => {
+  const extractMetadata = async (
+    file: File,
+    requestId: number,
+    fallbackMetadata: { title: string; artist: string }
+  ) => {
     setExtractingMetadata(true);
-    setFileValidation(null);
     
     try {
-      // Create a new File object to ensure we have a fresh copy
-      const fileCopy = new File([file], file.name, { type: file.type });
-      
-      const formData = new FormData();
-      formData.append('file', fileCopy);
+      const requestFormData = new FormData();
+      requestFormData.append('file', file);
       
       const response = await fetch(`${API_URL}/upload/extract-metadata`, {
         method: 'POST',
-        body: formData,
+        body: requestFormData,
       });
+
+      if (requestId !== metadataRequestIdRef.current) {
+        return;
+      }
       
       if (response.ok) {
         const metadata = await response.json();
@@ -187,19 +238,20 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
         const extractedMetadata = metadata.metadata || metadata;
         console.log('Extracted metadata object:', extractedMetadata);
         
-        // Update form fields with extracted metadata
-        const updatedFormData = {
-          title: extractedMetadata.title || '',
-          primaryArtist: extractedMetadata.artist || '',
-          genre: extractedMetadata.genre || 'Podcast Shows',
-          description: extractedMetadata.album ? `Album: ${extractedMetadata.album}${extractedMetadata.year ? ` (${extractedMetadata.year})` : ''}` : ''
-        };
-        
-        console.log('Form data updates:', updatedFormData);
-        
         setFormData(prev => ({
           ...prev,
-          ...updatedFormData
+          title: !prev.title || prev.title === fallbackMetadata.title
+            ? (extractedMetadata.title || prev.title)
+            : prev.title,
+          primaryArtist: !prev.primaryArtist || prev.primaryArtist === fallbackMetadata.artist
+            ? (extractedMetadata.artist || prev.primaryArtist)
+            : prev.primaryArtist,
+          genre: prev.genre === 'Podcast Shows'
+            ? (extractedMetadata.genre || prev.genre)
+            : prev.genre,
+          description: !prev.description
+            ? (extractedMetadata.album ? `Album: ${extractedMetadata.album}${extractedMetadata.year ? ` (${extractedMetadata.year})` : ''}` : prev.description)
+            : prev.description
         }));
         
         // Set cover art if available
@@ -207,7 +259,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
           setCoverArt(metadata.cover_art);
         }
         
-        // Set file as valid if we got this far
+        // Keep file marked valid after successful background extraction
         setFileValidation({
           valid: true,
           mime_type: file.type,
@@ -241,12 +293,11 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
       }
     } catch (error) {
       console.error('Error extracting metadata:', error);
-      setUploadError({
-        error: 'Error processing file. Please try again.',
-        error_code: 'processing_error'
-      });
+      // Don't block the upload flow if background metadata extraction fails.
     } finally {
-      setExtractingMetadata(false);
+      if (requestId === metadataRequestIdRef.current) {
+        setExtractingMetadata(false);
+      }
     }
   };
 
@@ -255,6 +306,34 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
       validateAndSetFile(e.target.files[0]);
     }
   };
+
+  const isLargeFilePendingMetadata = Boolean(
+    fileValidation?.valid &&
+    !extractingMetadata &&
+    typeof fileValidation.file_size_bytes === 'number' &&
+    fileValidation.file_size_bytes > NON_BLOCKING_METADATA_MAX_BYTES
+  );
+
+  const fileStatusTitle = isLargeFilePendingMetadata ? 'File Selected' : 'File Ready';
+  const fileStatusDetails = isLargeFilePendingMetadata
+    ? `Size: ${((fileValidation?.file_size_bytes || 0) / (1024 * 1024)).toFixed(1)}MB${fileValidation?.mime_type ? ` • Type: ${fileValidation.mime_type}` : ''} • Metadata will be checked during upload`
+    : `${fileValidation?.file_size_bytes ? `Size: ${(fileValidation.file_size_bytes / (1024 * 1024)).toFixed(1)}MB` : ''}${fileValidation?.mime_type ? `${fileValidation?.file_size_bytes ? ' • ' : ''}Type: ${fileValidation.mime_type}` : ''}`;
+
+  const filePickerHint = extractingMetadata
+    ? 'Extracting metadata…'
+    : isLargeFilePendingMetadata
+      ? 'Large file selected — metadata will be checked during upload.'
+      : uploadedFile
+        ? 'File selected. You can keep editing before publishing.'
+        : 'Best on mobile: tap below to pick a file from your device.';
+
+  const desktopFilePickerHint = extractingMetadata
+    ? 'Reading your audio file…'
+    : isLargeFilePendingMetadata
+      ? 'Large files skip the pre-publish metadata scan so upload stays responsive.'
+      : uploadedFile
+        ? 'You can choose a different file or keep editing the details below.'
+        : 'You can also drag and drop a file here from desktop.';
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -975,11 +1054,8 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
           <div className="bg-green-500/10 border border-green-500/50 text-green-300 px-4 py-3 rounded-lg flex items-start space-x-2">
             <CheckCircle className="w-5 h-5 mt-0.5 flex-shrink-0" />
             <div>
-              <p className="font-medium">File Validated</p>
-              <p className="text-sm">
-                {fileValidation.file_size_bytes && `Size: ${(fileValidation.file_size_bytes / (1024 * 1024)).toFixed(1)}MB`}
-                {fileValidation.mime_type && ` • Type: ${fileValidation.mime_type}`}
-              </p>
+              <p className="font-medium">{fileStatusTitle}</p>
+              <p className="text-sm">{fileStatusDetails}</p>
             </div>
           </div>
         )}
@@ -1200,7 +1276,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
                 {uploadedFile ? uploadedFile.name : 'Choose an audio file to upload'}
               </p>
               <p className="text-gray-300 text-sm sm:text-base">
-                {extractingMetadata ? 'Extracting metadata…' : 'Best on mobile: tap below to pick a file from your device.'}
+                {filePickerHint}
               </p>
               <p className="text-gray-500 text-xs sm:text-sm">Supports audio files up to {MAX_UPLOAD_SIZE_MB}MB.</p>
             </div>
@@ -1215,7 +1291,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
                 {uploadedFile ? 'Choose a different file' : 'Choose file'}
               </button>
               <p className="hidden md:block text-sm text-gray-400">
-                {extractingMetadata ? 'Reading your audio file…' : 'You can also drag and drop a file here from desktop.'}
+                {desktopFilePickerHint}
               </p>
             </div>
           </div>
