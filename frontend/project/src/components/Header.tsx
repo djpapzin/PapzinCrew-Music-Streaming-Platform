@@ -30,7 +30,10 @@ const Header: React.FC<HeaderProps> = ({ searchQuery, setSearchQuery, onMenuClic
   };
 
   return (
-    <div className="bg-black/50 backdrop-blur-xl border-b border-white/10 px-4 lg:px-6 py-4">
+    <div
+      className="bg-black/50 backdrop-blur-xl border-b border-white/10 px-4 lg:px-6 py-4"
+      style={{ paddingTop: 'calc(1rem + env(safe-area-inset-top, 0px))' }}
+    >
       <div className="flex items-center justify-between">
         {/* Left section */}
         <div className="flex items-center space-x-4">
