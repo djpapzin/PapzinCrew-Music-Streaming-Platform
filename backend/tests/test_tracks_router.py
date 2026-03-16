@@ -144,6 +144,64 @@ class TestTrackStreaming:
         assert sample_track.play_count == 3
         mock_db_session.commit.assert_not_called()
 
+class TestProxyTrackStreaming:
+    """Test proxy streaming header behavior for remote tracks."""
+
+    @pytest.fixture
+    def remote_proxy_track(self):
+        track = MagicMock()
+        track.id = 1
+        track.title = "Remote Proxy Track"
+        track.file_path = "https://example.com/audio/test.ogg"
+        track.availability = "public"
+        track.artist = MagicMock()
+        return track
+
+    def test_proxy_stream_head_range_derives_total_size_from_content_range(self, remote_proxy_track):
+        async def _head_with_content_range(*args, **kwargs):
+            response = MagicMock()
+            response.status_code = 206
+            response.headers = {
+                "Content-Type": "audio/ogg",
+                "Content-Range": "bytes 0-1023/4096",
+                "Accept-Ranges": "bytes",
+            }
+            return response
+
+        with patch("app.routers.tracks.crud.get_mix", return_value=remote_proxy_track), patch(
+            "httpx.AsyncClient.head", side_effect=_head_with_content_range
+        ):
+            response = client.head(
+                "/tracks/1/stream/proxy",
+                headers={"Range": "bytes=0-1023"},
+                follow_redirects=False,
+            )
+
+        assert response.status_code == 206, response.text
+        assert response.headers.get("content-range") == "bytes 0-1023/4096"
+        assert response.headers.get("content-length") == "1024"
+        assert response.headers.get("accept-ranges") == "bytes"
+
+    def test_proxy_stream_head_without_range_uses_total_from_content_range_when_length_missing(self, remote_proxy_track):
+        async def _head_with_total_only(*args, **kwargs):
+            response = MagicMock()
+            response.status_code = 200
+            response.headers = {
+                "Content-Type": "audio/ogg",
+                "Content-Range": "bytes 0-4095/4096",
+                "Accept-Ranges": "bytes",
+            }
+            return response
+
+        with patch("app.routers.tracks.crud.get_mix", return_value=remote_proxy_track), patch(
+            "httpx.AsyncClient.head", side_effect=_head_with_total_only
+        ):
+            response = client.head("/tracks/1/stream/proxy", follow_redirects=False)
+
+        assert response.status_code == 200, response.text
+        assert response.headers.get("content-length") == "4096"
+        assert response.headers.get("accept-ranges") == "bytes"
+
 class TestTrackMetadata:
     """Test track metadata retrieval."""
     

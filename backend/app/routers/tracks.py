@@ -757,29 +757,60 @@ async def proxy_stream_track(track_id: int, request: Request, db: Session = Depe
 
             total_length_header = head_resp.headers.get("Content-Length")
             total_size: Optional[int] = int(total_length_header) if total_length_header and total_length_header.isdigit() else None
+            upstream_content_range = head_resp.headers.get("Content-Range")
+
+            def _parse_content_range(value: Optional[str]) -> tuple[Optional[int], Optional[int], Optional[int]]:
+                if not value:
+                    return None, None, None
+                try:
+                    unit_and_range, total_s = value.strip().split("/", 1)
+                    unit, range_part = unit_and_range.split(" ", 1)
+                    if unit.strip().lower() != "bytes" or "-" not in range_part:
+                        return None, None, None
+                    start_s, end_s = range_part.split("-", 1)
+                    start = int(start_s)
+                    end = int(end_s)
+                    total = int(total_s) if total_s.isdigit() else None
+                    return start, end, total
+                except Exception:
+                    return None, None, None
+
+            upstream_range_start, upstream_range_end, upstream_total_size = _parse_content_range(upstream_content_range)
+            if total_size is None and upstream_total_size is not None:
+                total_size = upstream_total_size
 
             # Determine status and range headers if client asked for Range
             status_code = 200
             range_header = request.headers.get("range")
             if range_header and total_size is not None:
-                # parse form: bytes=start-end
-                try:
-                    unit, rng = range_header.split("=", 1)
-                    if unit.strip().lower() == "bytes" and "-" in rng:
-                        start_s, end_s = rng.split("-", 1)
-                        start = int(start_s) if start_s else 0
-                        end = int(end_s) if end_s else total_size - 1
-                        if start > end or start >= total_size:
-                            raise HTTPException(status_code=416, detail="Requested Range Not Satisfiable")
-                        part_len = end - start + 1
-                        resp_headers["Content-Range"] = f"bytes {start}-{end}/{total_size}"
-                        resp_headers["Content-Length"] = str(part_len)
-                        status_code = 206
-                except Exception:
-                    # If parsing fails, fall back to 200 without content-range
-                    pass
+                # Prefer the upstream Content-Range if it is available; it is more reliable
+                # than rebuilding it solely from the client request when the origin omits
+                # Content-Length but still reports the served byte range.
+                if upstream_content_range and upstream_range_start is not None and upstream_range_end is not None:
+                    part_len = upstream_range_end - upstream_range_start + 1
+                    resp_headers["Content-Range"] = upstream_content_range
+                    resp_headers["Content-Length"] = str(part_len)
+                    status_code = 206
+                else:
+                    # parse form: bytes=start-end
+                    try:
+                        unit, rng = range_header.split("=", 1)
+                        if unit.strip().lower() == "bytes" and "-" in rng:
+                            start_s, end_s = rng.split("-", 1)
+                            start = int(start_s) if start_s else 0
+                            end = int(end_s) if end_s else total_size - 1
+                            if start > end or start >= total_size:
+                                raise HTTPException(status_code=416, detail="Requested Range Not Satisfiable")
+                            part_len = end - start + 1
+                            resp_headers["Content-Range"] = f"bytes {start}-{end}/{total_size}"
+                            resp_headers["Content-Length"] = str(part_len)
+                            status_code = 206
+                    except Exception:
+                        # If parsing fails, fall back to 200 without content-range
+                        pass
             else:
-                # Full response: if we know total size, include it
+                # Full response: if we know total size, include it even when the upstream
+                # omitted Content-Length but exposed the total via Content-Range.
                 if total_size is not None:
                     resp_headers["Content-Length"] = str(total_size)
 
