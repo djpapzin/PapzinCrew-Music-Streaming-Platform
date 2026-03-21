@@ -258,6 +258,7 @@ At minimum confirm these values:
 
 - `DRIVE_REMOTE`
 - `DRIVE_PATH`
+- `GOOGLE_DRIVE_ACCOUNT_EMAIL` = `djpapzin@gmail.com`
 - `B2_REMOTE`
 - `B2_BUCKET`
 - `B2_PREFIX`
@@ -544,10 +545,11 @@ That would turn this from a viable single-artist migration path into a safer gen
 
 For the real first batch, DJ Papzin should:
 
-1. create a small Google Drive folder with **5–10 Papzin mixes only**
+1. create a small Google Drive folder under **`djpapzin@gmail.com`** with **5–10 Papzin mixes only**
 2. rename files to **`Artist - Title.ext`**
 3. fill `.migration.first-batch.env` from `scripts/migration/first-batch.env.example`
-4. run `bash scripts/migration/drive_to_b2_sync.sh`
-5. build and inspect the manifest before any DB commit
+4. in `rclone config`, verify the Google Drive remote is authenticated as **`djpapzin@gmail.com`** and not `l.fanampe@gmail.com`
+5. run `bash scripts/migration/drive_to_b2_sync.sh`
+6. build and inspect the manifest before any DB commit
 
 That is the current viable Path A.
