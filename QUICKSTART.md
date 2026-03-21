@@ -2,7 +2,8 @@
 
 ## 🚀 Live Platform
 - Frontend: https://papzincrew.netlify.app/
-- Backend: https://papzincrew-backend.onrender.com/ (health: `/health`)
+- Backend: http://13.48.27.192/ (health: `/health`)
+- Historical/stale backend reference: `https://papzincrew-backend.onrender.com/` is not the current production source of truth
 
 ## 🧪 Local Development
 ### Prereqs

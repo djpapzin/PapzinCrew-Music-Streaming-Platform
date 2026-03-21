@@ -1,12 +1,12 @@
 # Papzin & Crew - Music Streaming Platform
 [![CI](https://github.com/djpapzin/PapzinCrew-Music-Streaming-Platform/actions/workflows/ci.yml/badge.svg)](https://github.com/djpapzin/PapzinCrew-Music-Streaming-Platform/actions/workflows/ci.yml)
 [![Frontend](https://img.shields.io/website?down_message=offline&label=frontend&up_message=online&url=https%3A%2F%2Fpapzincrew.netlify.app%2F)](https://papzincrew.netlify.app/)
-[![Backend health](https://img.shields.io/website?down_message=unhealthy&label=backend%20health&up_message=healthy&url=https%3A%2F%2Fpapzincrew-backend.onrender.com%2Fhealth)](https://papzincrew-backend.onrender.com/health)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE.md)
 
 ## Live Platform
 - Frontend: https://papzincrew.netlify.app/
-- Backend: https://papzincrew-backend.onrender.com/ (health: `/health`)
+- Backend: http://13.48.27.192/ (health: `/health`)
+- Historical/stale backend reference: `https://papzincrew-backend.onrender.com/` should not be treated as the current production source of truth
 
 ## Logs
 [Backend logs: quick reference](docs/logs.md)
@@ -16,10 +16,10 @@ Papzin & Crew connects independent artists and listeners. DJs and creators uploa
 
 ## Architecture
 - Backend: FastAPI (Uvicorn) + SQLAlchemy + Alembic
-- Database: PostgreSQL (production on Render). SQLite auto-used locally if DATABASE_URL is not set.
+- Database: PostgreSQL on Neon (SQLite auto-used locally if DATABASE_URL is not set)
 - Storage: Backblaze B2 for audio/cover art (local filesystem fallback for dev)
 - Frontend: React (Vite + TypeScript + Tailwind)
-- Hosting: Backend on Render, Frontend on Netlify
+- Hosting: Backend on EC2 behind nginx, Frontend on Netlify
 
 ## Tech Stack
 - Python 3.11, FastAPI, SQLAlchemy 2.x, Alembic, psycopg2-binary
@@ -94,6 +94,7 @@ VITE_API_URL=http://127.0.0.1:8000
   - Max size: 100MB (frontend and backend aligned)
   - Type: validated by extension and Mutagen sniffing; backend responds with structured errors
   - Common error codes: `file_too_large`, `unsupported_file_type`, `invalid_audio_file` (may include `detected_type`)
+  - Short/small `.ogg` uploads that look like Telegram voice notes or TTS artifacts are rejected with `likely_voice_note_upload` so they do not get mistaken for real mixes
 
 • __Duplicate detection__
   - Pre-upload check via `POST /upload/check-duplicate` using title, artist, size, optional file hash and duration
