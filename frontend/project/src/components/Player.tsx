@@ -130,7 +130,7 @@ const Player: React.FC<PlayerProps> = ({
       {/* Mobile Full Player */}
       {showMobilePlayer && (
         <div
-          className="lg:hidden fixed inset-0 bg-black z-50 flex flex-col overflow-y-auto"
+          className="lg:hidden fixed inset-0 bg-black z-50 flex flex-col overflow-hidden"
           style={{ height: '100dvh', minHeight: '100dvh' }}
         >
           {/* Header */}
@@ -152,22 +152,22 @@ const Player: React.FC<PlayerProps> = ({
           </div>
 
           {/* Album Art */}
-          <div className="flex-1 min-h-0 flex items-center justify-center px-6 py-4 sm:px-8 sm:py-6">
+          <div className="flex-1 min-h-0 flex items-center justify-center px-5 py-4 sm:px-8 sm:py-6">
             <img
               src={currentSong.imageUrl}
               alt={currentSong.album}
-              className="w-full max-w-[min(80vw,20rem)] aspect-square max-h-[38vh] sm:max-h-[42vh] rounded-lg object-cover shadow-2xl"
+              className="w-full max-w-[min(74vw,18rem)] aspect-square max-h-[30vh] sm:max-h-[36vh] rounded-lg object-cover shadow-2xl"
             />
           </div>
 
           {/* Song Info */}
-          <div className="px-6 pb-4 flex-shrink-0">
-            <h1 className="text-white text-2xl font-bold mb-2 break-words">{currentSong.title}</h1>
-            <p className="text-gray-400 text-lg truncate">{currentSong.artist}</p>
+          <div className="px-6 pb-3 flex-shrink-0">
+            <h1 className="text-white text-xl sm:text-2xl font-bold mb-1 break-words line-clamp-2">{currentSong.title}</h1>
+            <p className="text-gray-400 text-base sm:text-lg truncate">{currentSong.artist}</p>
           </div>
 
           {/* Progress */}
-          <div className="px-6 pb-4 flex-shrink-0">
+          <div className="px-6 pb-3 flex-shrink-0">
             <input
               type="range"
               min="0"
@@ -191,29 +191,29 @@ const Player: React.FC<PlayerProps> = ({
 
           {/* Controls */}
           <div
-            className="px-6 pt-2 flex-shrink-0"
-            style={{ paddingBottom: 'calc(2rem + env(safe-area-inset-bottom, 0px))' }}
+            className="px-5 sm:px-6 pt-2 flex-shrink-0"
+            style={{ paddingBottom: 'calc(1.25rem + env(safe-area-inset-bottom, 0px))' }}
           >
-            <div className="flex items-center justify-center space-x-6 sm:space-x-8 mb-6">
+            <div className="flex items-center justify-between gap-3 sm:gap-4 mb-5">
               <button
                 onClick={onToggleShuffle}
-                className={`transition-colors duration-200 ${
+                className={`min-h-11 min-w-11 flex items-center justify-center transition-colors duration-200 ${
                   shuffle ? 'text-green-400' : 'text-gray-400'
                 }`}
               >
-                <Shuffle className="w-6 h-6" />
+                <Shuffle className="w-5 h-5 sm:w-6 sm:h-6" />
               </button>
 
               <button
                 onClick={onPrevious}
-                className="text-white"
+                className="min-h-12 min-w-12 flex items-center justify-center text-white"
               >
-                <SkipBack className="w-8 h-8" />
+                <SkipBack className="w-7 h-7 sm:w-8 sm:h-8" />
               </button>
 
               <button
                 onClick={onTogglePlay}
-                className="w-16 h-16 bg-white hover:bg-gray-200 rounded-full flex items-center justify-center transition-colors duration-200"
+                className="w-16 h-16 sm:w-18 sm:h-18 bg-white hover:bg-gray-200 rounded-full flex items-center justify-center transition-colors duration-200 flex-shrink-0"
               >
                 {isPlaying ? (
                   <Pause className="w-8 h-8 text-black" />
@@ -224,18 +224,18 @@ const Player: React.FC<PlayerProps> = ({
 
               <button
                 onClick={onNext}
-                className="text-white"
+                className="min-h-12 min-w-12 flex items-center justify-center text-white"
               >
-                <SkipForward className="w-8 h-8" />
+                <SkipForward className="w-7 h-7 sm:w-8 sm:h-8" />
               </button>
 
               <button
                 onClick={onToggleRepeat}
-                className={`transition-colors duration-200 ${
+                className={`min-h-11 min-w-11 flex items-center justify-center transition-colors duration-200 ${
                   repeat !== 'none' ? 'text-green-400' : 'text-gray-400'
                 }`}
               >
-                <Repeat className="w-6 h-6" />
+                <Repeat className="w-5 h-5 sm:w-6 sm:h-6" />
               </button>
             </div>
 
