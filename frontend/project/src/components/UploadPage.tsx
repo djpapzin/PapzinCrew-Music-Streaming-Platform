@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { Song } from '../types/music';
 
 // Base API URL (Render/production uses VITE_API_URL; fallback to local dev)
-const API_BASE = import.meta.env.VITE_API_URL || (window.location.origin.includes('netlify') ? 'https://papzincrew-backend.onrender.com' : 'http://localhost:8000');
+const API_BASE = import.meta.env.VITE_API_URL || (window.location.origin.includes('netlify') ? 'http://13.48.27.192' : 'http://localhost:8000');
 
 // Ensure API_BASE doesn't end with a slash
 const API_URL = API_BASE.endsWith('/') ? API_BASE.slice(0, -1) : API_BASE;
@@ -313,6 +313,9 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
     typeof fileValidation.file_size_bytes === 'number' &&
     fileValidation.file_size_bytes > NON_BLOCKING_METADATA_MAX_BYTES
   );
+  const shouldSkipPreUploadHash = Boolean(
+    uploadedFile && uploadedFile.size > NON_BLOCKING_METADATA_MAX_BYTES
+  );
 
   const fileStatusTitle = isLargeFilePendingMetadata ? 'File Selected' : 'File Ready';
   const fileStatusDetails = isLargeFilePendingMetadata
@@ -398,8 +401,8 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
       let fileHash: string | undefined;
       let duration: number | undefined;
       
-      // Calculate file hash if file is available
-      if (uploadedFile) {
+      // For large files, skip client-side hashing so Publish stays responsive.
+      if (uploadedFile && !shouldSkipPreUploadHash) {
         try {
           fileHash = await calculateFileHash(uploadedFile);
         } catch (error) {
@@ -470,7 +473,9 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
         stage: 'processing',
         progress: 0,
         message: 'Checking for duplicates...',
-        details: 'Verifying if this track already exists',
+        details: shouldSkipPreUploadHash
+          ? 'Large file detected — skipping pre-upload hash so publish starts faster.'
+          : 'Verifying if this track already exists',
         speed: '',
         timeRemaining: ''
       });
@@ -1056,6 +1061,16 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
             <div>
               <p className="font-medium">{fileStatusTitle}</p>
               <p className="text-sm">{fileStatusDetails}</p>
+            </div>
+          </div>
+        )}
+
+        {isLargeFilePendingMetadata && uploadedFile && (
+          <div className="bg-blue-500/10 border border-blue-500/40 text-blue-200 px-4 py-3 rounded-lg flex items-start space-x-2">
+            <Loader2 className="w-5 h-5 mt-0.5 flex-shrink-0" />
+            <div>
+              <p className="font-medium">Large file mode is on</p>
+              <p className="text-sm">You can publish immediately. We skip the slow pre-upload scan/hash for larger files so the upload starts faster, and the rest is checked during upload.</p>
             </div>
           </div>
         )}
@@ -1771,7 +1786,12 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
             ) : null}
 
           {/* Publish Button */}
-          <div className="pt-4">
+          <div className="pt-4 space-y-3">
+            {isLargeFilePendingMetadata && !isPublishing && (
+              <p className="text-sm text-blue-300">
+                Large file selected — publish starts immediately without the slow pre-upload hash step.
+              </p>
+            )}
             <button
               type="button"
               onClick={handlePublish}
@@ -1803,6 +1823,8 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
                     ? 'Published Successfully! ' 
                     : uploadStatus.stage === 'error'
                     ? 'Try Again'
+                    : isLargeFilePendingMetadata
+                    ? 'Publish Large File'
                     : 'Publish'}
                 </span>
               )}
