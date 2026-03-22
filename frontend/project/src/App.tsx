@@ -9,6 +9,18 @@ import { Routes, Route } from 'react-router-dom';
 import { Song, Playlist, Album, Artist } from './types/music';
 import Toast from './components/Toast';
 
+const INTERNAL_PROBE_TRACK_PATTERNS = [
+  /^b2 proof\b/i,
+  /^starter mix\s+\d+\s+\d{8}$/i,
+  /\bproof\s+20\d{6,}/i,
+];
+
+const isPublicTrack = (mix: any): boolean => {
+  const title = String(mix?.title || '').trim();
+  if (!title) return true;
+  return !INTERNAL_PROBE_TRACK_PATTERNS.some((pattern) => pattern.test(title));
+};
+
 function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -45,7 +57,8 @@ function App() {
       const res = await fetch(`${API_BASE}/tracks/`);
       if (!res.ok) throw new Error(`Failed to load tracks: ${res.status}`);
       const mixes = await res.json();
-      const mapped: Song[] = (mixes || []).map((mix: any) => ({
+      const publicMixes = (mixes || []).filter((mix: any) => isPublicTrack(mix));
+      const mapped: Song[] = publicMixes.map((mix: any) => ({
         id: String(mix.id),
         title: mix.title || 'Untitled',
         artist: (mix.artist && mix.artist.name) || 'Unknown Artist',
