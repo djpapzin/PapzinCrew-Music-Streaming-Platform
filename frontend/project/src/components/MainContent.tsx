@@ -14,6 +14,7 @@ interface MainContentProps {
   playlists: Playlist[];
   albums: Album[];
   artists: Artist[];
+  tracksLoading: boolean;
   currentSong: Song | null;
   isPlaying: boolean;
   onPlaySong: (song: Song, queue?: Song[]) => void;
@@ -21,12 +22,12 @@ interface MainContentProps {
 }
 
 const MainContent: React.FC<MainContentProps> = ({
-  activeView,
   searchQuery,
   songs,
   playlists,
   albums,
   artists,
+  tracksLoading,
   currentSong,
   isPlaying,
   onPlaySong,
@@ -85,12 +86,17 @@ const MainContent: React.FC<MainContentProps> = ({
         onPlayPlaylist={onPlayPlaylist}
       />
 
-      {songs.length === 0 && (
+      {tracksLoading ? (
+        <div className="bg-white/5 rounded-xl p-6 border border-white/10 animate-pulse">
+          <div className="h-6 w-40 bg-white/10 rounded mb-3" />
+          <div className="h-4 w-64 max-w-full bg-white/10 rounded" />
+        </div>
+      ) : songs.length === 0 ? (
         <div className="bg-white/5 rounded-xl p-6 border border-white/10">
           <h2 className="text-xl lg:text-2xl font-bold text-white mb-2">No uploads yet</h2>
           <p className="text-gray-300">Go to the Upload page to add your first track.</p>
         </div>
-      )}
+      ) : null}
 
       {/* Featured Content Section */}
       <div className="bg-gradient-to-br from-purple-900/50 to-pink-900/50 rounded-xl p-6 lg:p-8 border border-white/10">

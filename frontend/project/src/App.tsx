@@ -16,6 +16,7 @@ function App() {
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [albums, setAlbums] = useState<Album[]>([]);
   const [artists, setArtists] = useState<Artist[]>([]);
+  const [tracksLoading, setTracksLoading] = useState(true);
   
   const {
     audioRef,
@@ -30,7 +31,7 @@ function App() {
     toggleRepeat
   } = usePlayer();
 
-  const API_BASE = (import.meta as any).env?.VITE_API_URL || (window.location.origin.includes('netlify') ? 'https://papzincrew-backend.onrender.com' : 'http://localhost:8000');
+  const API_BASE = (import.meta as any).env?.VITE_API_URL || (window.location.origin.includes('netlify') ? 'http://13.48.27.192' : 'http://localhost:8000');
   const toAbsoluteUrl = (url?: string | null): string => {
     if (!url) return '';
     if (/^https?:\/\//i.test(url)) return url;
@@ -39,6 +40,7 @@ function App() {
   };
 
   const fetchTracks = useCallback(async () => {
+    setTracksLoading(true);
     try {
       const res = await fetch(`${API_BASE}/tracks/`);
       if (!res.ok) throw new Error(`Failed to load tracks: ${res.status}`);
@@ -59,6 +61,8 @@ function App() {
     } catch (err) {
       console.error('Failed to fetch tracks', err);
       setSongs([]);
+    } finally {
+      setTracksLoading(false);
     }
   }, [API_BASE]);
 
@@ -123,6 +127,7 @@ function App() {
             playlists={playlists}
             albums={albums}
             artists={artists}
+            tracksLoading={tracksLoading}
             currentSong={playerState.currentSong}
             isPlaying={playerState.isPlaying}
             onPlaySong={playSong}
