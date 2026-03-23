@@ -41,7 +41,57 @@ const MainContent: React.FC<MainContentProps> = ({
     });
   };
 
-  const renderHome = () => (
+  const renderHome = () => {
+    if (tracksLoading) {
+      return (
+        <div className="space-y-6 lg:space-y-8">
+          <div className="bg-gradient-to-br from-purple-900/60 to-pink-900/60 rounded-xl p-6 lg:p-8 border border-purple-500/30 backdrop-blur-sm animate-pulse">
+            <div className="flex items-center space-x-4 mb-4">
+              <div className="w-12 h-12 lg:w-16 lg:h-16 bg-white/10 rounded-full" />
+              <div className="space-y-3 flex-1">
+                <div className="h-7 lg:h-10 w-56 max-w-full bg-white/10 rounded" />
+                <div className="h-4 w-80 max-w-full bg-white/10 rounded" />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-6 mt-6">
+              {[0, 1, 2].map((index) => (
+                <div key={index} className="bg-white/10 rounded-lg p-4 border border-white/10">
+                  <div className="w-6 h-6 bg-white/10 rounded mb-3" />
+                  <div className="h-4 w-32 bg-white/10 rounded mb-2" />
+                  <div className="h-3 w-full bg-white/10 rounded" />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="bg-gradient-to-r from-purple-600/20 to-pink-600/20 rounded-xl p-4 lg:p-6 border border-purple-500/20 animate-pulse">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
+              <div className="space-y-2">
+                <div className="h-6 w-28 bg-white/10 rounded" />
+                <div className="h-4 w-52 bg-white/10 rounded" />
+              </div>
+              <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3">
+                {[0, 1, 2].map((index) => (
+                  <div key={index} className="h-10 w-28 bg-white/10 rounded-full" />
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-gradient-to-br from-purple-900/50 to-pink-900/50 rounded-xl p-6 lg:p-8 border border-white/10 animate-pulse">
+            <div className="h-8 w-56 bg-white/10 rounded mb-4" />
+            <div className="h-4 w-80 max-w-full bg-white/10 rounded mb-6" />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+              {[0, 1, 2, 3].map((index) => (
+                <div key={index} className="h-[72px] bg-white/10 rounded-lg" />
+              ))}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return (
     <div className="space-y-6 lg:space-y-8">
       {/* Welcome to Papzin & Crew Section */}
       <div className="bg-gradient-to-br from-purple-900/60 to-pink-900/60 rounded-xl p-6 lg:p-8 border border-purple-500/30 backdrop-blur-sm">
@@ -86,12 +136,7 @@ const MainContent: React.FC<MainContentProps> = ({
         onPlayPlaylist={onPlayPlaylist}
       />
 
-      {tracksLoading ? (
-        <div className="bg-white/5 rounded-xl p-6 border border-white/10 animate-pulse">
-          <div className="h-6 w-40 bg-white/10 rounded mb-3" />
-          <div className="h-4 w-64 max-w-full bg-white/10 rounded" />
-        </div>
-      ) : songs.length === 0 ? (
+      {songs.length === 0 ? (
         <div className="bg-white/5 rounded-xl p-6 border border-white/10">
           <h2 className="text-xl lg:text-2xl font-bold text-white mb-2">No uploads yet</h2>
           <p className="text-gray-300">Go to the Upload page to add your first track.</p>
@@ -233,6 +278,7 @@ const MainContent: React.FC<MainContentProps> = ({
       </div>
     </div>
   );
+  };
 
   const renderUpload = () => <UploadPage onPlaySong={onPlaySong} />;
 

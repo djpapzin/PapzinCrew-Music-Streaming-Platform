@@ -2,12 +2,7 @@ import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { Upload, Image, Music, Tag, Globe, Download, Eye, Users, ChevronDown, Loader2, AlertCircle, CheckCircle, XCircle, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Song } from '../types/music';
-
-// Base API URL (Render/production uses VITE_API_URL; fallback to local dev)
-const API_BASE = import.meta.env.VITE_API_URL || (window.location.origin.includes('netlify') ? 'http://13.48.27.192' : 'http://localhost:8000');
-
-// Ensure API_BASE doesn't end with a slash
-const API_URL = API_BASE.endsWith('/') ? API_BASE.slice(0, -1) : API_BASE;
+import { API_BASE as API_URL } from '../lib/api';
 const MAX_UPLOAD_SIZE_MB = 200;
 const MAX_UPLOAD_SIZE_BYTES = MAX_UPLOAD_SIZE_MB * 1024 * 1024;
 const NON_BLOCKING_METADATA_MAX_MB = 25;

@@ -8,6 +8,7 @@ import { usePlayer } from './hooks/usePlayer';
 import { Routes, Route } from 'react-router-dom';
 import { Song, Playlist, Album, Artist } from './types/music';
 import Toast from './components/Toast';
+import { API_BASE, toAbsoluteApiUrl } from './lib/api';
 
 const INTERNAL_PROBE_TRACK_PATTERNS = [
   /^b2 proof\b/i,
@@ -43,14 +44,6 @@ function App() {
     toggleRepeat
   } = usePlayer();
 
-  const API_BASE = (import.meta as any).env?.VITE_API_URL || (window.location.origin.includes('netlify') ? 'http://13.48.27.192' : 'http://localhost:8000');
-  const toAbsoluteUrl = (url?: string | null): string => {
-    if (!url) return '';
-    if (/^https?:\/\//i.test(url)) return url;
-    if (url.startsWith('/')) return `${API_BASE}${url}`;
-    return `${API_BASE}/${url}`;
-  };
-
   const fetchTracks = useCallback(async () => {
     setTracksLoading(true);
     try {
@@ -64,7 +57,7 @@ function App() {
         artist: (mix.artist && mix.artist.name) || 'Unknown Artist',
         album: mix.album || '',
         duration: mix.duration_seconds || 0,
-        imageUrl: toAbsoluteUrl(mix.cover_art_url) || '',
+        imageUrl: toAbsoluteApiUrl(mix.cover_art_url) || '',
         audioUrl: mix.file_path ? `${API_BASE}/tracks/${mix.id}/stream` : '',
         genre: mix.genre || '',
         year: mix.year || 0,
