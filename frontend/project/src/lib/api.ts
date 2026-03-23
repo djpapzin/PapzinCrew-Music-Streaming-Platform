@@ -5,13 +5,13 @@ const isNetlifyHost = (hostname: string) =>
   hostname === 'papzincrew.netlify.app' || hostname.endsWith('.netlify.app');
 
 export const getApiBase = (): string => {
+  if (typeof window !== 'undefined' && isNetlifyHost(window.location.hostname)) {
+    return NETLIFY_PROXY_API_BASE;
+  }
+
   const envBase = (import.meta as any).env?.VITE_API_URL as string | undefined;
   if (envBase && envBase.trim()) {
     return envBase.trim().replace(/\/$/, '');
-  }
-
-  if (typeof window !== 'undefined' && isNetlifyHost(window.location.hostname)) {
-    return NETLIFY_PROXY_API_BASE;
   }
 
   return DEFAULT_LOCAL_API_BASE;

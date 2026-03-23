@@ -51,7 +51,8 @@ function App() {
       if (!res.ok) throw new Error(`Failed to load tracks: ${res.status}`);
       const mixes = await res.json();
       const publicMixes = (mixes || []).filter((mix: any) => isPublicTrack(mix));
-      const mapped: Song[] = publicMixes.map((mix: any) => ({
+      const visibleMixes = publicMixes.length > 0 ? publicMixes : (mixes || []);
+      const mapped: Song[] = visibleMixes.map((mix: any) => ({
         id: String(mix.id),
         title: mix.title || 'Untitled',
         artist: (mix.artist && mix.artist.name) || 'Unknown Artist',
