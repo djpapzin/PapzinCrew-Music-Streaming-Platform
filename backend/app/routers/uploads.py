@@ -246,6 +246,7 @@ SUPPORTED_MIME_TYPES = {
     'audio/mp4': '.m4a',
     'audio/x-m4a': '.m4a',
     'audio/ogg': '.ogg',
+    'audio/opus': '.opus',
     'audio/x-ms-wma': '.wma'
 }
 
@@ -343,7 +344,7 @@ def validate_audio_file(file_or_bytes, filename: Optional[str] = None, lightweig
     file_size = len(data)
     # Derive extension and mime from filename
     extension = os.path.splitext((detected_filename or "").lower())[1]
-    allowed_extensions = {'.mp3', '.wav', '.aiff', '.flac', '.m4a', '.ogg', '.wma'}
+    allowed_extensions = {'.mp3', '.wav', '.aiff', '.flac', '.m4a', '.ogg', '.opus', '.wma'}
     extension_to_mime = {
         '.mp3': 'audio/mpeg',
         '.wav': 'audio/wav',
@@ -351,6 +352,7 @@ def validate_audio_file(file_or_bytes, filename: Optional[str] = None, lightweig
         '.flac': 'audio/flac',
         '.m4a': 'audio/mp4',
         '.ogg': 'audio/ogg',
+        '.opus': 'audio/opus',
         '.wma': 'audio/x-ms-wma',
     }
     detected_mime = extension_to_mime.get(extension, 'application/octet-stream')

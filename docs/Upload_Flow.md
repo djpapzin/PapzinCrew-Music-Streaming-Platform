@@ -8,6 +8,7 @@ This document summarizes the end-to-end upload pipeline and key environment vari
 - Progress is shown in phases: Upload (0–40%) → Processing (40–70%) → Cover Art (70–100%).
 - Backend performs duplicate detection, metadata extraction, and B2-first storage with local fallback.
 - Cover art: use provided image → embedded art → AI-generated fallback (with polling until ready).
+- Supported audio formats: mp3, wav, aiff, flac, m4a, ogg, opus, wma
 
 ## Sequence (high-level)
 

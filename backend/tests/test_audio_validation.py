@@ -17,6 +17,8 @@ MP3_HEADER = b'\xff\xfb\x90\x00'  # MP3 header
 WAV_HEADER = b'RIFF\x24\x08\x00\x00WAVEfmt '  # WAV header
 FLAC_HEADER = b'fLaC'  # FLAC header
 INVALID_HEADER = b'\x00\x01\x02\x03'  # Invalid audio header
+OGG_HEADER = b'OggS'  # OGG header
+OPUS_HEADER = b'OggS'  # OPUS files use OGG container
 
 class TestAudioValidation:
     """Test audio file validation functionality."""
@@ -31,6 +33,18 @@ class TestAudioValidation:
     def mock_wav_file(self):
         """Create a mock WAV file."""
         content = WAV_HEADER + b'\x00' * 1000  # WAV header + dummy data
+        return io.BytesIO(content)
+
+    @pytest.fixture
+    def mock_ogg_file(self):
+        """Create a mock OGG file."""
+        content = OGG_HEADER + b'\x00' * 1000
+        return io.BytesIO(content)
+    
+    @pytest.fixture
+    def mock_opus_file(self):
+        """Create a mock OPUS file."""
+        content = OPUS_HEADER + b'\x00' * 1000
         return io.BytesIO(content)
     
     @pytest.fixture
@@ -189,6 +203,43 @@ class TestAudioValidation:
             expected_size = len(MP3_HEADER + b'\x00' * 1000)
             assert result['file_size_bytes'] == expected_size
 
+    def test_validate_rejects_small_short_ogg_voice_style_upload(self, mock_ogg_file):
+        """Reject likely Telegram voice/TTS OGG artifacts so they are not mistaken for full mixes."""
+        small_ogg = io.BytesIO(OGG_HEADER + b'\x00' * 4096)
+
+        with patch('mutagen.File') as mock_mutagen:
+            mock_audio = MagicMock()
+            mock_audio.info.length = 29.6
+            mock_audio.info.bitrate = 64
+            mock_audio.mime = ['audio/ogg']
+            mock_mutagen.return_value = mock_audio
+
+            is_valid, result = validate_audio_file(small_ogg, 'voice-note.ogg')
+
+            assert is_valid is False
+            assert result['valid'] is False
+            assert result['error_code'] == 'likely_voice_note_upload'
+            assert result['voice_style_detected'] is True
+            assert result['mime_type'] == 'audio/ogg'
+
+    def test_validate_allows_large_long_ogg_music_upload(self, mock_ogg_file):
+        """Allow OGG uploads that actually look like full music files."""
+        large_ogg = io.BytesIO(OGG_HEADER + b'\x00' * (6 * 1024 * 1024))
+
+        with patch('mutagen.File') as mock_mutagen:
+            mock_audio = MagicMock()
+            mock_audio.info.length = 320.0
+            mock_audio.info.bitrate = 192
+            mock_audio.mime = ['audio/ogg']
+            mock_mutagen.return_value = mock_audio
+
+            is_valid, result = validate_audio_file(large_ogg, 'full-mix.ogg')
+
+            assert is_valid is True
+            assert result['valid'] is True
+            assert result['mime_type'] == 'audio/ogg'
+            assert result['duration_seconds'] == 320.0
+
 class TestAudioMetadataExtraction:
     """Test audio metadata extraction edge cases."""
     
@@ -255,3 +306,87 @@ class TestAudioMetadataExtraction:
             # Should handle malformed tags gracefully
             assert is_valid is True
             assert result['valid'] is True
+
+
+
+    
+    def test_extract_metadata_missing_tags(self):
+        """Test metadata extraction when tags are missing."""
+        mock_file = io.BytesIO(MP3_HEADER + b'\x00' * 1000)
+        
+        with patch('mutagen.File') as mock_mutagen:
+            mock_audio = MagicMock()
+            mock_audio.info.length = 180
+            mock_audio.info.bitrate = 320
+            mock_audio.mime = ['audio/mpeg']
+            mock_audio.tags = None  # No tags
+            mock_mutagen.return_value = mock_audio
+            
+            is_valid, result = validate_audio_file(mock_file, "notags.mp3")
+            
+            assert is_valid is True
+            assert result['valid'] is True
+    
+    def test_extract_metadata_unicode_tags(self):
+        """Test metadata extraction with Unicode characters."""
+        mock_file = io.BytesIO(MP3_HEADER + b'\x00' * 1000)
+        
+        with patch('mutagen.File') as mock_mutagen:
+            mock_audio = MagicMock()
+            mock_audio.info.length = 180
+            mock_audio.info.bitrate = 320
+            mock_audio.mime = ['audio/mpeg']
+            
+            # Unicode metadata
+            mock_audio.tags = {
+                'TIT2': ['测试标题'],  # Chinese title
+                'TPE1': ['Артист'],   # Cyrillic artist
+                'TALB': ['Álbum']     # Accented album
+            }
+            mock_mutagen.return_value = mock_audio
+            
+            is_valid, result = validate_audio_file(mock_file, "unicode.mp3")
+            
+            assert is_valid is True
+            assert result['valid'] is True
+    
+    def test_extract_metadata_malformed_tags(self):
+        """Test handling of malformed metadata tags."""
+        mock_file = io.BytesIO(MP3_HEADER + b'\x00' * 1000)
+        
+        with patch('mutagen.File') as mock_mutagen:
+            mock_audio = MagicMock()
+            mock_audio.info.length = 180
+            mock_audio.info.bitrate = 320
+            mock_audio.mime = ['audio/mpeg']
+            
+            # Malformed tags that might cause issues
+            mock_audio.tags = {
+                'TIT2': [],  # Empty list
+                'TPE1': [None],  # None value
+                'TALB': ['']  # Empty string
+            }
+            mock_mutagen.return_value = mock_audio
+            
+            is_valid, result = validate_audio_file(mock_file, "malformed.mp3")
+            
+            # Should handle malformed tags gracefully
+            assert is_valid is True
+            assert result['valid'] is True
+
+    def test_validate_opus_success(self, mock_opus_file):
+        """Test successful OPUS validation."""
+        with patch('mutagen.File') as mock_mutagen:
+            # Mock mutagen to return OPUS metadata
+            mock_audio = MagicMock()
+            mock_audio.info.length = 180.5
+            mock_audio.info.bitrate = 128
+            mock_audio.mime = ['audio/opus']
+            mock_mutagen.return_value = mock_audio
+            
+            is_valid, result = validate_audio_file(mock_opus_file, "test.opus")
+            
+            assert is_valid is True
+            assert result['valid'] is True
+            assert result['mime_type'] == 'audio/opus'
+            assert result['file_extension'] == '.opus'

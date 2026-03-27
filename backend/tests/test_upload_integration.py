@@ -48,6 +48,18 @@ def _audio_form(file_name: str = "integration.mp3", content: bytes = b"integrati
     return data, files
 
 
+def _opus_form(file_name: str = "integration.opus", content: bytes = b"integration-opus"):
+    data = {
+        "title": "Integration OPUS Title",
+        "artist_name": "Integration OPUS Artist",
+        "skip_duplicate_check": "true",
+    }
+    files = {
+        "file": (file_name, io.BytesIO(content), "audio/opus"),
+    }
+    return data, files
+
+
 @pytest.mark.integration
 def test_upload_local_scaffold_persists_mix_and_file(integration_client):
     data, files = _audio_form(file_name="local.mp3")
@@ -140,3 +152,24 @@ def test_upload_b2_only_mode_returns_503_without_local_artifact(integration_clie
     detail = response.json()["detail"]
     assert detail["error_code"] == "storage_unavailable"
     assert not list((tmp_path / "uploads").glob("*.mp3"))
+
+
+@pytest.mark.integration
+def test_upload_opus_file_success(integration_client):
+    data, files = _opus_form(file_name="test.opus")
+
+    with patch("app.routers.uploads.validate_audio_file", return_value=(True, {
+        "valid": True,
+        "mime_type": "audio/opus",
+        "file_extension": ".opus",
+        "file_size_bytes": len(files["file"][1].getvalue()),
+    })), patch("app.routers.uploads.AIArtGenerator.generate_cover_art_from_metadata", return_value=None), patch(
+        "app.routers.uploads.B2Storage.is_configured", return_value=False
+    ):
+        response = integration_client.post("/upload", data=data, files=files)
+
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert body["storage"] == "local_filesystem"
+    assert body["id"] > 0
+    assert ".opus" in body["location"]
