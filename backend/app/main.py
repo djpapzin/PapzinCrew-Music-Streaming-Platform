@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from .db.database import engine, get_db_diagnostics
 from .models import models
-from .routers import auth, tracks, categories, artists, uploads, storage, cleanup, file_management
+from .routers import auth, tracks, categories, artists, uploads, storage, cleanup, file_management, paperclip
 from .logging_utils import (
     setup_logging,
     set_request_id,
@@ -252,6 +252,7 @@ app.include_router(uploads.router)
 app.include_router(storage.router)
 app.include_router(cleanup.router)
 app.include_router(file_management.router)
+app.include_router(paperclip.router)
 
 # Determine upload directory from environment
 UPLOAD_DIR = os.getenv("UPLOAD_DIR", "uploads")

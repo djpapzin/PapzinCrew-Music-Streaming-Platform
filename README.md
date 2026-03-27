@@ -175,3 +175,8 @@ VITE_API_URL=http://127.0.0.1:8000
 
 ## License
 MIT. See `LICENSE.md`.
+
+
+## Paperclip consumer hook
+
+Papzin & Crew can now consume Paperclip business summaries through the backend endpoint `GET /paperclip/summary/{task_id}`. Set `PAPERCLIP_BASE_URL` if Paperclip runs somewhere other than `http://127.0.0.1:8787`.
