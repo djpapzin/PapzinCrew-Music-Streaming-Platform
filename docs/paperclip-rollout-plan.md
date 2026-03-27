@@ -36,6 +36,14 @@ This rollout plan defines how to use Paperclip to help Papzin & Crew without cre
 - completion state
 - what is actively todo / in-progress / review / done
 
+### EC2 host storage owns
+- runtime-only files
+- short-lived caches and temp artifacts
+- logs that are safe to rotate
+- small local working data when off-host storage is unavailable
+
+EC2 disk must be treated as a limited operational resource, not the primary store for Papzin & Crew media, backups, or long-term artifacts. Durable assets should stay in B2/Postgres/off-host storage, and the rollout should include explicit disk-usage thresholds, log rotation, cleanup jobs, and fallback rules for when host storage runs low.
+
 ## 3) Rollout principles
 
 1. **One source of truth per layer**
