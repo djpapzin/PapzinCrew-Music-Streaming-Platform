@@ -3,10 +3,12 @@ import { Upload, Image, Music, Tag, Globe, Download, Eye, Users, ChevronDown, Lo
 import { useNavigate } from 'react-router-dom';
 import { Song } from '../types/music';
 import { API_BASE as API_URL } from '../lib/api';
+import PaperclipInsightCard from './PaperclipInsightCard';
 const MAX_UPLOAD_SIZE_MB = 200;
 const MAX_UPLOAD_SIZE_BYTES = MAX_UPLOAD_SIZE_MB * 1024 * 1024;
 const NON_BLOCKING_METADATA_MAX_MB = 25;
 const NON_BLOCKING_METADATA_MAX_BYTES = NON_BLOCKING_METADATA_MAX_MB * 1024 * 1024;
+const PAPERCLIP_TASK_ID = Number((import.meta as any).env?.VITE_PAPERCLIP_TASK_ID ?? '203');
 
 // Add fade-in animation
 const fadeInKeyframes = `
@@ -1019,6 +1021,8 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
         <div className="text-center">
           <h1 className="text-2xl lg:text-3xl font-bold text-white mb-2">Upload single stream</h1>
         </div>
+
+        <PaperclipInsightCard taskId={PAPERCLIP_TASK_ID} className="shadow-xl shadow-fuchsia-950/10" />
 
         {/* File Upload Section */}
         <div className="bg-white/5 rounded-xl p-6 border border-white/10 space-y-4">

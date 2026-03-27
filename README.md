@@ -88,6 +88,10 @@ VITE_API_URL=http://127.0.0.1:8000
 - Duplicate detection with optional forced upload; structured error codes returned.
 - B2-first storage; local fallback.
 
+### Paperclip insight card
+- The upload page now shows a Paperclip insight card powered by the backend consumer hook.
+- Set `VITE_PAPERCLIP_TASK_ID` in `frontend/project/.env` if you want to point the card at a different live Paperclip task; it defaults to `203`.
+
 ### Upload Behavior Details
 
 • __Validation__
