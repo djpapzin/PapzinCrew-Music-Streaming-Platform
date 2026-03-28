@@ -2,10 +2,10 @@
   command = "npm ci && npm run build"
   publish = "dist"
 
-# Proxy API requests to the live EC2 backend so the browser stays same-origin on Netlify.
+# Proxy API requests to the live backend so the browser stays same-origin on Netlify.
 [[redirects]]
   from = "/api/*"
-  to = "http://13.48.27.192/:splat"
+  to = "https://papzincrew-backend.onrender.com/:splat"
   status = 200
   force = true
 

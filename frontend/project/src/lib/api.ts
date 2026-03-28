@@ -1,12 +1,20 @@
 const DEFAULT_LOCAL_API_BASE = 'http://localhost:8000';
-const NETLIFY_PROXY_API_BASE = '/api';
+const SAME_ORIGIN_API_BASE = '/api';
 
-const isNetlifyHost = (hostname: string) =>
-  hostname === 'papzincrew.netlify.app' || hostname.endsWith('.netlify.app');
+const isLocalDevHost = (hostname: string) =>
+  hostname === 'localhost' || hostname === '127.0.0.1';
 
 export const getApiBase = (): string => {
-  if (typeof window !== 'undefined' && isNetlifyHost(window.location.hostname)) {
-    return NETLIFY_PROXY_API_BASE;
+  if (typeof window !== 'undefined') {
+    if (isLocalDevHost(window.location.hostname)) {
+      const envBase = (import.meta as any).env?.VITE_API_URL as string | undefined;
+      if (envBase && envBase.trim()) {
+        return envBase.trim().replace(/\/$/, '');
+      }
+      return DEFAULT_LOCAL_API_BASE;
+    }
+
+    return SAME_ORIGIN_API_BASE;
   }
 
   const envBase = (import.meta as any).env?.VITE_API_URL as string | undefined;
