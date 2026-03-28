@@ -53,6 +53,28 @@ describe('PaperclipInsightCard', () => {
     expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/paperclip/summary/203'));
   });
 
+  it('renders a provided summary without fetching', () => {
+    render(<PaperclipInsightCard taskId={203} summary={summary} />);
+
+    expect(screen.getByText(summary.business_status_summary)).toBeInTheDocument();
+    expect(screen.getByText(/Phase: review/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Loading Paperclip insight/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Refresh Paperclip insight/i })).not.toBeInTheDocument();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('renders a compact variant focused on publish/admin summaries', async () => {
+    render(<PaperclipInsightCard taskId={203} compact />);
+
+    await waitFor(() => {
+      expect(screen.getByText(summary.business_status_summary)).toBeInTheDocument();
+    });
+
+    expect(screen.getByText(/Initiative: Mobile publish-state clarity/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Goal: goal_paperclip_papzincrew_001/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/init_paperclip_phase1_mobile_publish_clarity/i)).not.toBeInTheDocument();
+  });
+
   it('shows an error when the fetch fails', async () => {
     vi.stubGlobal(
       'fetch',
@@ -68,5 +90,16 @@ describe('PaperclipInsightCard', () => {
     await waitFor(() => {
       expect(screen.getByText(/HTTP 502/i)).toBeInTheDocument();
     });
+  });
+
+  it('does not silently fall back to a hardcoded Paperclip task id', async () => {
+    render(<PaperclipInsightCard taskId={null} />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Set a Paperclip task context first/i)).toBeInTheDocument();
+    });
+
+    expect(fetch).not.toHaveBeenCalled();
+    expect(screen.getByText(/Task #—/i)).toBeInTheDocument();
   });
 });

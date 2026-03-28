@@ -4,6 +4,7 @@ import SongRow from './SongRow';
 import QuickPlay from './QuickPlay';
 import QuickPlayCard from './QuickPlayCard';
 import UploadPage from './UploadPage';
+import AdminAnalyticsPanel from './AdminAnalyticsPanel';
 import { Routes, Route } from 'react-router-dom';
 import { Song, Playlist, Album, Artist } from '../types/music';
 import { Clock, Star, TrendingUp, Users, Award, Zap, Music } from 'lucide-react';
@@ -281,6 +282,8 @@ const MainContent: React.FC<MainContentProps> = ({
   };
 
   const renderUpload = () => <UploadPage onPlaySong={onPlaySong} />;
+
+  const renderAdmin = () => <AdminAnalyticsPanel />;
 
   const renderIndependent = () => (
     <div className="space-y-6 lg:space-y-8">
@@ -579,6 +582,7 @@ const MainContent: React.FC<MainContentProps> = ({
         <Route path="/independent" element={renderIndependent()} />
         <Route path="/trending" element={renderTrending()} />
         <Route path="/upload" element={renderUpload()} />
+        <Route path="/admin" element={renderAdmin()} />
       </Routes>
     </div>
   );

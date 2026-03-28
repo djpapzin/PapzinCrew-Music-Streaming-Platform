@@ -80,7 +80,12 @@ ENABLE_UPLOAD_PRINTS=0
 Frontend (optional) `frontend/project/.env`:
 ```
 VITE_API_URL=http://127.0.0.1:8000
+VITE_ADMIN_API_KEY=your-shared-admin-key
 ```
+
+Admin analytics/publish note:
+- `backend/.env`: set `ADMIN_API_KEY` to the shared secret expected by `X-Admin-Api-Key` on `GET /admin/analytics`
+- `frontend/project/.env`: set `VITE_ADMIN_API_KEY` to the same value if you want the admin analytics panel to load in the frontend
 
 ## Upload Flow Overview
 - Validates file type/size; extracts metadata via Mutagen.
@@ -89,8 +94,10 @@ VITE_API_URL=http://127.0.0.1:8000
 - B2-first storage; local fallback.
 
 ### Paperclip insight card
-- The upload page now shows a Paperclip insight card powered by the backend consumer hook.
-- Set `VITE_PAPERCLIP_TASK_ID` in `frontend/project/.env` if you want to point the card at a different live Paperclip task; it defaults to `203`.
+- The upload page now shows a Paperclip insight card powered by the backend consumer hook when a Paperclip task context is available.
+- Preferred source: pass `paperclipTaskId` in the upload page query string, for example `/upload?paperclipTaskId=321`.
+- On successful publish, the upload submit path now echoes `paperclip_task_id` back from the backend so the card can follow the live publish result instead of only the initial page context.
+- The shared card no longer silently falls back to a hardcoded task id; `VITE_PAPERCLIP_TASK_ID` remains available only as an explicit environment fallback if you want one configured.
 
 ### Upload Behavior Details
 

@@ -870,6 +870,7 @@ async def upload_mix(
     cover_art: Optional[UploadFile] = File(None),
     custom_prompt: Optional[str] = Form(None),
     skip_duplicate_check: bool = Form(False),  # Allow skipping duplicate check
+    paperclip_task_id: Optional[int] = Form(None),
     request: Request = None,
     background_tasks: BackgroundTasks = None,
     db: Session = Depends(get_db)
@@ -1219,6 +1220,7 @@ async def upload_mix(
             'quality_kbps': quality_kbps,
             'bpm': bpm
         }
+        response_content['paperclip_task_id'] = paperclip_task_id if paperclip_task_id is not None else db_mix.id
         response_content['authoritative_processing'] = {
             'status': 'pending',
             'fields_pending': ['duration_seconds', 'quality_kbps', 'bpm', 'cover_art_url']

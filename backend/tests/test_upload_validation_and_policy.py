@@ -21,6 +21,7 @@ def test_app(tmp_path, monkeypatch):
     monkeypatch.setenv("UPLOAD_DIR", str(tmp_path))
     # Keep AI cover generation from making network calls
     monkeypatch.setenv("AI_COVER_TIMEOUT_SECONDS", "0.1")
+    monkeypatch.setenv("ENFORCE_B2_ONLY", "0")
     # Use a temp sqlite DB file per test to avoid UNIQUE collisions between tests
     db_path = tmp_path / "test.db"
     monkeypatch.setenv("SQLALCHEMY_DATABASE_URL", f"sqlite:///{db_path}")

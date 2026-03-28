@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Home, Search, Library, Heart, PlusCircle, Music, Users, Disc3, Star, TrendingUp, Upload } from 'lucide-react';
+import { Home, Search, Library, Heart, PlusCircle, Music, Users, Disc3, Star, TrendingUp, Upload, Shield } from 'lucide-react';
 
 interface SidebarProps {
   onNavigate?: () => void;
@@ -26,7 +26,8 @@ const Sidebar: React.FC<SidebarProps> = ({ onNavigate }) => {
   const discoverItems = [
     { id: 'independent', path: '/independent', label: 'Independent Artists', icon: Star },
     { id: 'trending', path: '/trending', label: 'Trending Now', icon: TrendingUp },
-    { id: 'upload', path: '/upload', label: 'Upload Music', icon: Upload }
+    { id: 'upload', path: '/upload', label: 'Upload Music', icon: Upload },
+    { id: 'admin', path: '/admin', label: 'Admin', icon: Shield }
   ];
 
   const NavLink = ({ to, onClick, isActive, children }) => (

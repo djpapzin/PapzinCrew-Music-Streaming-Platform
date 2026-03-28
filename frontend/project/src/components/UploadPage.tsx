@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { Upload, Image, Music, Tag, Globe, Download, Eye, Users, ChevronDown, Loader2, AlertCircle, CheckCircle, XCircle, X } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation, useSearchParams, useParams } from 'react-router-dom';
 import { Song } from '../types/music';
 import { API_BASE as API_URL } from '../lib/api';
 import PaperclipInsightCard from './PaperclipInsightCard';
@@ -8,7 +8,6 @@ const MAX_UPLOAD_SIZE_MB = 200;
 const MAX_UPLOAD_SIZE_BYTES = MAX_UPLOAD_SIZE_MB * 1024 * 1024;
 const NON_BLOCKING_METADATA_MAX_MB = 25;
 const NON_BLOCKING_METADATA_MAX_BYTES = NON_BLOCKING_METADATA_MAX_MB * 1024 * 1024;
-const PAPERCLIP_TASK_ID = Number((import.meta as any).env?.VITE_PAPERCLIP_TASK_ID ?? '203');
 
 // Add fade-in animation
 const fadeInKeyframes = `
@@ -49,6 +48,38 @@ interface UploadPageProps {
 
 const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
+  const params = useParams();
+  const paperclipTaskIdFromContext = React.useMemo(() => {
+    const candidates = [
+      searchParams.get('paperclipTaskId'),
+      searchParams.get('taskId'),
+      params.paperclipTaskId,
+      params.taskId,
+      params.id,
+      location.state && typeof location.state === 'object' ? (location.state as Record<string, unknown>).paperclipTaskId : null,
+      location.state && typeof location.state === 'object' ? (location.state as Record<string, unknown>).taskId : null,
+    ];
+
+    for (const candidate of candidates) {
+      if (candidate === undefined || candidate === null) continue;
+      const trimmed = String(candidate).trim();
+      if (!trimmed) continue;
+      const parsed = Number(trimmed);
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
+
+    return null;
+  }, [location.state, params, searchParams]);
+  const [paperclipTaskIdFromPublish, setPaperclipTaskIdFromPublish] = useState<number | null>(paperclipTaskIdFromContext);
+
+  useEffect(() => {
+    setPaperclipTaskIdFromPublish(paperclipTaskIdFromContext);
+  }, [paperclipTaskIdFromContext]);
+
   const [dragActive, setDragActive] = useState(false);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [extractingMetadata, setExtractingMetadata] = useState(false);
@@ -566,6 +597,10 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
         uploadFormData.append('custom_prompt', customPrompt.trim());
       }
 
+      if (paperclipTaskIdFromContext !== null) {
+        uploadFormData.append('paperclip_task_id', String(paperclipTaskIdFromContext));
+      }
+
       // Create XMLHttpRequest for progress tracking
       const xhr = new XMLHttpRequest();
       currentXhrRef.current = xhr; // Store reference for cancellation
@@ -703,6 +738,10 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
           if (xhr.status >= 200 && xhr.status < 300) {
             try {
               const response = parsed || {};
+              const returnedPaperclipTaskId = Number(response.paperclip_task_id);
+              if (Number.isFinite(returnedPaperclipTaskId)) {
+                setPaperclipTaskIdFromPublish(returnedPaperclipTaskId);
+              }
               
               // Phase 2: Metadata Processing (40-70% of total progress)
               setUploadStatus({
@@ -1013,6 +1052,8 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
     }
   };
 
+  const activePaperclipTaskId = Number.isFinite(paperclipTaskIdFromPublish ?? NaN) ? paperclipTaskIdFromPublish : null;
+
   return (
     <div className="upload-page-container">
       <div className="min-h-screen bg-gray-900 text-white p-6">
@@ -1022,7 +1063,19 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
           <h1 className="text-2xl lg:text-3xl font-bold text-white mb-2">Upload single stream</h1>
         </div>
 
-        <PaperclipInsightCard taskId={PAPERCLIP_TASK_ID} className="shadow-xl shadow-fuchsia-950/10" />
+        {activePaperclipTaskId !== null ? (
+          <PaperclipInsightCard taskId={activePaperclipTaskId} className="shadow-xl shadow-fuchsia-950/10" />
+        ) : (
+          <section className="rounded-2xl border border-fuchsia-500/30 bg-gradient-to-br from-fuchsia-500/10 via-slate-950 to-slate-900 p-4 shadow-lg shadow-fuchsia-950/20 shadow-xl shadow-fuchsia-950/10">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-fuchsia-300" />
+              <div className="min-w-0">
+                <h2 className="text-lg font-semibold text-white">Paperclip insight</h2>
+                <p className="mt-1 text-sm text-slate-300">Open this upload page with a <span className="font-mono text-fuchsia-200">?paperclipTaskId=&lt;task_id&gt;</span> query param to preload the matching Paperclip brief, then submit the upload to keep Paperclip following the live publish result.</p>
+              </div>
+            </div>
+          </section>
+        )}
 
         {/* File Upload Section */}
         <div className="bg-white/5 rounded-xl p-6 border border-white/10 space-y-4">

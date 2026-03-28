@@ -22,9 +22,9 @@ interface PaperclipInsightCardProps {
   taskId?: number | string | null;
   title?: string;
   className?: string;
+  compact?: boolean;
+  summary?: PaperclipSummary | null;
 }
-
-const FALLBACK_TASK_ID = 203;
 
 const resolveTaskId = (taskId?: number | string | null) => {
   if (taskId !== undefined && taskId !== null && `${taskId}`.trim()) {
@@ -36,7 +36,7 @@ const resolveTaskId = (taskId?: number | string | null) => {
     return Number(envTaskId);
   }
 
-  return FALLBACK_TASK_ID;
+  return Number.NaN;
 };
 
 const chipClass = 'rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.16em] text-purple-100';
@@ -45,16 +45,25 @@ export default function PaperclipInsightCard({
   taskId,
   title = 'Paperclip insight',
   className = '',
+  compact = false,
+  summary: preloadedSummary = null,
 }: PaperclipInsightCardProps) {
   const resolvedTaskId = useMemo(() => resolveTaskId(taskId), [taskId]);
-  const [summary, setSummary] = useState<PaperclipSummary | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [summary, setSummary] = useState<PaperclipSummary | null>(preloadedSummary);
+  const [loading, setLoading] = useState(!preloadedSummary);
   const [error, setError] = useState<string | null>(null);
 
   const loadSummary = useCallback(async () => {
+    if (preloadedSummary) {
+      setSummary(preloadedSummary);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+
     if (!Number.isFinite(resolvedTaskId)) {
       setSummary(null);
-      setError('Set VITE_PAPERCLIP_TASK_ID to point this card at a live Paperclip task.');
+      setError('Set a Paperclip task context first, or configure VITE_PAPERCLIP_TASK_ID for an explicit environment fallback.');
       setLoading(false);
       return;
     }
@@ -75,11 +84,18 @@ export default function PaperclipInsightCard({
     } finally {
       setLoading(false);
     }
-  }, [resolvedTaskId]);
+  }, [preloadedSummary, resolvedTaskId]);
 
   useEffect(() => {
+    if (preloadedSummary) {
+      setSummary(preloadedSummary);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+
     void loadSummary();
-  }, [loadSummary]);
+  }, [loadSummary, preloadedSummary]);
 
   return (
     <section className={`rounded-2xl border border-fuchsia-500/30 bg-gradient-to-br from-fuchsia-500/10 via-slate-950 to-slate-900 p-4 shadow-lg shadow-fuchsia-950/20 ${className}`.trim()}>
@@ -93,15 +109,17 @@ export default function PaperclipInsightCard({
           <p className="mt-1 text-sm text-slate-300">Live Paperclip guidance from the company brain, pulled through the backend consumer hook.</p>
         </div>
 
-        <button
-          type="button"
-          onClick={() => void loadSummary()}
-          className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-white transition hover:bg-white/10"
-          aria-label="Refresh Paperclip insight"
-        >
-          <RefreshCw className="h-4 w-4" />
-          Refresh
-        </button>
+        {!preloadedSummary ? (
+          <button
+            type="button"
+            onClick={() => void loadSummary()}
+            className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-white transition hover:bg-white/10"
+            aria-label="Refresh Paperclip insight"
+          >
+            <RefreshCw className="h-4 w-4" />
+            Refresh
+          </button>
+        ) : null}
       </div>
 
       <div className="mt-4">
@@ -136,13 +154,26 @@ export default function PaperclipInsightCard({
                 <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Blocker</p>
                 <p className="mt-1 text-sm text-slate-200">{summary.blocker_summary}</p>
               </div>
+              {!compact ? (
+                <div>
+                  <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Initiative</p>
+                  <p className="mt-1 text-sm text-slate-200">{summary.initiative_title}</p>
+                </div>
+              ) : null}
             </div>
 
-            <div className="flex flex-wrap gap-2 text-xs text-slate-300">
-              <span className="rounded-full bg-white/5 px-2.5 py-1">Goal: {summary.goal_id}</span>
-              <span className="rounded-full bg-white/5 px-2.5 py-1">Initiative: {summary.initiative_id}</span>
-              <span className="rounded-full bg-white/5 px-2.5 py-1">Updated: {summary.last_updated}</span>
-            </div>
+            {!compact ? (
+              <div className="flex flex-wrap gap-2 text-xs text-slate-300">
+                <span className="rounded-full bg-white/5 px-2.5 py-1">Goal: {summary.goal_id}</span>
+                <span className="rounded-full bg-white/5 px-2.5 py-1">Initiative: {summary.initiative_id}</span>
+                <span className="rounded-full bg-white/5 px-2.5 py-1">Updated: {summary.last_updated}</span>
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-2 text-xs text-slate-300">
+                <span className="rounded-full bg-white/5 px-2.5 py-1">Initiative: {summary.initiative_title}</span>
+                <span className="rounded-full bg-white/5 px-2.5 py-1">Updated: {summary.last_updated}</span>
+              </div>
+            )}
 
             {summary.linked_tracker_cards?.length ? (
               <p className="text-xs text-slate-400">Linked cards: {summary.linked_tracker_cards.join(', ')}</p>
