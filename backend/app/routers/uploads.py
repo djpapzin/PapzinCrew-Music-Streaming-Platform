@@ -300,6 +300,29 @@ def _classify_voice_style_audio(
 
     return None
 
+def _infer_audio_extension_from_mutagen(audio: Any) -> Optional[str]:
+    """Infer a likely file extension from a parsed mutagen audio object."""
+    if audio is None:
+        return None
+
+    class_marker = f"{audio.__class__.__module__}.{audio.__class__.__name__}".lower()
+    if "mp3" in class_marker:
+        return ".mp3"
+    if "wave" in class_marker or "wav" in class_marker:
+        return ".wav"
+    if "flac" in class_marker:
+        return ".flac"
+    if "mp4" in class_marker or "m4a" in class_marker:
+        return ".m4a"
+    if "opus" in class_marker:
+        return ".opus"
+    if "ogg" in class_marker:
+        return ".ogg"
+    if "wma" in class_marker or "asf" in class_marker:
+        return ".wma"
+    return None
+
+
 def validate_audio_file(file_or_bytes, filename: Optional[str] = None, lightweight: bool = False) -> Tuple[bool, Dict[str, Any]]:
     """
     Validate the audio file for type, size, and integrity.
@@ -377,7 +400,20 @@ def validate_audio_file(file_or_bytes, filename: Optional[str] = None, lightweig
             'file_size_bytes': file_size,
         }
 
-    # Unsupported extension
+    # If the extension is missing or unsupported, try sniffing the bytes before rejecting.
+    sniffed_audio = None
+    inferred_extension = None
+    if not extension or extension not in allowed_extensions:
+        try:
+            sniffed_audio = mutagen.File(BytesIO(data))
+        except Exception:
+            sniffed_audio = None
+        inferred_extension = _infer_audio_extension_from_mutagen(sniffed_audio)
+        if inferred_extension in allowed_extensions:
+            extension = inferred_extension
+            detected_mime = extension_to_mime.get(extension, detected_mime)
+
+    # Unsupported extension (after sniffing)
     if extension and extension not in allowed_extensions:
         return False, {
             'valid': False,

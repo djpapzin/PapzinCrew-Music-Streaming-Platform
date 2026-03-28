@@ -20,6 +20,12 @@ INVALID_HEADER = b'\x00\x01\x02\x03'  # Invalid audio header
 OGG_HEADER = b'OggS'  # OGG header
 OPUS_HEADER = b'OggS'  # OPUS files use OGG container
 
+
+@pytest.fixture
+def mock_opus_file():
+    content = OPUS_HEADER + bytes([0]) * 1000
+    return io.BytesIO(content)
+
 class TestAudioValidation:
     """Test audio file validation functionality."""
     
