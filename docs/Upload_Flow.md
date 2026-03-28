@@ -29,7 +29,7 @@ sequenceDiagram
         FE->>U: Prompt user to force or cancel
     end
 
-    FE->>BE: POST upload-mix (multipart form)
+    FE->>BE: POST /upload (multipart form)
     BE->>BE: validate_audio_file; duplicate check; sanitize filename
     BE->>B2: Try upload (retries with timeout)
     alt B2 success
@@ -61,8 +61,8 @@ Notes:
 ## API Endpoints (reference)
 
 - Duplicate check: POST endpoint to check for existing track with provided metadata.
-- Upload: POST endpoint that accepts multipart (audio file, metadata, and flags like `skip_duplicate_check`).
-- Cover art status: GET endpoint to query generation status by track/id.
+- Upload: POST /upload accepts multipart form data (title, file, metadata, and flags like skip_duplicate_check; aliases: /, /upload/, /upload-mix).
+- Cover art status: GET /tracks/{id}/art-status.
 
 Refer to backend routes in `backend/app/routers/uploads.py` for exact paths and payloads.
 

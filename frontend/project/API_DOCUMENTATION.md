@@ -369,64 +369,41 @@ GET /search?q={query}&type={type}
 
 ## 📤 Upload API
 
+This section reflects the live upload contract used by UploadPage.tsx.
+
 ### Upload Track
-```http
-POST /upload/track
-```
+POST /upload
 
-**Headers:**
-```http
-Authorization: Bearer <jwt_token>
-Content-Type: multipart/form-data
-```
+Aliases:
+- /
+- /upload/
+- /upload-mix
 
-**Request Body (Form Data):**
-- `audioFile` (file): Audio file (MP3, WAV, FLAC)
-- `imageFile` (file, optional): Cover art image
-- `title` (string): Track title
-- `description` (string, optional): Track description
-- `genre` (string): Music genre
-- `tags` (string): Comma-separated tags
-- `isPublic` (boolean): Public visibility
-- `allowDownloads` (boolean): Allow downloads
+Request body: multipart/form-data
+- title (string, required)
+- file (file, required)
+- artist_name (string, optional)
+- primary_artist (string, optional alias for artist_name)
+- tag_artists (string, optional)
+- album (string, optional)
+- year (number, optional)
+- description (string, optional)
+- tracklist (string, optional)
+- tags (string, optional)
+- genre (string, optional)
+- availability (string, optional; default public)
+- allow_downloads (string, optional; default yes)
+- display_embed (string, optional; default yes)
+- age_restriction (string, optional; default all)
+- cover_art (file, optional)
+- custom_prompt (string, optional)
+- skip_duplicate_check (boolean-ish form value, optional)
+- paperclip_task_id (number, optional)
 
-**Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "uploadId": "upload_123",
-    "status": "processing",
-    "estimatedTime": "2-5 minutes",
-    "trackId": null
-  }
-}
-```
-
-### Check Upload Status
-```http
-GET /upload/status/{uploadId}
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "uploadId": "upload_123",
-    "status": "completed",
-    "progress": 100,
-    "trackId": "song_456",
-    "errors": null,
-    "processedAt": "2024-01-15T10:35:00Z"
-  }
-}
-```
-
-### Get Upload History
-```http
-GET /upload/history
-```
+Related endpoints:
+- POST /upload/extract-metadata
+- POST /upload/check-duplicate
+- GET /tracks/{id}/art-status
 
 ## 👤 User API
 
