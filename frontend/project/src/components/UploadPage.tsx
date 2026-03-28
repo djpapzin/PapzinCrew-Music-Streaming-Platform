@@ -794,6 +794,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
             
             // Prefer server-provided message when available
             const serverMsg = detail?.error || parsed?.error || detail?.message || xhr.statusText;
+            const serverErrorCode = detail?.error_code || parsed?.error_code || null;
             setUploadStatus(prev => ({
               ...prev,
               stage: 'error',
@@ -807,7 +808,10 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
               timeRemaining: ''
             }));
             
-            reject(new Error(`HTTP ${xhr.status}: ${serverMsg}`));
+            const err = new Error(`HTTP ${xhr.status}: ${serverMsg}`);
+            (err as any).serverMsg = serverMsg;
+            (err as any).serverErrorCode = serverErrorCode;
+            reject(err);
           }
         };
         
@@ -1040,13 +1044,44 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
         }, 1500);
     } catch (error) {
       console.error('Upload error:', error);
+
+      const errAny: any = error as any;
+      const rawMessage: string =
+        errAny?.serverMsg ||
+        (error instanceof Error ? error.message : String(error));
+
+      const normalizedDetails = (() => {
+        if (!rawMessage) return 'Upload failed. Please check your connection and try again.';
+        if (rawMessage === 'Network error') return 'Network error. Please check your connection and try again.';
+        if (rawMessage === 'Upload timeout') return 'Upload timed out. Please check your connection and try again.';
+        if (rawMessage.startsWith('HTTP ')) return rawMessage.replace(/^HTTP \d+:\s*/, '');
+        return rawMessage;
+      })();
+
+      const serverErrorCode: string = errAny?.serverErrorCode || 'upload_failed';
+
+      setUploadError({
+        error: normalizedDetails,
+        error_code: serverErrorCode,
+      });
+
       setUploadStatus({
         stage: 'error',
         progress: 0,
-        message: 'Upload failed. Please check your connection and try again.'
+        message: 'Upload failed',
+        details: normalizedDetails,
+        speed: '',
+        timeRemaining: '',
+        phase: 'none',
+        phaseProgress: 0,
+        canCancel: false,
+        extractedMetadata: null
       });
+
       setPublishStatus('error');
-      alert('Upload failed. Please check your connection and try again.');
+      alert(normalizedDetails.startsWith('Upload failed')
+        ? normalizedDetails
+        : `Upload failed: ${normalizedDetails}`);
     } finally {
       setIsPublishing(false);
     }
