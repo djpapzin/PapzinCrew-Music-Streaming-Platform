@@ -5,7 +5,7 @@
 # Proxy API requests to the live backend so the browser stays same-origin on Netlify.
 [[redirects]]
   from = "/api/*"
-  to = "https://papzincrew-backend.onrender.com/:splat"
+  to = "http://16.171.10.189/:splat"
   status = 200
   force = true
 
