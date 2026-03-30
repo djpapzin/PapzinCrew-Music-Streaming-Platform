@@ -1,5 +1,5 @@
 const DEFAULT_LOCAL_API_BASE = 'http://localhost:8000';
-const DEFAULT_PROD_API_BASE = 'http://16.171.10.189';
+const DEFAULT_PROD_API_BASE = 'https://papzincrew-backend.onrender.com';
 const SAME_ORIGIN_API_BASE = '/api';
 
 const isLocalDevHost = (hostname: string) =>
@@ -21,8 +21,6 @@ export const getApiBase = (): string => {
       return envBase || DEFAULT_LOCAL_API_BASE;
     }
 
-    // Netlify / browser production should call the real backend directly unless
-    // an explicit environment override is provided.
     return envBase || DEFAULT_PROD_API_BASE;
   }
 
