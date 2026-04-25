@@ -40,6 +40,14 @@ export const usePlayer = () => {
         currentTime: audio.currentTime,
         duration: audio.duration || 0
       }));
+      // Update MediaSession position
+      if ('mediaSession' in navigator && navigator.mediaSession.metadata) {
+        navigator.mediaSession.setPositionState({
+          playbackRate: audio.playbackRate || 1,
+          position: audio.currentTime || 0,
+          duration: audio.duration || 0
+        });
+      }
     };
 
     const onEnded = () => {
@@ -245,6 +253,35 @@ export const usePlayer = () => {
       isPlaying: !prev.isPlaying
     }));
   };
+
+  // MediaSession API for lock screen / notifications (mobile)
+  const setupMediaSession = () => {
+    if (!('mediaSession' in navigator)) return;
+    const song = playerState.currentSong;
+    if (!song) return;
+    try {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: song.title || 'Unknown Track',
+        artist: song.artist?.name || 'Unknown Artist',
+        album: 'Papzin & Crew',
+        artwork: song.coverUrl ? [{ src: song.coverUrl, sizes: '512x512', type: 'image/jpeg' }] : []
+      });
+      navigator.mediaSession.setActionHandler('play', () => audioRef.current?.play());
+      navigator.mediaSession.setActionHandler('pause', () => audioRef.current?.pause());
+      navigator.mediaSession.setActionHandler('previoustrack', () => handlePrev?.());
+      navigator.mediaSession.setActionHandler('nexttrack', () => handleNext?.());
+      navigator.mediaSession.setActionHandler('seekto', (details) => {
+        if (audioRef.current && details.seekTime !== undefined) {
+          audioRef.current.currentTime = details.seekTime;
+        }
+      });
+    } catch (e) { console.warn('MediaSession error:', e); }
+  };
+
+  // Update MediaSession when track changes
+  useEffect(() => {
+    if (playerState.currentSong) setupMediaSession();
+  }, [playerState.currentSong?.id, playerState.currentSong?.title]);
 
   const handleNext = () => {
     const { queue, currentIndex, shuffle, repeat } = playerState;
