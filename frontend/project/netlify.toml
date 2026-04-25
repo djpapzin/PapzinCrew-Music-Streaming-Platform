@@ -5,7 +5,7 @@
 # Proxy API requests to the live backend so the browser stays same-origin on Netlify.
 [[redirects]]
   from = "/api/*"
-  to = "http://16.171.10.189/:splat"
+  to = "http://13.48.27.192/:splat"
   status = 200
   force = true
 
