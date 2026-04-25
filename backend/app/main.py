@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse
 from .db.database import engine, get_db_diagnostics
 from .models import models
 from .routers import auth, tracks, categories, artists, uploads, storage, cleanup, file_management, paperclip, admin
+from .services.duration_backfill import maybe_backfill_missing_track_durations
 from .logging_utils import (
     setup_logging,
     set_request_id,
@@ -101,6 +102,14 @@ async def lifespan(app: FastAPI):
             _ensure_mix_extra_columns()
         except Exception:
             logger.exception("Legacy DB bootstrap failed during startup")
+
+    try:
+        if _env_bool("BACKFILL_TRACK_DURATIONS", default=False):
+            import asyncio
+            asyncio.create_task(maybe_backfill_missing_track_durations())
+    except Exception:
+        logger.exception("Failed to schedule track duration backfill")
+
     yield
 
 

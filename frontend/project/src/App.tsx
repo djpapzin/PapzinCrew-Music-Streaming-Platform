@@ -30,6 +30,7 @@ function App() {
   const [albums, setAlbums] = useState<Album[]>([]);
   const [artists, setArtists] = useState<Artist[]>([]);
   const [tracksLoading, setTracksLoading] = useState(true);
+  const [tracksError, setTracksError] = useState<string | null>(null);
   
   const {
     audioRef,
@@ -46,9 +47,34 @@ function App() {
 
   const fetchTracks = useCallback(async () => {
     setTracksLoading(true);
+    setTracksError(null);
     try {
       const res = await fetch(`${API_BASE}/tracks/`);
-      if (!res.ok) throw new Error(`Failed to load tracks: ${res.status}`);
+      if (!res.ok) {
+        let message = `Failed to load tracks (${res.status})`;
+
+        if (res.status >= 500) {
+          message = `Catalog service unavailable (${res.status}).`;
+        } else if (res.status === 404) {
+          message = 'Catalog endpoint not found (404).';
+        } else if (res.status === 401 || res.status === 403) {
+          message = `Catalog request blocked (${res.status}).`;
+        }
+
+        let responseBody = '';
+        try {
+          responseBody = await res.text();
+        } catch {
+          responseBody = '';
+        }
+
+        console.error('Failed to load tracks response', {
+          status: res.status,
+          body: responseBody.slice(0, 500),
+        });
+
+        throw new Error(message);
+      }
       const mixes = await res.json();
       const publicMixes = (mixes || []).filter((mix: any) => isPublicTrack(mix));
       const visibleMixes = publicMixes.length > 0 ? publicMixes : (mixes || []);
@@ -65,9 +91,11 @@ function App() {
         playable: Boolean(mix.file_path),
       }));
       setSongs(mapped);
+      setTracksError(null);
     } catch (err) {
       console.error('Failed to fetch tracks', err);
       setSongs([]);
+      setTracksError(err instanceof Error ? err.message : 'Unable to load tracks.');
     } finally {
       setTracksLoading(false);
     }
@@ -135,6 +163,7 @@ function App() {
             albums={albums}
             artists={artists}
             tracksLoading={tracksLoading}
+            tracksError={tracksError}
             currentSong={playerState.currentSong}
             isPlaying={playerState.isPlaying}
             onPlaySong={playSong}

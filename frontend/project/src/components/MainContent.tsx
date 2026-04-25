@@ -16,6 +16,7 @@ interface MainContentProps {
   albums: Album[];
   artists: Artist[];
   tracksLoading: boolean;
+  tracksError: string | null;
   currentSong: Song | null;
   isPlaying: boolean;
   onPlaySong: (song: Song, queue?: Song[]) => void;
@@ -29,6 +30,7 @@ const MainContent: React.FC<MainContentProps> = ({
   albums,
   artists,
   tracksLoading,
+  tracksError,
   currentSong,
   isPlaying,
   onPlaySong,
@@ -41,6 +43,20 @@ const MainContent: React.FC<MainContentProps> = ({
       return name.includes(searchQuery.toLowerCase());
     });
   };
+
+  const renderCatalogError = (title: string, detail?: string) => (
+    <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 lg:p-6 text-amber-100">
+      <h3 className="text-lg font-semibold text-white">{title}</h3>
+      <p className="mt-2 text-sm text-amber-100/90">
+        {detail || 'The catalog request failed, so this screen is showing an empty fallback instead of live songs.'}
+      </p>
+      {tracksError ? (
+        <p className="mt-2 text-xs uppercase tracking-[0.18em] text-amber-200/80">
+          Last catalog error: {tracksError}
+        </p>
+      ) : null}
+    </div>
+  );
 
   const renderHome = () => {
     if (tracksLoading) {
@@ -137,7 +153,9 @@ const MainContent: React.FC<MainContentProps> = ({
         onPlayPlaylist={onPlayPlaylist}
       />
 
-      {songs.length === 0 ? (
+      {tracksError ? (
+        renderCatalogError('Live catalog unavailable', 'Recent songs could not be loaded from the backend. Fix the API/database connection and refresh to see imported tracks.')
+      ) : songs.length === 0 ? (
         <div className="bg-white/5 rounded-xl p-6 border border-white/10">
           <h2 className="text-xl lg:text-2xl font-bold text-white mb-2">No uploads yet</h2>
           <p className="text-gray-300">Go to the Upload page to add your first track.</p>
@@ -189,16 +207,20 @@ const MainContent: React.FC<MainContentProps> = ({
           {/* Recent Songs */}
           <div className="space-y-2">
             <h3 className="text-lg font-semibold text-white mb-3">Recent Songs</h3>
-            <div className="space-y-2">
-              {songs.slice(0, 5).map(song => (
-                <QuickPlayCard
-                  key={song.id}
-                  item={song}
-                  type="song"
-                  onPlay={() => onPlaySong(song, songs)}
-                />
-              ))}
-            </div>
+            {tracksError ? (
+              renderCatalogError('Recent songs unavailable', 'The app could not load the live track list, so there are no recent songs to display right now.')
+            ) : (
+              <div className="space-y-2">
+                {songs.slice(0, 5).map(song => (
+                  <QuickPlayCard
+                    key={song.id}
+                    item={song}
+                    type="song"
+                    onPlay={() => onPlaySong(song, songs)}
+                  />
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Popular Playlists */}
@@ -541,7 +563,9 @@ const MainContent: React.FC<MainContentProps> = ({
 
       <div>
         <h2 className="text-xl lg:text-2xl font-bold text-white mb-6">Recently Added</h2>
-        {songs.length === 0 ? (
+        {tracksError ? (
+          renderCatalogError('Recent songs unavailable', 'The library could not reach the live catalog API. This is not an empty-database state.')
+        ) : songs.length === 0 ? (
           <div className="bg-white/5 rounded-lg p-6 text-gray-300">
             No recent songs yet. Upload a track to get started.
           </div>
