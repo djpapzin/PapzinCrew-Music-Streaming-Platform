@@ -8,6 +8,7 @@ import AdminAnalyticsPanel from './AdminAnalyticsPanel';
 import { Routes, Route } from 'react-router-dom';
 import { Song, Playlist, Album, Artist } from '../types/music';
 import { Clock, Star, TrendingUp, Users, Award, Zap, Music } from 'lucide-react';
+import { safeArtworkUrl, DEFAULT_ARTWORK_URL } from '../lib/artwork';
 
 interface MainContentProps {
   searchQuery: string;
@@ -187,9 +188,13 @@ const MainContent: React.FC<MainContentProps> = ({
               className="flex items-center bg-white/10 hover:bg-white/20 rounded-lg p-3 cursor-pointer transition-colors duration-200 group"
             >
               <img
-                src={playlist.imageUrl}
+                src={safeArtworkUrl(playlist.imageUrl)}
                 alt={playlist.title}
                 className="w-12 h-12 rounded object-cover shadow-lg flex-shrink-0"
+                onError={(e) => {
+                  const el = e.currentTarget as HTMLImageElement;
+                  if (el.src !== DEFAULT_ARTWORK_URL) el.src = DEFAULT_ARTWORK_URL;
+                }}
               />
               <span className="ml-3 text-white font-medium truncate">{playlist.title}</span>
             </div>
@@ -335,9 +340,13 @@ const MainContent: React.FC<MainContentProps> = ({
           {artists.filter(artist => artist.followers < 100000).map(artist => (
             <div key={artist.id} className="group bg-white/5 hover:bg-white/10 rounded-lg p-4 transition-all duration-300 cursor-pointer">
               <img
-                src={artist.imageUrl}
+                src={safeArtworkUrl(artist.imageUrl)}
                 alt={artist.name}
                 className="w-full aspect-square object-cover rounded-full shadow-lg mb-4"
+                onError={(e) => {
+                  const el = e.currentTarget as HTMLImageElement;
+                  if (el.src !== DEFAULT_ARTWORK_URL) el.src = DEFAULT_ARTWORK_URL;
+                }}
               />
               <h3 className="text-white font-semibold text-center text-sm lg:text-base">{artist.name}</h3>
               <p className="text-gray-400 text-xs lg:text-sm text-center">{artist.followers.toLocaleString()} followers</p>
@@ -436,9 +445,13 @@ const MainContent: React.FC<MainContentProps> = ({
           {artists.map(artist => (
             <div key={artist.id} className="group bg-white/5 hover:bg-white/10 rounded-lg p-4 transition-all duration-300 cursor-pointer">
               <img
-                src={artist.imageUrl}
+                src={safeArtworkUrl(artist.imageUrl)}
                 alt={artist.name}
                 className="w-full aspect-square object-cover rounded-full shadow-lg mb-4"
+                onError={(e) => {
+                  const el = e.currentTarget as HTMLImageElement;
+                  if (el.src !== DEFAULT_ARTWORK_URL) el.src = DEFAULT_ARTWORK_URL;
+                }}
               />
               <h3 className="text-white font-semibold text-center text-sm lg:text-base">{artist.name}</h3>
               <p className="text-gray-400 text-xs lg:text-sm text-center">{artist.followers.toLocaleString()} followers</p>

@@ -9,6 +9,7 @@ import { Routes, Route } from 'react-router-dom';
 import { Song, Playlist, Album, Artist } from './types/music';
 import Toast from './components/Toast';
 import { API_BASE, toAbsoluteApiUrl } from './lib/api';
+import { safeArtworkUrl } from './lib/artwork';
 
 const INTERNAL_PROBE_TRACK_PATTERNS = [
   /^b2 proof\b/i,
@@ -84,7 +85,7 @@ function App() {
         artist: (mix.artist && mix.artist.name) || 'Unknown Artist',
         album: mix.album || '',
         duration: mix.duration_seconds || 0,
-        imageUrl: toAbsoluteApiUrl(mix.cover_art_url) || '',
+        imageUrl: safeArtworkUrl(toAbsoluteApiUrl(mix.cover_art_url)),
         audioUrl: mix.file_path ? `${API_BASE}/tracks/${mix.id}/stream` : '',
         genre: mix.genre || '',
         year: mix.year || 0,

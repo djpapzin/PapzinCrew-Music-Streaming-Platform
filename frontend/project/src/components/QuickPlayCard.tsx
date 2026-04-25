@@ -1,6 +1,7 @@
 import React from 'react';
 import { Play, Clock } from 'lucide-react';
 import { Song, Playlist, Album } from '../types/music';
+import { safeArtworkUrl, DEFAULT_ARTWORK_URL } from '../lib/artwork';
 
 interface QuickPlayCardProps {
   item: Song | Playlist | Album;
@@ -54,12 +55,12 @@ const QuickPlayCard: React.FC<QuickPlayCardProps> = ({ item, type, onPlay }) => 
     >
       <div className="relative flex-shrink-0">
         <img
-          src={getImageUrl()}
+          src={safeArtworkUrl(getImageUrl())}
           alt={getTitle()}
           className="w-10 lg:w-12 h-10 lg:h-12 rounded object-cover shadow-lg"
           onError={(e) => {
             const el = e.currentTarget as HTMLImageElement;
-            if (el.src !== PLACEHOLDER) el.src = PLACEHOLDER;
+            if (el.src !== DEFAULT_ARTWORK_URL) el.src = DEFAULT_ARTWORK_URL;
           }}
         />
 

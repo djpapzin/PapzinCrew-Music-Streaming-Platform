@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { PlayerState } from '../types/music';
 import { NowPlayingPopup } from './NowPlayingPopup';
+import { safeArtworkUrl, DEFAULT_ARTWORK_URL } from '../lib/artwork';
 
 interface PlayerProps {
   playerState: PlayerState;
@@ -84,9 +85,13 @@ const Player: React.FC<PlayerProps> = ({
           onClick={() => setShowMobilePlayer(true)}
         >
           <img
-            src={currentSong.imageUrl}
+            src={safeArtworkUrl(currentSong.imageUrl)}
             alt={currentSong.album}
             className="w-10 h-10 rounded object-cover shadow-lg"
+            onError={(e) => {
+              const el = e.currentTarget as HTMLImageElement;
+              if (el.src !== DEFAULT_ARTWORK_URL) el.src = DEFAULT_ARTWORK_URL;
+            }}
           />
           <div className="flex-1 min-w-0">
             <p className="text-white font-medium text-sm truncate">{currentSong.title}</p>
@@ -154,9 +159,13 @@ const Player: React.FC<PlayerProps> = ({
           {/* Album Art */}
           <div className="flex-1 min-h-0 flex items-center justify-center px-5 py-4 sm:px-8 sm:py-6">
             <img
-              src={currentSong.imageUrl}
+              src={safeArtworkUrl(currentSong.imageUrl)}
               alt={currentSong.album}
               className="w-full max-w-[min(74vw,18rem)] aspect-square max-h-[30vh] sm:max-h-[36vh] rounded-lg object-cover shadow-2xl"
+              onError={(e) => {
+                const el = e.currentTarget as HTMLImageElement;
+                if (el.src !== DEFAULT_ARTWORK_URL) el.src = DEFAULT_ARTWORK_URL;
+              }}
             />
           </div>
 
@@ -271,9 +280,13 @@ const Player: React.FC<PlayerProps> = ({
             {/* Left: Current song info */}
             <div className="flex items-center space-x-3">
               <img
-                src={currentSong.imageUrl}
+                src={safeArtworkUrl(currentSong.imageUrl)}
                 alt={currentSong.album}
                 className="w-14 h-14 rounded-lg object-cover shadow-lg"
+                onError={(e) => {
+                  const el = e.currentTarget as HTMLImageElement;
+                  if (el.src !== DEFAULT_ARTWORK_URL) el.src = DEFAULT_ARTWORK_URL;
+                }}
               />
               <div className="min-w-0">
                 <p className="text-white font-medium truncate">{currentSong.title}</p>
@@ -401,7 +414,7 @@ const Player: React.FC<PlayerProps> = ({
           id: currentSong.id,
           title: currentSong.title,
           artist: currentSong.artist,
-          coverArt: currentSong.imageUrl,
+          coverArt: safeArtworkUrl(currentSong.imageUrl),
           audioUrl: currentSong.audioUrl
         }}
         isVisible={showNowPlayingPopup}

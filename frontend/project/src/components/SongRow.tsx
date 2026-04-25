@@ -1,6 +1,7 @@
 import React from 'react';
 import { Play, Heart, MoreHorizontal, AlertCircle } from 'lucide-react';
 import { Song } from '../types/music';
+import { safeArtworkUrl, DEFAULT_ARTWORK_URL } from '../lib/artwork';
 
 interface SongRowProps {
   song: Song;
@@ -55,12 +56,12 @@ const SongRow: React.FC<SongRowProps> = ({ song, index, isPlaying, onPlay }) => 
         {/* Song info */}
         <div className="col-span-5 flex items-center space-x-3">
           <img
-            src={song.imageUrl && song.imageUrl.trim().length > 0 ? song.imageUrl : PLACEHOLDER}
+            src={safeArtworkUrl(song.imageUrl || PLACEHOLDER)}
             alt={song.album}
             className="w-10 h-10 rounded object-cover"
             onError={(e) => {
               const el = e.currentTarget as HTMLImageElement;
-              if (el.src !== PLACEHOLDER) el.src = PLACEHOLDER;
+              if (el.src !== DEFAULT_ARTWORK_URL) el.src = DEFAULT_ARTWORK_URL;
             }}
           />
           <div className="min-w-0">
@@ -105,12 +106,12 @@ const SongRow: React.FC<SongRowProps> = ({ song, index, isPlaying, onPlay }) => 
       <div className="lg:hidden group flex items-center space-x-3 px-4 py-3 hover:bg-white/5 rounded-lg transition-colors duration-200">
         <div className="relative">
           <img
-            src={song.imageUrl && song.imageUrl.trim().length > 0 ? song.imageUrl : PLACEHOLDER}
+            src={safeArtworkUrl(song.imageUrl || PLACEHOLDER)}
             alt={song.album}
             className="w-12 h-12 rounded object-cover"
             onError={(e) => {
               const el = e.currentTarget as HTMLImageElement;
-              if (el.src !== PLACEHOLDER) el.src = PLACEHOLDER;
+              if (el.src !== DEFAULT_ARTWORK_URL) el.src = DEFAULT_ARTWORK_URL;
             }}
           />
           {disabled && (

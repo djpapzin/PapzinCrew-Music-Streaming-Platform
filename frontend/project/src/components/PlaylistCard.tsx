@@ -1,6 +1,7 @@
 import React from 'react';
 import { Play } from 'lucide-react';
 import { Playlist, Album } from '../types/music';
+import { safeArtworkUrl, DEFAULT_ARTWORK_URL } from '../lib/artwork';
 
 interface PlaylistCardProps {
   item: Playlist | Album;
@@ -14,9 +15,13 @@ const PlaylistCard: React.FC<PlaylistCardProps> = ({ item, onPlay }) => {
     <div className="group bg-white/5 hover:bg-white/10 rounded-lg p-3 lg:p-4 transition-all duration-300 hover:shadow-xl cursor-pointer">
       <div className="relative">
         <img
-          src={item.imageUrl}
+          src={safeArtworkUrl(item.imageUrl)}
           alt={item.title}
           className="w-full aspect-square object-cover rounded-lg shadow-lg"
+          onError={(e) => {
+            const el = e.currentTarget as HTMLImageElement;
+            if (el.src !== DEFAULT_ARTWORK_URL) el.src = DEFAULT_ARTWORK_URL;
+          }}
         />
         <button
           onClick={onPlay}

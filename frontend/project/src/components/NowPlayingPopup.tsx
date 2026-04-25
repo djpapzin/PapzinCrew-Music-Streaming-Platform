@@ -15,6 +15,7 @@ import {
   ChevronUp
 } from 'lucide-react';
 import { PlayerState } from '../types/music';
+import { safeArtworkUrl, DEFAULT_ARTWORK_URL } from '../lib/artwork';
 
 interface Track {
   id: string;
@@ -76,7 +77,15 @@ export function NowPlayingPopup({
       <div className="fixed bottom-4 right-4 bg-black/90 backdrop-blur-xl border border-white/20 rounded-xl shadow-2xl p-3 z-50 flex items-center space-x-3 w-80">
         <div className="w-10 h-10 rounded overflow-hidden flex-shrink-0">
           {track.coverArt ? (
-            <img src={track.coverArt} alt={`${track.title} cover`} className="w-full h-full object-cover" />
+            <img
+              src={safeArtworkUrl(track.coverArt)}
+              alt={`${track.title} cover`}
+              className="w-full h-full object-cover"
+              onError={(e) => {
+                const el = e.currentTarget as HTMLImageElement;
+                if (el.src !== DEFAULT_ARTWORK_URL) el.src = DEFAULT_ARTWORK_URL;
+              }}
+            />
           ) : (
             <div className="w-full h-full bg-gradient-to-br from-gray-800 to-gray-900" />
           )}
@@ -174,9 +183,13 @@ export function NowPlayingPopup({
             <div className="aspect-square rounded-2xl overflow-hidden shadow-2xl">
               {track.coverArt ? (
                 <img
-                  src={track.coverArt}
+                  src={safeArtworkUrl(track.coverArt)}
                   alt={`${track.title} cover`}
                   className="w-full h-full object-cover"
+                  onError={(e) => {
+                    const el = e.currentTarget as HTMLImageElement;
+                    if (el.src !== DEFAULT_ARTWORK_URL) el.src = DEFAULT_ARTWORK_URL;
+                  }}
                 />
               ) : (
                 <div className="w-full h-full bg-gradient-to-br from-gray-800 to-gray-900 flex items-center justify-center">
@@ -320,4 +333,3 @@ export function NowPlayingPopup({
     </div>
   );
 }
-
