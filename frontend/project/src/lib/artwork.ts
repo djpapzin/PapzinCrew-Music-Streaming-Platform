@@ -10,6 +10,7 @@ export const DEFAULT_ARTWORK_DATA_URL =
   <rect width='100%' height='100%' rx='28' fill='url(%23g)'/>\
   <circle cx='160' cy='160' r='70' fill='rgba(255,255,255,0.14)'/>\
   <text x='50%' y='52%' font-size='112' text-anchor='middle' dominant-baseline='middle' fill='white'>♪</text>\
+  <text x='50%' y='83%' font-size='26' font-weight='700' text-anchor='middle' fill='white' font-family='Arial, Helvetica, sans-serif' letter-spacing='1.5'>PAPZIN &amp; CREW</text>\
 </svg>";
 
 export const resolveArtworkUrl = (url?: string | null): string => {
