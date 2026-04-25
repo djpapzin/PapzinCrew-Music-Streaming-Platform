@@ -4,22 +4,27 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
 from app.main import app
-from app.db.database import Base, get_db
-from app.models.models import Mix
+from app.db.database import get_db
+from app.models import models
 from app.services.paperclip_client import PaperclipConsumerError
 
 # Setup the TestClient
 client = TestClient(app)
 
-# Setup the in-memory SQLite database for testing
-SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
-engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
+# Setup an in-memory SQLite database shared across TestClient requests
+SQLALCHEMY_DATABASE_URL = "sqlite://"
+engine = create_engine(
+    SQLALCHEMY_DATABASE_URL,
+    connect_args={"check_same_thread": False},
+    poolclass=StaticPool,
+)
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-# Override the get_db dependency to use the in-memory database
-Base.metadata.create_all(bind=engine)
+# Override the get_db dependency to use the shared in-memory database
+models.Base.metadata.create_all(bind=engine)
 
 def override_get_db():
     try:
@@ -32,14 +37,14 @@ app.dependency_overrides[get_db] = override_get_db
 
 @pytest.fixture(scope="function")
 def db_session():
-    # Create the tables.
-    Base.metadata.create_all(bind=engine)
+    models.Base.metadata.drop_all(bind=engine)
+    models.Base.metadata.create_all(bind=engine)
     db = TestingSessionLocal()
     try:
         yield db
     finally:
         db.close()
-        Base.metadata.drop_all(bind=engine)
+        models.Base.metadata.drop_all(bind=engine)
 
 # --- Test Cases ---
 
@@ -62,8 +67,37 @@ def test_get_analytics_success(mock_fetch_paperclip_summary, db_session):
         'last_updated': '2026-03-27T20:40:00Z',
         'audit_ref': 'audit-1',
     }
-    db_session.add(Mix(title="Test Mix 1", artist_id=1, category_id=1, file_name="test1.mp3", play_count=100, download_count=10, file_size_mb=5.5))
-    db_session.add(Mix(title="Test Mix 2", artist_id=1, category_id=1, file_name="test2.mp3", play_count=50, download_count=5, file_size_mb=2.3))
+    artist = models.Artist(name="Test Artist")
+    db_session.add(artist)
+    db_session.commit()
+    db_session.refresh(artist)
+
+    db_session.add(
+        models.Mix(
+            title="Test Mix 1",
+            original_filename="test1.mp3",
+            artist_id=artist.id,
+            duration_seconds=180,
+            file_path="/uploads/test1.mp3",
+            file_size_mb=5.5,
+            quality_kbps=320,
+            play_count=100,
+            download_count=10,
+        )
+    )
+    db_session.add(
+        models.Mix(
+            title="Test Mix 2",
+            original_filename="test2.mp3",
+            artist_id=artist.id,
+            duration_seconds=240,
+            file_path="/uploads/test2.mp3",
+            file_size_mb=2.3,
+            quality_kbps=320,
+            play_count=50,
+            download_count=5,
+        )
+    )
     db_session.commit()
 
     # Act: Call the endpoint with the admin key
