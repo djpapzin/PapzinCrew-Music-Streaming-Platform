@@ -17,11 +17,17 @@ services:
     healthCheckPath: /ready
     autoDeploy: true
     envVars:
-      # Database connection (automatically provided by Render when using pgsql service)
+      # Database connection - swap between Render Postgres and Neon
+      # === RENDER POSTGRES (currently active) ===
+      # - key: DATABASE_URL
+      #   fromDatabase:
+      #     name: papzincrew-db
+      #     property: connectionString
+      # === NEON (uncomment when ready) ===
       - key: DATABASE_URL
-        fromDatabase:
-          name: papzincrew-db
-          property: connectionString
+        value: "postgresql://neondb_owner:npg_An0WhyEaBC6r@ep-royal-rice-ak2mosuj-pooler.c-3.us-west-2.aws.neon.tech:5432/neondb?sslmode=require&channel_binding=require"
+      - key: DB_SSLMODE
+        value: "require"
       # Explicit Python version
       - key: PYTHON_VERSION
         value: "3.12.5"
@@ -75,4 +81,4 @@ services:
     publishPath: dist
     envVars:
       - key: VITE_API_URL
-        value: "https://papzincrew-backend.onrender.com"
+        value: "http://13.48.27.192"
