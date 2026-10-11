@@ -1,15 +1,15 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import MainContent from './components/MainContent';
 import Player from './components/Player';
 import MobileNav from './components/MobileNav';
 import { usePlayer } from './hooks/usePlayer';
-import { Routes, Route } from 'react-router-dom';
 import { Song, Playlist, Album, Artist } from './types/music';
 import Toast from './components/Toast';
 import { API_BASE, toAbsoluteApiUrl } from './lib/api';
 import { safeArtworkUrl } from './lib/artwork';
+import { LibraryProvider } from './state/LibraryContext';
 
 const INTERNAL_PROBE_TRACK_PATTERNS = [
   /^b2 proof\b/i,
@@ -27,9 +27,9 @@ function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [songs, setSongs] = useState<Song[]>([]);
-  const [playlists, setPlaylists] = useState<Playlist[]>([]);
-  const [albums, setAlbums] = useState<Album[]>([]);
-  const [artists, setArtists] = useState<Artist[]>([]);
+  const [playlists] = useState<Playlist[]>([]);
+  const [albums] = useState<Album[]>([]);
+  const [artists] = useState<Artist[]>([]);
   const [tracksLoading, setTracksLoading] = useState(true);
   const [tracksError, setTracksError] = useState<string | null>(null);
   
@@ -50,7 +50,12 @@ function App() {
     setTracksLoading(true);
     setTracksError(null);
     try {
-      const res = await fetch(`${API_BASE}/tracks/`);
+      // Render free instances can outlast Netlify's proxy timeout on a cold start.
+      // Retry once through the backend origin before showing a recoverable error.
+      let res = await fetch(`${API_BASE}/tracks/?limit=1000`);
+      if (res.status === 502 || res.status === 503 || res.status === 504) {
+        res = await fetch('https://papzincrew-backend.onrender.com/tracks/?limit=1000');
+      }
       if (!res.ok) {
         let message = `Failed to load tracks (${res.status})`;
 
@@ -123,7 +128,7 @@ function App() {
   };
 
   return (
-    <div className="h-screen bg-black text-white flex flex-col">
+    <LibraryProvider songs={songs}><div className="h-screen bg-black text-white flex flex-col">
       {/* Global toast notifications */}
       <Toast />
       {/* Hidden audio element */}
@@ -167,6 +172,9 @@ function App() {
             tracksError={tracksError}
             currentSong={playerState.currentSong}
             isPlaying={playerState.isPlaying}
+            volume={playerState.volume}
+            setVolume={setVolume}
+            onRetry={fetchTracks}
             onPlaySong={playSong}
             onPlayPlaylist={handlePlayPlaylist}
           />
@@ -190,7 +198,7 @@ function App() {
           onToggleRepeat={toggleRepeat}
         />
       )}
-    </div>
+    </div></LibraryProvider>
   );
 }
 

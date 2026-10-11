@@ -1,5 +1,5 @@
 import React from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Home, Search, Library, Heart, PlusCircle, Music, Users, Disc3, Star, TrendingUp, Upload, Shield } from 'lucide-react';
 
 interface SidebarProps {
@@ -8,6 +8,7 @@ interface SidebarProps {
 
 const Sidebar: React.FC<SidebarProps> = ({ onNavigate }) => {
   const location = useLocation();
+  const navigate = useNavigate();
   const activePath = location.pathname;
 
   const mainMenuItems = [
@@ -30,7 +31,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onNavigate }) => {
     { id: 'admin', path: '/admin', label: 'Admin', icon: Shield }
   ];
 
-  const NavLink = ({ to, onClick, isActive, children }) => (
+  const NavLink = ({ to, onClick, isActive, children }: {to: string; onClick?: () => void; isActive: boolean; children: React.ReactNode}) => (
     <Link
       to={to}
       onClick={onClick}
@@ -78,7 +79,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onNavigate }) => {
 
       {/* Create Playlist */}
       <div className="px-4 pb-4 flex-shrink-0">
-        <button className="w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-400 hover:text-white hover:bg-white/5 transition-all duration-200">
+        <button onClick={() => { navigate('/playlists'); onNavigate?.(); }} className="w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-400 hover:text-white hover:bg-white/5 transition-all duration-200">
           <PlusCircle className="w-5 h-5" />
           <span className="font-medium">Create Playlist</span>
         </button>
@@ -141,7 +142,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onNavigate }) => {
           <p className="text-gray-400 text-sm mb-3">
             Connect with independent artists and discover fresh talent.
           </p>
-          <button className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:shadow-lg transition-shadow duration-200 w-full">
+          <button onClick={() => { navigate('/account'); onNavigate?.(); }} className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:shadow-lg transition-shadow duration-200 w-full">
             Get Started
           </button>
         </div>

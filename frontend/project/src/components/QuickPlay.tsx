@@ -11,32 +11,31 @@ interface QuickPlayProps {
 
 const QuickPlay: React.FC<QuickPlayProps> = ({
   songs,
-  playlists,
-  onPlaySong,
-  onPlayPlaylist
+  onPlaySong
 }) => {
-  const hasSongs = Array.isArray(songs) && songs.length > 0;
-  const hasPlaylists = Array.isArray(playlists) && playlists.length > 0;
+  const playable = songs.filter(song => song.playable !== false && song.audioUrl);
+  const hasSongs = playable.length > 0;
 
   const handleQuickPlay = () => {
     if (!hasSongs) return;
     // Play a random song from all available songs
-    const randomSong = songs[Math.floor(Math.random() * songs.length)];
-    onPlaySong(randomSong, songs);
+    const randomSong = playable[Math.floor(Math.random() * playable.length)];
+    onPlaySong(randomSong, playable);
   };
 
   const handleShufflePlay = () => {
     if (!hasSongs) return;
     // Create a shuffled queue and start playing
-    const shuffledSongs = [...songs].sort(() => Math.random() - 0.5);
+    const shuffledSongs = [...playable].sort(() => Math.random() - 0.5);
     onPlaySong(shuffledSongs[0], shuffledSongs);
   };
 
   const handleRadioPlay = () => {
-    if (!hasPlaylists) return;
-    // Play from a random playlist (simulating radio mode)
-    const randomPlaylist = playlists[Math.floor(Math.random() * playlists.length)];
-    onPlayPlaylist(randomPlaylist);
+    if (!hasSongs) return;
+    const seed = playable[Math.floor(Math.random() * playable.length)];
+    const related = playable.filter(song => song.id !== seed.id && (song.artist === seed.artist || (seed.genre && song.genre === seed.genre)));
+    const others = playable.filter(song => song.id !== seed.id && !related.some(item => item.id === song.id));
+    onPlaySong(seed, [seed, ...related.sort(() => Math.random() - 0.5), ...others.sort(() => Math.random() - 0.5)]);
   };
 
   return (
@@ -70,8 +69,8 @@ const QuickPlay: React.FC<QuickPlayProps> = ({
           
           <button
             onClick={handleRadioPlay}
-            disabled={!hasPlaylists}
-            className={`flex items-center justify-center space-x-2 bg-purple-500 text-white px-4 py-2 rounded-full font-medium transition-all duration-200 ${hasPlaylists ? 'hover:bg-purple-400 hover:scale-105' : 'opacity-50 cursor-not-allowed'}`}
+            disabled={!hasSongs}
+            className={`flex items-center justify-center space-x-2 bg-purple-500 text-white px-4 py-2 rounded-full font-medium transition-all duration-200 ${hasSongs ? 'hover:bg-purple-400 hover:scale-105' : 'opacity-50 cursor-not-allowed'}`}
           >
             <Radio className="w-4 h-4" />
             <span>Radio</span>

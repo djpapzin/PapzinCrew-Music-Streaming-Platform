@@ -1,376 +1,151 @@
 import { useState, useRef, useEffect } from 'react';
 import { Song, PlayerState } from '../types/music';
 
+export const VOLUME_KEY = 'papzincrew:volume';
+const initialVolume = () => {
+  try { const saved = localStorage.getItem(VOLUME_KEY); const n = Number(saved); return saved !== null && Number.isFinite(n) ? Math.max(0, Math.min(1, n)) : 0.7; } catch { return 0.7; }
+};
+const available = (song: Song) => !!song.audioUrl && song.playable !== false;
+
 export const usePlayer = () => {
   const audioRef = useRef<HTMLAudioElement>(null);
-  const [playerState, setPlayerState] = useState<PlayerState>({
-    currentSong: null,
-    isPlaying: false,
-    volume: 0.7,
-    currentTime: 0,
-    duration: 0,
-    queue: [],
-    currentIndex: -1,
-    shuffle: false,
-    repeat: 'none'
-  });
-  
-  // Track one-time proxy fallback per track to avoid loops (dev reliability)
-  const proxyTriedRef = useRef<Set<string>>(new Set());
-  const isDevHost = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
-  const toast = (message: string) => {
-    try {
-      window.dispatchEvent(new CustomEvent('app:toast', { detail: { message } }));
-    } catch {}
+  const [playerState, setPlayerState] = useState<PlayerState>({ currentSong: null, isPlaying: false, volume: initialVolume(), currentTime: 0, duration: 0, queue: [], currentIndex: -1, shuffle: false, repeat: 'none' });
+  const stateRef = useRef(playerState);
+  const failed = useRef(new Set<string>());
+  const actions = useRef({ next: (_ended = false) => {}, previous: () => {}, seek: (_time: number) => {} });
+  const update = (change: Partial<PlayerState>) => {
+    stateRef.current = { ...stateRef.current, ...change };
+    setPlayerState(stateRef.current);
   };
-
-  useEffect(() => {
+  const notify = (message: string) => window.dispatchEvent(new CustomEvent('app:toast', { detail: { message } }));
+  const requestPlay = () => {
     const audio = audioRef.current;
     if (!audio) return;
-
-    // Ensure CORS-safe playback for redirected/static resources
-    try {
-      audio.crossOrigin = 'anonymous';
-      audio.preload = 'auto';
-    } catch {}
-
-    const updateTime = () => {
-      setPlayerState(prev => ({
-        ...prev,
-        currentTime: audio.currentTime,
-        duration: audio.duration || 0
-      }));
-      // Update MediaSession position
-      if ('mediaSession' in navigator && navigator.mediaSession.metadata) {
-        navigator.mediaSession.setPositionState({
-          playbackRate: audio.playbackRate || 1,
-          position: audio.currentTime || 0,
-          duration: audio.duration || 0
-        });
-      }
-    };
-
-    const onEnded = () => {
-      handleNext();
-    };
-
-    const onError = () => {
-      const err = (audio as any).error as MediaError | undefined;
-      console.error('Audio error', {
-        code: err?.code,
-        message: (err as any)?.message,
-        src: audio.currentSrc,
-        networkState: audio.networkState,
-        readyState: audio.readyState,
-      });
-
-      // Fallback: if we failed loading a redirected B2 URL due to CORS or format, retry once via backend proxy
-      try {
-        const src = audio.currentSrc || audio.src;
-        // Match /tracks/{id}/stream but not already /proxy
-        const m = src && src.match(/\/tracks\/(\d+)\/stream(?!\/proxy)/);
-        const trackIdStr = m ? String(parseInt(m[1], 10)) : undefined;
-        if (trackIdStr && !proxyTriedRef.current.has(trackIdStr)) {
-          proxyTriedRef.current.add(trackIdStr);
-          const proxyUrl = src.replace('/stream', '/stream/proxy');
-          console.info('Falling back to proxy', { trackId: trackIdStr, proxyUrl });
-          audio.src = proxyUrl;
-          try { audio.load(); } catch {}
-          // Retry playback now and also once ready
-          const targetVolume = audio.volume;
-          audio.muted = false;
-          audio.volume = targetVolume;
-          audio.addEventListener('canplay', () => {
-            audio.play().catch(console.error);
-          }, { once: true });
-          audio.play().catch(() => {/* will retry on canplay */});
-          return;
-        }
-        // If we are already on proxy (or retry already happened), skip to next track
-        const onProxy = src.includes('/stream/proxy');
-        if (onProxy || (trackIdStr && proxyTriedRef.current.has(trackIdStr))) {
-          console.warn('Proxy also failed; skipping to next track');
-          toast('Skipped: playback failed for this track');
-          handleNext();
-          return;
-        }
-      } catch {}
-    };
-
-    const onStalled = () => {
-      console.warn('Audio stalled', { src: audio.currentSrc, networkState: audio.networkState, readyState: audio.readyState });
-    };
-
-    const onAbort = () => {
-      console.warn('Audio load aborted', { src: audio.currentSrc });
-    };
-
-    const onWaiting = () => {
-      console.info('Audio waiting for data', { src: audio.currentSrc, readyState: audio.readyState });
-    };
-
-    audio.addEventListener('timeupdate', updateTime);
-    audio.addEventListener('ended', onEnded);
-    audio.addEventListener('loadedmetadata', updateTime);
-    audio.addEventListener('error', onError);
-    audio.addEventListener('stalled', onStalled);
-    audio.addEventListener('abort', onAbort);
-    audio.addEventListener('waiting', onWaiting);
-
-    return () => {
-      audio.removeEventListener('timeupdate', updateTime);
-      audio.removeEventListener('ended', onEnded);
-      audio.removeEventListener('loadedmetadata', updateTime);
-      audio.removeEventListener('error', onError);
-      audio.removeEventListener('stalled', onStalled);
-      audio.removeEventListener('abort', onAbort);
-      audio.removeEventListener('waiting', onWaiting);
-    };
-  }, []);
+    audio.volume = stateRef.current.volume;
+    audio.muted = stateRef.current.volume === 0;
+    void audio.play().catch((err: Error) => {
+      if (err.name === 'AbortError') return;
+      update({ isPlaying: false });
+      if (err.name === 'NotAllowedError') notify('Tap Play to start listening.');
+    });
+  };
 
   const playSong = (song: Song, queue: Song[] = [song]) => {
     const audio = audioRef.current;
-    if (!audio) return;
-
-    const currentIndex = queue.findIndex(s => s.id === song.id);
-    
-    // Reset proxy fallback for this track
-    try { proxyTriedRef.current.delete(String(song.id)); } catch {}
-    
-    setPlayerState(prev => ({
-      ...prev,
-      currentSong: song,
-      queue,
-      currentIndex,
-      isPlaying: true
-    }));
-
-    // Immediate guard: skip tracks with no source or flagged unplayable
-    if (!song.audioUrl || song.playable === false) {
-      console.warn('Skipping unplayable track (no source or flagged)', { id: song.id, title: song.title });
-      toast('Skipped: track is unavailable');
-      handleNext();
-      return;
-    }
-
-    // Build preferred source: always use proxy in development to avoid B2 CORS
-    const buildPreferredSrc = (url: string) => {
-      if (!url) return url;
-      // Always use proxy for streaming to avoid CORS issues with B2 storage
-      if (url.includes('/stream/proxy')) return url; // already proxy
-      if (url.includes('/tracks/') && url.includes('/stream')) return url.replace('/stream', '/stream/proxy');
-      return url;
-    };
-
-    const preferredSrc = buildPreferredSrc(song.audioUrl);
-    console.debug('Setting audio src', { url: preferredSrc, id: song.id, title: song.title });
-
-    // Define attemptPlay before use to avoid TDZ issues
-    const attemptPlay = () => {
-      // Try muted autoplay first (widely allowed by browsers)
-      const targetVolume = playerState.volume;
-      audio.muted = true;
-      audio.play().then(() => {
-        // Unmute as soon as possible after playback starts
-        setTimeout(() => {
-          audio.muted = false;
-          audio.volume = targetVolume;
-        }, 0);
-      }).catch((err: any) => {
-        // Autoplay restriction
-        if (err && (err.name === 'NotAllowedError' || err.message?.toLowerCase().includes('autoplay'))) {
-          console.warn('Autoplay blocked; will resume on next user interaction');
-          const resume = () => {
-            // Ensure we unmute and restore intended volume on user interaction
-            audio.muted = false;
-            audio.volume = targetVolume;
-            audio.play().catch(console.error);
-            document.removeEventListener('click', resume);
-            document.removeEventListener('keydown', resume);
-          };
-          document.addEventListener('click', resume, { once: true });
-          document.addEventListener('keydown', resume, { once: true });
-        } else {
-          // If playback failed due to readiness/network, retry on canplay
-          console.warn('Playback failed, retrying on canplay:', err);
-          audio.addEventListener('canplay', () => {
-            audio.muted = false;
-            audio.volume = targetVolume;
-            audio.play().catch(console.error);
-          }, { once: true });
-        }
-      });
-    };
-
-    // In dev, proactively HEAD the proxy to skip null/404 tracks
-    const trySetAndPlay = () => {
-      audio.src = preferredSrc;
-      audio.volume = playerState.volume;
-      try { audio.load(); } catch {}
-      // Try to play now and also once it's ready
-      audio.addEventListener('canplay', attemptPlay, { once: true });
-      attemptPlay();
-    };
-
-    if (isDevHost && preferredSrc.includes('/stream/proxy')) {
-      // Use a short HEAD to validate availability
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 5000);
-      fetch(preferredSrc, { method: 'HEAD', signal: controller.signal }).then((resp) => {
-        clearTimeout(timeout);
-        if (!resp.ok) {
-          console.warn('Proxy HEAD not OK; skipping track', { status: resp.status, id: song.id, url: preferredSrc });
-          toast('Skipped: track not found');
-          handleNext();
-          return;
-        }
-        trySetAndPlay();
-      }).catch((e) => {
-        clearTimeout(timeout);
-        console.warn('Proxy HEAD failed; skipping track', { error: String(e), id: song.id, url: preferredSrc });
-        toast('Skipped: track not reachable');
-        handleNext();
-      });
-      return;
-    }
-
-    trySetAndPlay();
-    // attemptPlay moved above into trySetAndPlay
+    if (!audio || !available(song)) { notify('This track is unavailable.'); return; }
+    const playableQueue = queue.filter(available);
+    if (!playableQueue.some(item => item.id === song.id)) playableQueue.unshift(song);
+    audio.pause();
+    update({ currentSong: song, currentIndex: playableQueue.findIndex(item => item.id === song.id), queue: playableQueue, currentTime: 0, duration: song.duration || 0, isPlaying: false });
+    audio.src = song.audioUrl.includes('/stream') && !song.audioUrl.includes('/stream/proxy') ? song.audioUrl.replace('/stream', '/stream/proxy') : song.audioUrl;
+    audio.load();
+    requestPlay();
+    window.dispatchEvent(new CustomEvent('library:played', { detail: song.id }));
   };
-
-  const togglePlay = () => {
+  const handleNext = (ended = false) => {
     const audio = audioRef.current;
-    if (!audio || !playerState.currentSong) return;
-
-    if (playerState.isPlaying) {
-      audio.pause();
-    } else {
-      audio.play().catch(console.error);
+    const { queue, currentIndex, shuffle, repeat } = stateRef.current;
+    if (!audio || !queue.length) return;
+    if (ended && repeat === 'one' && !failed.current.has(queue[currentIndex]?.id)) {
+      audio.currentTime = 0; update({ currentTime: 0 }); requestPlay(); return;
     }
-
-    setPlayerState(prev => ({
-      ...prev,
-      isPlaying: !prev.isPlaying
-    }));
-  };
-
-  // MediaSession API for lock screen / notifications (mobile)
-  const setupMediaSession = () => {
-    if (!('mediaSession' in navigator)) return;
-    const song = playerState.currentSong;
-    if (!song) return;
-    try {
-      navigator.mediaSession.metadata = new MediaMetadata({
-        title: song.title || 'Unknown Track',
-        artist: song.artist?.name || 'Unknown Artist',
-        album: 'Papzin & Crew',
-        artwork: song.coverUrl ? [{ src: song.coverUrl, sizes: '512x512', type: 'image/jpeg' }] : []
-      });
-      navigator.mediaSession.setActionHandler('play', () => audioRef.current?.play());
-      navigator.mediaSession.setActionHandler('pause', () => audioRef.current?.pause());
-      navigator.mediaSession.setActionHandler('previoustrack', () => handlePrev?.());
-      navigator.mediaSession.setActionHandler('nexttrack', () => handleNext?.());
-      navigator.mediaSession.setActionHandler('seekto', (details) => {
-        if (audioRef.current && details.seekTime !== undefined) {
-          audioRef.current.currentTime = details.seekTime;
-        }
-      });
-    } catch (e) { console.warn('MediaSession error:', e); }
-  };
-
-  // Update MediaSession when track changes
-  useEffect(() => {
-    if (playerState.currentSong) setupMediaSession();
-  }, [playerState.currentSong?.id, playerState.currentSong?.title]);
-
-  const handleNext = () => {
-    const { queue, currentIndex, shuffle, repeat } = playerState;
-    if (queue.length === 0) return;
-
-    let nextIndex = currentIndex;
-
-    if (repeat === 'one') {
-      // Replay current song
-      const audio = audioRef.current;
-      if (audio) {
-        audio.currentTime = 0;
-        audio.play().catch(console.error);
-      }
-      return;
+    const candidates = queue.map((song, i) => ({ song, i })).filter(({song, i}) => available(song) && !failed.current.has(song.id) && i !== currentIndex);
+    let nextIndex = currentIndex + 1;
+    if (shuffle && candidates.length) nextIndex = candidates[Math.floor(Math.random() * candidates.length)].i;
+    else {
+      while (nextIndex < queue.length && failed.current.has(queue[nextIndex].id)) nextIndex++;
+      if (nextIndex >= queue.length && repeat === 'all') nextIndex = queue.findIndex(song => !failed.current.has(song.id));
     }
-
-    if (shuffle) {
-      nextIndex = Math.floor(Math.random() * queue.length);
-    } else {
-      nextIndex = currentIndex + 1;
-      if (nextIndex >= queue.length) {
-        if (repeat === 'all') {
-          nextIndex = 0;
-        } else {
-          setPlayerState(prev => ({ ...prev, isPlaying: false }));
-          return;
-        }
-      }
-    }
-
+    if (nextIndex < 0 || nextIndex >= queue.length || failed.current.has(queue[nextIndex].id)) { audio.pause(); update({isPlaying:false}); return; }
     playSong(queue[nextIndex], queue);
   };
-
   const handlePrevious = () => {
-    const { queue, currentIndex } = playerState;
-    if (queue.length === 0) return;
-
     const audio = audioRef.current;
-    if (audio && audio.currentTime > 3) {
-      // If more than 3 seconds played, restart current song
-      audio.currentTime = 0;
-      return;
-    }
-
-    let prevIndex = currentIndex - 1;
-    if (prevIndex < 0) {
-      prevIndex = queue.length - 1;
-    }
-
-    playSong(queue[prevIndex], queue);
+    const { queue, currentIndex } = stateRef.current;
+    if (!audio || !queue.length) return;
+    if (audio.currentTime > 3 || currentIndex === 0) { audio.currentTime = 0; update({currentTime:0}); return; }
+    playSong(queue[currentIndex - 1], queue);
   };
-
-  const setVolume = (volume: number) => {
+  const togglePlay = () => {
     const audio = audioRef.current;
-    if (audio) {
-      audio.volume = volume;
-    }
-    setPlayerState(prev => ({ ...prev, volume }));
+    if (!audio || !stateRef.current.currentSong) return;
+    if (!audio.paused) { audio.pause(); update({isPlaying:false}); } else requestPlay();
   };
-
+  const setVolume = (value: number) => {
+    const volume = Math.max(0, Math.min(1, value));
+    if (audioRef.current) { audioRef.current.volume = volume; audioRef.current.muted = volume === 0; }
+    try { localStorage.setItem(VOLUME_KEY, String(volume)); } catch {}
+    update({volume});
+  };
   const seekTo = (time: number) => {
     const audio = audioRef.current;
-    if (audio) {
-      audio.currentTime = time;
-    }
+    if (!audio || !Number.isFinite(time)) return;
+    const duration = Number.isFinite(audio.duration) ? audio.duration : stateRef.current.duration;
+    const currentTime = Math.max(0, Math.min(time, duration));
+    audio.currentTime = currentTime;
+    update({currentTime});
   };
+  useEffect(() => {
+    const queueTrack = (e: Event) => {
+      const song = (e as CustomEvent<Song>).detail;
+      if (!song || !available(song)) return;
+      const state = stateRef.current;
+      if (!state.currentSong) { playSong(song); return; }
+      if (state.queue.some(item => item.id === song.id)) { notify('This track is already in the queue.'); return; }
+      update({queue: [...state.queue, song]});
+      notify('Track added to queue.');
+    };
+    window.addEventListener('player:queue', queueTrack);
+    return () => window.removeEventListener('player:queue', queueTrack);
+  }, []);
+  const toggleShuffle = () => update({shuffle: !stateRef.current.shuffle});
+  const toggleRepeat = () => update({repeat: stateRef.current.repeat === 'none' ? 'all' : stateRef.current.repeat === 'all' ? 'one' : 'none'});
+  actions.current = { next: handleNext, previous: handlePrevious, seek: seekTo };
 
-  const toggleShuffle = () => {
-    setPlayerState(prev => ({ ...prev, shuffle: !prev.shuffle }));
-  };
-
-  const toggleRepeat = () => {
-    setPlayerState(prev => ({
-      ...prev,
-      repeat: prev.repeat === 'none' ? 'all' : prev.repeat === 'all' ? 'one' : 'none'
-    }));
-  };
-
-  return {
-    audioRef,
-    playerState,
-    playSong,
-    togglePlay,
-    handleNext,
-    handlePrevious,
-    setVolume,
-    seekTo,
-    toggleShuffle,
-    toggleRepeat
-  };
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.volume = stateRef.current.volume;
+    audio.muted = stateRef.current.volume === 0;
+    const sync = () => {
+      const duration = Number.isFinite(audio.duration) ? audio.duration : stateRef.current.duration;
+      update({currentTime: audio.currentTime || 0, duration});
+      try {
+        if (duration > 0 && navigator.mediaSession?.setPositionState) navigator.mediaSession.setPositionState({ duration, position: Math.min(audio.currentTime || 0, duration), playbackRate: audio.playbackRate || 1 });
+      } catch { /* MediaSession is optional. */ }
+    };
+    const playing = () => update({isPlaying:true});
+    const paused = () => update({isPlaying:false});
+    const ended = () => actions.current.next(true);
+    const error = () => {
+      const song = stateRef.current.currentSong;
+      if (song) failed.current.add(song.id);
+      notify('This track could not be played. Trying the next track.');
+      actions.current.next();
+    };
+    audio.addEventListener('timeupdate', sync);
+    audio.addEventListener('loadedmetadata', sync);
+    audio.addEventListener('play', playing);
+    audio.addEventListener('pause', paused);
+    audio.addEventListener('ended', ended);
+    audio.addEventListener('error', error);
+    return () => {
+      audio.removeEventListener('timeupdate', sync); audio.removeEventListener('loadedmetadata', sync);
+      audio.removeEventListener('play', playing); audio.removeEventListener('pause', paused);
+      audio.removeEventListener('ended', ended); audio.removeEventListener('error', error);
+    };
+  }, []);
+  useEffect(() => {
+    const song = playerState.currentSong;
+    if (!song || !('mediaSession' in navigator)) return;
+    try {
+      navigator.mediaSession.metadata = new MediaMetadata({ title: song.title, artist: song.artist, album: song.album || 'Papzin & Crew', artwork: song.imageUrl ? [{src:song.imageUrl}] : [] });
+      navigator.mediaSession.setActionHandler('play', requestPlay);
+      navigator.mediaSession.setActionHandler('pause', () => audioRef.current?.pause());
+      navigator.mediaSession.setActionHandler('nexttrack', () => actions.current.next());
+      navigator.mediaSession.setActionHandler('previoustrack', () => actions.current.previous());
+      navigator.mediaSession.setActionHandler('seekto', details => { if (details.seekTime !== undefined) actions.current.seek(details.seekTime); });
+    } catch { /* Unsupported MediaSession handlers must not interrupt playback. */ }
+  }, [playerState.currentSong?.id]);
+  return { audioRef, playerState, playSong, togglePlay, handleNext: () => handleNext(), handlePrevious, setVolume, seekTo, toggleShuffle, toggleRepeat };
 };

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Play,
   Pause,
@@ -37,6 +37,8 @@ interface NowPlayingPopupProps {
   onSeek: (time: number) => void;
   onToggleShuffle: () => void;
   onToggleRepeat: () => void;
+  liked: boolean;
+  onToggleLike: () => void;
 }
 
 const formatTime = (seconds: number): string => {
@@ -57,9 +59,11 @@ export function NowPlayingPopup({
   onVolumeChange,
   onSeek,
   onToggleShuffle,
-  onToggleRepeat
+  onToggleRepeat,
+  liked, onToggleLike
 }: NowPlayingPopupProps) {
   const [isMinimized, setIsMinimized] = useState(false);
+  useEffect(() => { if (!isVisible) setIsMinimized(false); }, [isVisible]);
   const { isPlaying, volume, currentTime, duration, shuffle, repeat } = playerState;
 
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -127,6 +131,7 @@ export function NowPlayingPopup({
 
   return (
     <div
+      role="dialog" aria-modal="true" aria-label="Now Playing"
       className="fixed inset-0 bg-black/95 backdrop-blur-xl z-50 flex items-start sm:items-center justify-center overflow-y-auto px-3 sm:px-4"
       style={{
         paddingTop: 'calc(1.75rem + env(safe-area-inset-top, 0px))',
@@ -172,9 +177,11 @@ export function NowPlayingPopup({
 
               <button
                 className="w-11 h-11 rounded-full bg-white/10 backdrop-blur-sm flex items-center justify-center text-gray-300 hover:text-white hover:bg-white/20 transition-all"
-                aria-label="Like track"
+                aria-label={liked ? 'Unlike track' : 'Like track'}
+                aria-pressed={liked}
+                onClick={onToggleLike}
               >
-                <Heart className="w-5 h-5" />
+                <Heart className={liked ? "w-5 h-5 text-pink-400" : "w-5 h-5"} fill={liked ? 'currentColor' : 'none'}/>
               </button>
             </div>
           </div>
@@ -218,6 +225,7 @@ export function NowPlayingPopup({
             <div className="relative">
               <input
                 type="range"
+                aria-label="Seek track"
                 min="0"
                 max={duration || 100}
                 value={currentTime}
@@ -236,7 +244,7 @@ export function NowPlayingPopup({
               className={`transition-colors duration-200 ${
                 shuffle ? 'text-green-400' : 'text-gray-400 hover:text-white'
               }`}
-              aria-label="Toggle shuffle"
+              aria-label="Toggle shuffle" aria-pressed={shuffle}
             >
               <Shuffle className="w-5 h-5 sm:w-6 sm:h-6" />
             </button>
@@ -274,7 +282,7 @@ export function NowPlayingPopup({
               className={`relative transition-colors duration-200 ${
                 repeat !== 'none' ? 'text-green-400' : 'text-gray-400 hover:text-white'
               }`}
-              aria-label="Toggle repeat"
+              aria-label={`Repeat: ${repeat}`} aria-pressed={repeat !== 'none'}
             >
               <Repeat className="w-5 h-5 sm:w-6 sm:h-6" />
               {repeat === 'one' && (
@@ -294,6 +302,7 @@ export function NowPlayingPopup({
             <div className="flex-1">
               <input
                 type="range"
+                aria-label="Volume"
                 min="0"
                 max="1"
                 step="0.01"

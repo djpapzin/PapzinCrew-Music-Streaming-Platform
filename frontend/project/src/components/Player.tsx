@@ -1,21 +1,21 @@
-import React, { useState } from 'react';
-import { 
-  Play, 
-  Pause, 
-  SkipBack, 
-  SkipForward, 
-  Shuffle, 
-  Repeat, 
-  Volume2, 
+import React, { useState, useEffect } from 'react';
+import {
+  Play,
+  Pause,
+  SkipBack,
+  SkipForward,
+  Shuffle,
+  Repeat,
+  Volume2,
   VolumeX,
-  Heart,
   Maximize2,
-  Minimize2,
-  MoreHorizontal
+  Minimize2
 } from 'lucide-react';
 import { PlayerState } from '../types/music';
 import { NowPlayingPopup } from './NowPlayingPopup';
 import { safeArtworkUrl, DEFAULT_ARTWORK_URL } from '../lib/artwork';
+import { useLibrary } from '../state/LibraryContext';
+import SongActions from './SongActions';
 
 interface PlayerProps {
   playerState: PlayerState;
@@ -45,33 +45,23 @@ const Player: React.FC<PlayerProps> = ({
   onToggleShuffle,
   onToggleRepeat
 }) => {
-  const [isSeeking, setIsSeeking] = useState(false);
-  const [seekValue, setSeekValue] = useState(0);
+  const { library, toggleLike } = useLibrary();
   const [showMobilePlayer, setShowMobilePlayer] = useState(false);
   const [showNowPlayingPopup, setShowNowPlayingPopup] = useState(false);
 
   const { currentSong, isPlaying, volume, currentTime, duration, shuffle, repeat } = playerState;
 
+  useEffect(() => {
+    const escape = (e: KeyboardEvent) => { if (e.key === 'Escape') { setShowMobilePlayer(false); setShowNowPlayingPopup(false); } };
+    window.addEventListener('keydown', escape);
+    return () => window.removeEventListener('keydown', escape);
+  }, []);
   if (!currentSong) {
     return null;
   }
 
-  const handleSeekStart = () => {
-    setIsSeeking(true);
-    setSeekValue(currentTime);
-  };
-
-  const handleSeekChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = parseFloat(e.target.value);
-    setSeekValue(value);
-  };
-
-  const handleSeekEnd = () => {
-    setIsSeeking(false);
-    onSeek(seekValue);
-  };
-
-  const progressPercent = duration > 0 ? ((isSeeking ? seekValue : currentTime) / duration) * 100 : 0;
+  const handleSeekChange = (e: React.ChangeEvent<HTMLInputElement>) => onSeek(Number(e.target.value));
+  const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   return (
     <>
@@ -80,8 +70,10 @@ const Player: React.FC<PlayerProps> = ({
         className="lg:hidden fixed bottom-16 left-0 right-0 bg-black/95 backdrop-blur-xl border-t border-white/20 px-3 pt-3 z-40"
         style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom, 0px))' }}
       >
-        <div 
+        <div
           className="flex items-center space-x-3 cursor-pointer"
+          role="button" tabIndex={0} aria-label="Open Now Playing"
+          onKeyDown={e => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); setShowMobilePlayer(true); } }}
           onClick={() => setShowMobilePlayer(true)}
         >
           <img
@@ -98,6 +90,7 @@ const Player: React.FC<PlayerProps> = ({
             <p className="text-gray-400 text-xs truncate">{currentSong.artist}</p>
           </div>
           <button
+            aria-label={isPlaying ? 'Pause' : 'Play'}
             onClick={(e) => {
               e.stopPropagation();
               onTogglePlay();
@@ -111,19 +104,20 @@ const Player: React.FC<PlayerProps> = ({
             )}
           </button>
         </div>
-        
+
         {/* Progress bar */}
         <div className="mt-2">
           <input
             type="range"
+            aria-label="Seek track"
             min="0"
             max={duration || 100}
-            value={isSeeking ? seekValue : currentTime}
+            value={currentTime}
             onChange={handleSeekChange}
-            onMouseDown={handleSeekStart}
-            onMouseUp={handleSeekEnd}
-            onTouchStart={handleSeekStart}
-            onTouchEnd={handleSeekEnd}
+
+
+
+
             className="w-full h-1 bg-gray-600 rounded-lg appearance-none cursor-pointer slider"
             style={{
               background: `linear-gradient(to right, #ffffff 0%, #ffffff ${progressPercent}%, #4a5568 ${progressPercent}%, #4a5568 100%)`
@@ -135,6 +129,7 @@ const Player: React.FC<PlayerProps> = ({
       {/* Mobile Full Player */}
       {showMobilePlayer && (
         <div
+          role="dialog" aria-modal="true" aria-label="Now Playing"
           className="lg:hidden fixed inset-0 bg-black z-50 flex flex-col overflow-hidden"
           style={{ height: '100dvh', minHeight: '100dvh' }}
         >
@@ -144,6 +139,7 @@ const Player: React.FC<PlayerProps> = ({
             style={{ paddingTop: 'calc(1rem + env(safe-area-inset-top, 0px))' }}
           >
             <button
+              aria-label="Minimize player"
               onClick={() => setShowMobilePlayer(false)}
               className="text-white flex-shrink-0"
             >
@@ -151,9 +147,7 @@ const Player: React.FC<PlayerProps> = ({
               <Minimize2 className="w-6 h-6" />
             </button>
             <h2 className="text-white font-medium">Now Playing</h2>
-            <button className="text-gray-400">
-              <MoreHorizontal className="w-6 h-6" />
-            </button>
+            <div className="flex gap-3"><SongActions song={currentSong} /></div>
           </div>
 
           {/* Album Art */}
@@ -179,14 +173,15 @@ const Player: React.FC<PlayerProps> = ({
           <div className="px-6 pb-3 flex-shrink-0">
             <input
               type="range"
+              aria-label="Seek track"
               min="0"
               max={duration || 100}
-              value={isSeeking ? seekValue : currentTime}
+              value={currentTime}
               onChange={handleSeekChange}
-              onMouseDown={handleSeekStart}
-              onMouseUp={handleSeekEnd}
-              onTouchStart={handleSeekStart}
-              onTouchEnd={handleSeekEnd}
+
+
+
+
               className="w-full h-1 bg-gray-600 rounded-lg appearance-none cursor-pointer slider mb-2"
               style={{
                 background: `linear-gradient(to right, #ffffff 0%, #ffffff ${progressPercent}%, #4a5568 ${progressPercent}%, #4a5568 100%)`
@@ -205,6 +200,7 @@ const Player: React.FC<PlayerProps> = ({
           >
             <div className="flex items-center justify-between gap-3 sm:gap-4 mb-5">
               <button
+                aria-label="Toggle shuffle" aria-pressed={shuffle}
                 onClick={onToggleShuffle}
                 className={`min-h-11 min-w-11 flex items-center justify-center transition-colors duration-200 ${
                   shuffle ? 'text-green-400' : 'text-gray-400'
@@ -214,6 +210,7 @@ const Player: React.FC<PlayerProps> = ({
               </button>
 
               <button
+                aria-label="Previous track"
                 onClick={onPrevious}
                 className="min-h-12 min-w-12 flex items-center justify-center text-white"
               >
@@ -221,6 +218,7 @@ const Player: React.FC<PlayerProps> = ({
               </button>
 
               <button
+                aria-label={isPlaying ? 'Pause' : 'Play'}
                 onClick={onTogglePlay}
                 className="w-16 h-16 sm:w-18 sm:h-18 bg-white hover:bg-gray-200 rounded-full flex items-center justify-center transition-colors duration-200 flex-shrink-0"
               >
@@ -232,6 +230,7 @@ const Player: React.FC<PlayerProps> = ({
               </button>
 
               <button
+                aria-label="Next track"
                 onClick={onNext}
                 className="min-h-12 min-w-12 flex items-center justify-center text-white"
               >
@@ -239,18 +238,20 @@ const Player: React.FC<PlayerProps> = ({
               </button>
 
               <button
+                aria-label={`Repeat: ${repeat}`} aria-pressed={repeat !== 'none'}
                 onClick={onToggleRepeat}
                 className={`min-h-11 min-w-11 flex items-center justify-center transition-colors duration-200 ${
                   repeat !== 'none' ? 'text-green-400' : 'text-gray-400'
                 }`}
               >
-                <Repeat className="w-5 h-5 sm:w-6 sm:h-6" />
+                <Repeat className="w-5 h-5 sm:w-6 sm:h-6" />{repeat === 'one' && <span className="text-xs">1</span>}
               </button>
             </div>
 
             {/* Volume */}
             <div className="flex items-center space-x-3">
               <button
+                aria-label={volume === 0 ? 'Unmute' : 'Mute'}
                 onClick={() => onVolumeChange(volume > 0 ? 0 : 0.7)}
                 className="text-gray-400"
               >
@@ -258,6 +259,7 @@ const Player: React.FC<PlayerProps> = ({
               </button>
               <input
                 type="range"
+                aria-label="Volume"
                 min="0"
                 max="1"
                 step="0.01"
@@ -292,9 +294,7 @@ const Player: React.FC<PlayerProps> = ({
                 <p className="text-white font-medium truncate">{currentSong.title}</p>
                 <p className="text-gray-400 text-sm truncate">{currentSong.artist}</p>
               </div>
-              <button className="text-gray-400 hover:text-white transition-colors duration-200">
-                <Heart className="w-5 h-5" />
-              </button>
+              <div className="flex gap-3"><SongActions song={currentSong}/></div>
             </div>
 
             {/* Center: Player controls */}
@@ -302,7 +302,8 @@ const Player: React.FC<PlayerProps> = ({
               {/* Control buttons */}
               <div className="flex items-center space-x-4">
                 <button
-                  onClick={onToggleShuffle}
+                  aria-label="Toggle shuffle" aria-pressed={shuffle}
+                onClick={onToggleShuffle}
                   className={`transition-colors duration-200 ${
                     shuffle ? 'text-green-400' : 'text-gray-400 hover:text-white'
                   }`}
@@ -311,14 +312,16 @@ const Player: React.FC<PlayerProps> = ({
                 </button>
 
                 <button
-                  onClick={onPrevious}
+                  aria-label="Previous track"
+                onClick={onPrevious}
                   className="text-gray-400 hover:text-white transition-colors duration-200"
                 >
                   <SkipBack className="w-5 h-5" />
                 </button>
 
                 <button
-                  onClick={onTogglePlay}
+                  aria-label={isPlaying ? 'Pause' : 'Play'}
+                onClick={onTogglePlay}
                   className="w-8 h-8 bg-white hover:bg-gray-200 rounded-full flex items-center justify-center transition-colors duration-200"
                 >
                   {isPlaying ? (
@@ -329,14 +332,16 @@ const Player: React.FC<PlayerProps> = ({
                 </button>
 
                 <button
-                  onClick={onNext}
+                  aria-label="Next track"
+                onClick={onNext}
                   className="text-gray-400 hover:text-white transition-colors duration-200"
                 >
                   <SkipForward className="w-5 h-5" />
                 </button>
 
                 <button
-                  onClick={onToggleRepeat}
+                  aria-label={`Repeat: ${repeat}`} aria-pressed={repeat !== 'none'}
+                onClick={onToggleRepeat}
                   className={`transition-colors duration-200 ${
                     repeat !== 'none' ? 'text-green-400' : 'text-gray-400 hover:text-white'
                   }`}
@@ -356,12 +361,13 @@ const Player: React.FC<PlayerProps> = ({
                 <div className="flex-1 relative">
                   <input
                     type="range"
+                    aria-label="Seek track"
                     min="0"
                     max={duration || 100}
-                    value={isSeeking ? seekValue : currentTime}
+                    value={currentTime}
                     onChange={handleSeekChange}
-                    onMouseDown={handleSeekStart}
-                    onMouseUp={handleSeekEnd}
+
+
                     className="w-full h-1 bg-gray-600 rounded-lg appearance-none cursor-pointer slider"
                     style={{
                       background: `linear-gradient(to right, #ffffff 0%, #ffffff ${progressPercent}%, #4a5568 ${progressPercent}%, #4a5568 100%)`
@@ -378,13 +384,15 @@ const Player: React.FC<PlayerProps> = ({
             <div className="flex items-center justify-end space-x-4">
               <div className="flex items-center space-x-2">
                 <button
-                  onClick={() => onVolumeChange(volume > 0 ? 0 : 0.7)}
+                  aria-label={volume === 0 ? 'Unmute' : 'Mute'}
+                onClick={() => onVolumeChange(volume > 0 ? 0 : 0.7)}
                   className="text-gray-400 hover:text-white transition-colors duration-200"
                 >
                   {volume === 0 ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
                 </button>
                 <input
                   type="range"
+                  aria-label="Volume"
                   min="0"
                   max="1"
                   step="0.01"
@@ -396,8 +404,9 @@ const Player: React.FC<PlayerProps> = ({
                   }}
                 />
               </div>
-              
-              <button 
+
+              <button
+                aria-label="Open Now Playing"
                 onClick={() => setShowNowPlayingPopup(true)}
                 className="text-gray-400 hover:text-white transition-colors duration-200"
               >
@@ -427,6 +436,8 @@ const Player: React.FC<PlayerProps> = ({
         onSeek={onSeek}
         onToggleShuffle={onToggleShuffle}
         onToggleRepeat={onToggleRepeat}
+        liked={library.liked.includes(currentSong.id)}
+        onToggleLike={() => toggleLike(currentSong.id)}
       />
     </>
   );

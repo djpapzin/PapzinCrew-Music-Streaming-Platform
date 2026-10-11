@@ -1881,7 +1881,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
             )}
             <button
               type="button"
-              onClick={handlePublish}
+              onClick={() => handlePublish()}
               disabled={isPublishing || !uploadedFile}
               aria-disabled={isPublishing || !uploadedFile}
               className={`w-full sm:w-auto min-h-12 px-8 py-3 rounded-xl font-semibold transition-all duration-200 inline-flex items-center justify-center space-x-2 ${

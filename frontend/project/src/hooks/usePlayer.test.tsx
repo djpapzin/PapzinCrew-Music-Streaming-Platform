@@ -1,0 +1,19 @@
+import { act, render, cleanup } from '@testing-library/react';
+import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
+import { usePlayer, VOLUME_KEY } from './usePlayer';
+import { Song } from '../types/music';
+let player:ReturnType<typeof usePlayer>;let audio:HTMLAudioElement;let paused=true;
+function Harness(){player=usePlayer();return <audio ref={player.audioRef}/>;}
+const song=(id:string):Song=>({id,title:`Mix ${id}`,artist:'DJ Papzin',album:'',duration:100,imageUrl:'',audioUrl:`https://example.com/tracks/${id}/stream`,genre:'House',year:2020});
+const queue=[song('1'),song('2'),song('3')];
+beforeEach(()=>{localStorage.clear();paused=true;vi.spyOn(HTMLMediaElement.prototype,'load').mockImplementation(()=>{});vi.spyOn(HTMLMediaElement.prototype,'play').mockImplementation(function(this:HTMLMediaElement){paused=false;this.dispatchEvent(new Event('play'));return Promise.resolve();});vi.spyOn(HTMLMediaElement.prototype,'pause').mockImplementation(function(this:HTMLMediaElement){paused=true;this.dispatchEvent(new Event('pause'));});vi.spyOn(HTMLMediaElement.prototype,'paused','get').mockImplementation(()=>paused);});
+afterEach(()=>{cleanup();vi.restoreAllMocks();});
+function setup(){render(<Harness/>);audio=player.audioRef.current!;Object.defineProperty(audio,'duration',{configurable:true,value:100});}
+describe('playback regressions',()=>{
+  it('preserves mute across automatic track changes using current queue state',async()=>{setup();await act(async()=>{player.setVolume(0);player.playSong(queue[0],queue);});expect(audio.volume).toBe(0);expect(audio.muted).toBe(true);await act(async()=>audio.dispatchEvent(new Event('ended')));expect(player.playerState.currentSong?.id).toBe('2');expect(audio.muted).toBe(true);await act(async()=>audio.dispatchEvent(new Event('ended')));expect(player.playerState.currentSong?.id).toBe('3');expect(localStorage.getItem(VOLUME_KEY)).toBe('0');});
+  it('repeats one on ended, but Next still changes tracks',async()=>{setup();await act(async()=>{player.playSong(queue[0],queue);player.toggleRepeat();player.toggleRepeat();});audio.currentTime=99;await act(async()=>audio.dispatchEvent(new Event('ended')));expect(player.playerState.currentSong?.id).toBe('1');expect(audio.currentTime).toBe(0);await act(async()=>player.handleNext());expect(player.playerState.currentSong?.id).toBe('2');});
+  it('wraps repeat all and stops when repeat is off',async()=>{setup();await act(async()=>{player.playSong(queue[2],queue);player.toggleRepeat();audio.dispatchEvent(new Event('ended'));});expect(player.playerState.currentSong?.id).toBe('1');await act(async()=>{player.toggleRepeat();player.toggleRepeat();player.playSong(queue[2],queue);audio.dispatchEvent(new Event('ended'));});expect(player.playerState.isPlaying).toBe(false);expect(audio.paused).toBe(true);});
+  it('updates seeking immediately while paused and clamps to duration',async()=>{setup();await act(async()=>player.playSong(queue[0],queue));act(()=>player.togglePlay());expect(player.playerState.isPlaying).toBe(false);act(()=>player.seekTo(25));expect(player.playerState.currentTime).toBe(25);expect(audio.currentTime).toBe(25);act(()=>player.seekTo(200));expect(audio.currentTime).toBe(100);});
+  it('uses current shuffle state and avoids the same track',async()=>{setup();vi.spyOn(Math,'random').mockReturnValue(0.9);await act(async()=>{player.playSong(queue[0],queue);player.toggleShuffle();audio.dispatchEvent(new Event('ended'));});expect(player.playerState.currentSong?.id).toBe('3');});
+  it('stops instead of endlessly retrying failed tracks',async()=>{setup();await act(async()=>{player.playSong(queue[0],queue);player.toggleRepeat();audio.dispatchEvent(new Event('error'));audio.dispatchEvent(new Event('error'));audio.dispatchEvent(new Event('error'));});expect(player.playerState.isPlaying).toBe(false);});
+});

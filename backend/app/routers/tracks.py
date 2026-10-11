@@ -45,6 +45,21 @@ def _get_current_user_dyn():
     except Exception:
         return None
 
+@router.get("/catalog-summary")
+def catalog_summary(db: Session = Depends(get_db)):
+    """Aggregate public catalog metadata; protected admin analytics stay private."""
+    from sqlalchemy import func
+    query = db.query(
+        func.count(Mix.id),
+        func.coalesce(func.sum(Mix.duration_seconds), 0),
+        func.coalesce(func.sum(Mix.file_size_mb), 0),
+        func.count(func.distinct(Mix.artist_id)),
+    ).filter(Mix.availability == "public")
+    tracks, duration, storage, artists = query.one()
+    return {"total_tracks": tracks, "total_duration_hours": round(duration / 3600, 2),
+            "total_storage_mb": round(float(storage), 2), "total_artists": artists}
+
+
 @router.get("/search")
 def search_tracks(
     q: str | None = None,

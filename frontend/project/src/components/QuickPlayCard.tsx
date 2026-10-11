@@ -50,6 +50,7 @@ const QuickPlayCard: React.FC<QuickPlayCardProps> = ({ item, type, onPlay }) => 
 
   return (
     <div 
+      role="button" tabIndex={0} aria-label={`Play ${getTitle()}`} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();onPlay();}}}
       onClick={onPlay}
       className="group flex items-center bg-white/5 hover:bg-white/10 rounded-lg p-3 cursor-pointer transition-all duration-200 hover:scale-[1.02]"
     >
