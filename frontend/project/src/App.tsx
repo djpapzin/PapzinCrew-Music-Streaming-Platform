@@ -12,12 +12,14 @@ import { safeArtworkUrl } from './lib/artwork';
 import { LibraryProvider } from './state/LibraryContext';
 
 const INTERNAL_PROBE_TRACK_PATTERNS = [
+  /^(?:origin probe|redeploy(?: fresh)? probe|phoneuploadtest)\b/i,
   /^b2 proof\b/i,
   /^starter mix\s+\d+\s+\d{8}$/i,
   /\bproof\s+20\d{6,}/i,
 ];
 
 const isPublicTrack = (mix: any): boolean => {
+  if (mix?.availability && String(mix.availability).toLowerCase() !== 'public') return false;
   const title = String(mix?.title || '').trim();
   if (!title) return true;
   return !INTERNAL_PROBE_TRACK_PATTERNS.some((pattern) => pattern.test(title));
@@ -83,7 +85,7 @@ function App() {
       }
       const mixes = await res.json();
       const publicMixes = (mixes || []).filter((mix: any) => isPublicTrack(mix));
-      const visibleMixes = publicMixes.length > 0 ? publicMixes : (mixes || []);
+      const visibleMixes = publicMixes;
       const mapped: Song[] = visibleMixes.map((mix: any) => ({
         id: String(mix.id),
         title: mix.title || 'Untitled',

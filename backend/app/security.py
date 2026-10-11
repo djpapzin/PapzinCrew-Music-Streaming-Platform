@@ -1,4 +1,5 @@
 import os
+import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -16,7 +17,7 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 optional_bearer_scheme = HTTPBearer(auto_error=False)
 
-JWT_SECRET = os.getenv("JWT_SECRET") or os.getenv("LOCAL_AUTH_TOKEN") or "dev-only-change-me"
+JWT_SECRET = os.getenv("JWT_SECRET") or os.getenv("LOCAL_AUTH_TOKEN") or secrets.token_urlsafe(48)
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
 
