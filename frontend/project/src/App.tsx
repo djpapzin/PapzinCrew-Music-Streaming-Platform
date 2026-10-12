@@ -39,6 +39,7 @@ function App() {
   const {
     audioRef,
     playbackAttempts,
+    timingStorageError,
     playerState,
     playSong,
     togglePlay,
@@ -168,7 +169,7 @@ function App() {
             onMenuClick={() => setSidebarOpen(true)}
           />
           
-          <PlaybackTiming attempts={playbackAttempts} />
+          <PlaybackTiming attempts={playbackAttempts} storageError={timingStorageError} />
           <MainContent
             searchQuery={searchQuery}
             songs={songs}
