@@ -107,3 +107,30 @@ describe('Upload catalog handoff', () => {
     window.removeEventListener('library:refresh', refreshed);
   });
 });
+
+describe('Upload duplicate preflight', () => {
+  afterEach(() => { vi.unstubAllGlobals(); });
+  it.each(['duplicate', 'empty'])('does not send audio after a %s response', async (scenario) => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false, status: scenario === 'duplicate' ? 409 : 502,
+      json: async () => {
+        if (scenario === 'empty') throw new SyntaxError('Empty response');
+        return { detail: { error_code: 'duplicate_track', duplicate_info: {
+          id: 232, title: 'Existing Guest 47', artist_name: 'Mr Dominate SA',
+          match_type: 'exact_file', reason: 'Identical file content detected',
+        } } };
+      },
+    }));
+    const xhr = vi.fn();
+    vi.stubGlobal('XMLHttpRequest', xhr);
+    const { container } = render(<MemoryRouter><UploadPage /></MemoryRouter>);
+    const file = new File(['audio'], 'Guest47.mp3', { type: 'audio/mpeg' });
+    Object.defineProperty(file, 'size', { value: 30 * 1024 * 1024 });
+    fireEvent.change(container.querySelector('#upload-audio-file')!, { target: { files: [file] } });
+    fireEvent.change(screen.getByPlaceholderText('Enter the main artist name'), { target: { value: 'Mr Dominate SA' } });
+    fireEvent.click(screen.getByRole('button', { name: /Publish Large File/i }));
+    if (scenario === 'duplicate') await screen.findByText('Existing Guest 47');
+    else await screen.findByText(/Could not check the catalog/);
+    expect(xhr).not.toHaveBeenCalled();
+  });
+});

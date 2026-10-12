@@ -424,7 +424,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
     });
   };
 
-  const checkForDuplicateTrack = async (title: string, artist: string, fileSize: number): Promise<boolean> => {
+  const checkForDuplicateTrack = async (title: string, artist: string, fileSize: number): Promise<boolean | null> => {
     try {
       let fileHash: string | undefined;
       let duration: number | undefined;
@@ -461,21 +461,26 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
         }),
       });
 
-      if (!response.ok) {
-        const error = await response.json();
-        console.error('Error checking for duplicates:', error);
-        return false;
-      }
-
       const result = await response.json();
-      if (result.duplicate) {
-        setDuplicateTrack(result);
+      const detail = result.detail || result;
+      if (response.status === 409 && detail.error_code === 'duplicate_track') {
+        setDuplicateTrack(detail.duplicate_info);
         return true;
       }
+      if (!response.ok) throw new Error('Duplicate check unavailable');
+      if (result.duplicate) {
+        setDuplicateTrack(result.duplicate_info || result);
+        return true;
+      }
+      if (result.duplicate !== false) throw new Error('Invalid duplicate check response');
       return false;
     } catch (error) {
       console.error('Error checking for duplicates:', error);
-      return false;
+      setUploadError({
+        error: 'Could not check the catalog. Your file has not been uploaded. Please try Publish again shortly.',
+        error_code: 'duplicate_check_unavailable',
+      });
+      return null;
     }
   };
 
@@ -515,7 +520,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
         uploadedFile.size
       );
       
-      if (isDuplicate) {
+      if (isDuplicate !== false) {
         // The checkForDuplicateTrack function will update the duplicateTrack state
         // and the UI will show the duplicate warning
         setShowStatusModal(false);
