@@ -709,7 +709,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
       });
       
       // Create promise to handle XMLHttpRequest
-      const uploadPromise = new Promise<Response>((resolve, reject) => {
+      const uploadPromise = new Promise<any>((resolve, reject) => {
         xhr.onload = () => {
           // Parse response JSON once if possible
           let parsed: any = null;
@@ -732,6 +732,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
               speed: '',
               timeRemaining: ''
             });
+            resolve(null);
             return;
           }
 
@@ -743,45 +744,6 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
                 setPaperclipTaskIdFromPublish(returnedPaperclipTaskId);
               }
               
-              // Phase 2: Metadata Processing (40-70% of total progress)
-              setUploadStatus({
-                stage: 'processing',
-                progress: 40,
-                message: 'Processing track...',
-                details: 'Analyzing audio and extracting metadata',
-                speed: '',
-                timeRemaining: 'This may take a moment...',
-                phase: 'metadata_extraction',
-                phaseProgress: 0,
-                canCancel: true,
-                extractedMetadata: response.metadata || null
-              });
-              
-              // Simulate metadata processing progress
-              const metadataInterval = setInterval(() => {
-                setUploadStatus(prev => {
-                  if (prev.phase === 'metadata_extraction' && prev.phaseProgress < 100) {
-                    const newPhaseProgress = Math.min(prev.phaseProgress + 20, 100);
-                    const overallProgress = 40 + (newPhaseProgress * 0.3); // 40% + up to 30%
-                    return {
-                      ...prev,
-                      progress: Math.round(overallProgress),
-                      phaseProgress: newPhaseProgress,
-                      details: newPhaseProgress < 50 ? 'Analyzing audio format...' :
-                              newPhaseProgress < 80 ? 'Extracting metadata...' :
-                              'Preparing for cover art generation...'
-                    };
-                  }
-                  return prev;
-                });
-              }, 300);
-              
-              // Clear interval after processing
-              setTimeout(() => {
-                clearInterval(metadataInterval);
-              }, 1500);
-              
-              // If we get here, the upload was successful
               resolve(response);
             } catch (error) {
               console.error('Error parsing response:', error);
@@ -820,6 +782,8 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
           reject(new Error('Network error'));
         };
         
+        xhr.onabort = () => resolve(null);
+
         xhr.ontimeout = () => {
           console.error('Upload timed out');
           reject(new Error('Upload timeout'));
@@ -841,207 +805,20 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
       });
       
       const result = await uploadPromise;
-        console.log('Upload successful:', result);
-        
-      // Phase 3: AI Art Generation (70-100% of total progress)
-        if (result.generating_art) {
-          setUploadStatus({
-            stage: 'generating_art',
-            progress: 70,
-            message: '🎨 Creating cover art...',
-            details: 'Using AI to generate a unique cover image',
-            speed: '',
-            timeRemaining: 'This usually takes 10-20 seconds',
-            phase: 'ai_generation',
-            phaseProgress: 0,
-            canCancel: true,
-            extractedMetadata: result.metadata || null
-          });
-          
-          // Simulate AI generation progress
-          const artInterval = setInterval(() => {
-            setUploadStatus(prev => {
-              if (prev.phase === 'ai_generation' && prev.phaseProgress < 90) {
-                const newPhaseProgress = Math.min(prev.phaseProgress + 15, 90);
-                const overallProgress = 70 + (newPhaseProgress * 0.3); // 70% + up to 27%
-                return {
-                  ...prev,
-                  progress: Math.round(overallProgress),
-                  phaseProgress: newPhaseProgress,
-                  details: newPhaseProgress < 30 ? 'Analyzing song metadata...' :
-                          newPhaseProgress < 60 ? 'Generating AI artwork...' :
-                          'Finalizing cover art...'
-                };
-              }
-              return prev;
-            });
-          }, 800);
-          
-          // Store interval reference for cleanup
-          artGenerationTimeoutRef.current = artInterval;
-          
-          // Poll for art generation status
-          const checkArtStatus = async (trackId: string, attempt = 1) => {
-            try {
-              const statusResponse = await fetch(`${API_URL}/tracks/${trackId}/art-status`);
-              if (statusResponse.ok) {
-                const status = await statusResponse.json();
-                
-                if (status.status === 'completed') {
-                  // Clear art generation interval
-                  if (artGenerationTimeoutRef.current) {
-                    clearInterval(artGenerationTimeoutRef.current);
-                    artGenerationTimeoutRef.current = null;
-                  }
-                  
-                  setUploadStatus({
-                    stage: 'success',
-                    progress: 100,
-                    message: '🎉 Upload complete!',
-                    details: 'Your track is ready to play',
-                    speed: '',
-                    timeRemaining: 'Redirecting...',
-                    phase: 'complete',
-                    phaseProgress: 100,
-                    canCancel: false,
-                    extractedMetadata: null
-                  });
-                  setPublishStatus('success');
-                  currentXhrRef.current = null;
-                  refreshLibrary();
-                  return true;
-                } else if (status.status === 'failed') {
-                  console.warn('Art generation failed, using default cover');
-                  // Clear art generation interval
-                  if (artGenerationTimeoutRef.current) {
-                    clearInterval(artGenerationTimeoutRef.current);
-                    artGenerationTimeoutRef.current = null;
-                  }
-                  
-                  setUploadStatus({
-                    stage: 'success',
-                    progress: 100,
-                    message: '✅ Upload complete!',
-                    details: 'Your track is ready (using default cover)',
-                    speed: '',
-                    timeRemaining: 'Redirecting...'
-                  });
-                  setPublishStatus('success');
-                  refreshLibrary();
-                  return true;
-                } else if (attempt < 10) { // Max 10 attempts (about 30 seconds)
-                  // Update status with progress
-                  setUploadStatus(prev => ({
-                    ...prev,
-                    details: `Generating cover art... (${attempt * 10}%)`,
-                    timeRemaining: `About ${20 - (attempt * 2)}s remaining`
-                  }));
-                  
-                  // Check again in 3 seconds
-                  setTimeout(() => checkArtStatus(trackId, attempt + 1), 3000);
-                } else {
-                  // Timeout after max attempts
-                  console.warn('Art generation timed out, using default cover');
-                  setUploadStatus({
-                    stage: 'success',
-                    progress: 100,
-                    message: '✅ Upload complete!',
-                    details: 'Your track is ready (using default cover)',
-                    speed: '',
-                    timeRemaining: 'Redirecting...'
-                  });
-                  setPublishStatus('success');
-                  refreshLibrary();
-                  return true;
-                }
-              }
-            } catch (error) {
-              console.error('Error checking art status:', error);
-              if (attempt < 3) { // Retry on network errors
-                setTimeout(() => checkArtStatus(trackId, attempt + 1), 3000);
-              } else {
-                setUploadStatus(prev => ({
-                  ...prev,
-                  message: '✅ Upload complete!',
-                  details: 'Your track is ready (skipped cover art)',
-                  timeRemaining: 'Redirecting...'
-                }));
-                setPublishStatus('success');
-                refreshLibrary();
-              }
-            }
-            return false;
-          };
-          
-          // Start polling for art status
-          if (result.id) {
-            checkArtStatus(result.id);
-          }
-        } else {
-          setUploadStatus({
-            stage: 'success',
-            progress: 100,
-            message: '✅ Upload complete!',
-            details: 'Your track is now available',
-            speed: '',
-            timeRemaining: 'Redirecting...'
-          });
-          setPublishStatus('success');
-          refreshLibrary();
-        }
-        
-        // Convert uploaded mix to Song format for player
-        const uploadedSong: Song = {
-          id: result.id.toString(),
-          title: result.title,
-          artist: result.artist.name,
-          album: result.album || 'Single',
-          duration: result.duration_seconds,
-          imageUrl: result.cover_art_url
-            ? (result.cover_art_url.startsWith('http') ? result.cover_art_url : `${API_URL}${result.cover_art_url}`)
-            : '/default-cover.jpg',
-          audioUrl: result.stream_url
-            ? (result.stream_url.startsWith('http') ? result.stream_url : `${API_URL}${result.stream_url}`)
-            : `${API_URL}/tracks/${result.id}/stream`,
-          genre: result.genre || 'Unknown',
-          year: result.year || new Date().getFullYear()
-        };
-        
-        console.log('Created song object for playback:', uploadedSong);
-        
-        // Navigate to home page and start playing the uploaded song
-        setTimeout(() => {
-          if (onPlaySong) {
-            onPlaySong(uploadedSong, [uploadedSong]);
-          }
-          navigate('/');
-          
-          // Reset form after navigation
-          setTimeout(() => {
-            setUploadedFile(null);
-            setCoverArt(null);
-            setShowCustomPrompt(false);
-            setCustomPrompt('');
-            setFormData({
-              title: '',
-              description: '',
-              tracklist: '',
-              primaryArtist: '',
-              tagArtists: '',
-              tags: '',
-              genre: 'Podcast Shows',
-              availability: 'Public',
-              allowDownloads: 'Yes',
-              displayEmbedCode: 'Yes',
-              ageRestriction: 'All ages can listen to this stream'
-            });
-            setUploadStatus({
-              stage: 'idle',
-              progress: 0,
-              message: ''
-            });
-          }, 500);
-        }, 1500);
+      if (result === null) return;
+      if (!result?.id) throw new Error('The server did not confirm a catalog entry.');
+      // The upload response confirms storage and database persistence. Artwork is
+      // background work and must never delay discovery in the shared library.
+      refreshLibrary();
+      currentXhrRef.current = null;
+      setPublishStatus('success');
+      setUploadStatus({
+        stage: 'success', progress: 100, message: 'Upload complete!',
+        details: 'Your mix is saved in the catalog. Cover art and audio details may finish processing shortly.',
+        speed: '', timeRemaining: '', phase: 'complete', phaseProgress: 100,
+        canCancel: false, extractedMetadata: result.metadata || null,
+      });
+      navigate(`/track/${result.id}`);
     } catch (error) {
       console.error('Upload error:', error);
 

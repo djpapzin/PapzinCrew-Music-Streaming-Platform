@@ -1127,7 +1127,7 @@ async def upload_mix(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     detail={"error": f"Failed to save file locally: {e}", "error_code": "local_save_failed"}
                 )
-        elif b2.is_configured():
+        elif b2.is_configured() and not enforce_b2_only:
             # B2 was configured but all retries failed: perform local fallback to ensure upload completes
             storage_provider = "local_filesystem"
             fallback_from_b2 = True
@@ -1153,11 +1153,11 @@ async def upload_mix(
                 )
         else:
             # ENFORCE_B2_ONLY prevents local fallback when remote storage is unavailable
-            logger.error("[upload] B2 storage not configured; refusing local fallback per policy", extra={"action": "storage_unavailable_policy", "policy": "ENFORCE_B2_ONLY"})
+            logger.error("[upload] B2 storage unavailable; refusing local fallback per policy", extra={"action": "storage_unavailable_policy", "policy": "ENFORCE_B2_ONLY"})
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail={
-                    "error": "B2 storage not configured",
+                    "error": "Cloud storage is unavailable. Your mix was not published; please try again later.",
                     "error_code": "storage_unavailable"
                 }
             )

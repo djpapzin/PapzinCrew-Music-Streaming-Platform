@@ -263,3 +263,22 @@ def test_enforce_b2_only_returns_503_when_unconfigured(test_app, tmp_path, monke
     assert body.get("detail", {}).get("error_code") == "storage_unavailable"
     # Ensure no audio file was saved locally (DB file may exist in tmp_path)
     assert not any(Path(tmp_path).glob("*.mp3")), "No audio files should be created when ENFORCE_B2_ONLY is enabled"
+
+
+def test_enforce_b2_only_rejects_failed_cloud_upload_without_catalog_entry(test_app, tmp_path, monkeypatch):
+    monkeypatch.setenv('ENFORCE_B2_ONLY', '1')
+    monkeypatch.setenv('B2_MAX_RETRIES', '1')
+    client = TestClient(test_app)
+    data, files = _form_data(file_name='cloud-failed.mp3')
+    with patch('app.routers.uploads.validate_audio_file', return_value=(True, {
+        'valid': True, 'mime_type': 'audio/mpeg', 'file_extension': '.mp3',
+        'file_size_bytes': 11,
+    })), patch('app.routers.uploads.B2Storage.is_configured', return_value=True), patch(
+        'app.routers.uploads.B2Storage.put_bytes_safe',
+        return_value={'ok': False, 'error_code': 'cap_exceeded'},
+    ), patch('app.routers.uploads.crud.create_mix') as create_mix:
+        response = client.post('/upload', data=data, files=files)
+    assert response.status_code == 503
+    assert response.json()['detail']['error_code'] == 'storage_unavailable'
+    create_mix.assert_not_called()
+    assert not list(tmp_path.glob('*.mp3'))
