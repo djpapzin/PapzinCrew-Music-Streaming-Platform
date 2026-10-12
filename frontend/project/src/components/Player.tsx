@@ -1,3 +1,4 @@
+import DeviceVolumeControl from './DeviceVolumeControl';
 import React, { useState, useEffect } from 'react';
 import {
   Play,
@@ -256,7 +257,7 @@ const Player: React.FC<PlayerProps> = ({
               >
                 {volume === 0 ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
               </button>
-              <input
+              <DeviceVolumeControl><input
                 type="range"
                 aria-label="Volume"
                 min="0"
@@ -268,7 +269,7 @@ const Player: React.FC<PlayerProps> = ({
                 style={{
                   background: `linear-gradient(to right, #ffffff 0%, #ffffff ${volume * 100}%, #4a5568 ${volume * 100}%, #4a5568 100%)`
                 }}
-              />
+              /></DeviceVolumeControl>
             </div>
           </div>
         </div>
@@ -389,7 +390,7 @@ const Player: React.FC<PlayerProps> = ({
                 >
                   {volume === 0 ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
                 </button>
-                <input
+                <DeviceVolumeControl><input
                   type="range"
                   aria-label="Volume"
                   min="0"
@@ -401,7 +402,7 @@ const Player: React.FC<PlayerProps> = ({
                   style={{
                     background: `linear-gradient(to right, #ffffff 0%, #ffffff ${volume * 100}%, #4a5568 ${volume * 100}%, #4a5568 100%)`
                   }}
-                />
+                /></DeviceVolumeControl>
               </div>
 
               <button

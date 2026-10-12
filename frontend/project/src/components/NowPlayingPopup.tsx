@@ -1,3 +1,4 @@
+import DeviceVolumeControl from './DeviceVolumeControl';
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -300,7 +301,7 @@ export function NowPlayingPopup({
               {volume === 0 ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
             </button>
             <div className="flex-1">
-              <input
+              <DeviceVolumeControl><input
                 type="range"
                 aria-label="Volume"
                 min="0"
@@ -312,7 +313,7 @@ export function NowPlayingPopup({
                 style={{
                   background: `linear-gradient(to right, #ffffff 0%, #ffffff ${volume * 100}%, #4a5568 ${volume * 100}%, #4a5568 100%)`
                 }}
-              />
+              /></DeviceVolumeControl>
             </div>
           </div>
         </div>
