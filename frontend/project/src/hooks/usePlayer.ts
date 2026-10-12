@@ -122,10 +122,13 @@ export const usePlayer = () => {
       } catch { /* MediaSession is optional. */ }
     };
     const playing = () => update({isPlaying:true});
-    const started = () => { if (!audio.paused && audio.readyState >= 2) timing.finish('started'); };
-    const paused = () => { if (audio.paused) { timing.finish('cancelled'); update({isPlaying:false}); } };
-    const ended = () => actions.current.next(true);
+    const started = () => { if (!audio.paused && audio.readyState >= 2) { timing.endBuffer(); timing.finish('started'); } };
+    const waiting = () => { if (!audio.paused && !audio.seeking) timing.startBuffer(); };
+    const stopBuffer = () => timing.endBuffer();
+    const paused = () => { if (audio.paused) { timing.endBuffer(); timing.finish('cancelled'); update({isPlaying:false}); } };
+    const ended = () => { timing.endBuffer(); actions.current.next(true); };
     const error = () => {
+      timing.endBuffer();
       timing.finish('failed');
       const song = stateRef.current.currentSong;
       if (song) failed.current.add(song.id);
@@ -136,12 +139,18 @@ export const usePlayer = () => {
     audio.addEventListener('loadedmetadata', sync);
     audio.addEventListener('play', playing);
     audio.addEventListener('playing', started);
+    audio.addEventListener('waiting', waiting);
+    audio.addEventListener('seeking', stopBuffer);
+    window.addEventListener('pagehide', stopBuffer);
     audio.addEventListener('pause', paused);
     audio.addEventListener('ended', ended);
     audio.addEventListener('error', error);
     return () => {
       audio.removeEventListener('timeupdate', sync); audio.removeEventListener('loadedmetadata', sync);
       audio.removeEventListener('playing', started);
+      audio.removeEventListener('waiting', waiting);
+      audio.removeEventListener('seeking', stopBuffer);
+      window.removeEventListener('pagehide', stopBuffer);
       audio.removeEventListener('play', playing); audio.removeEventListener('pause', paused);
       audio.removeEventListener('ended', ended); audio.removeEventListener('error', error);
     };
@@ -158,5 +167,5 @@ export const usePlayer = () => {
       navigator.mediaSession.setActionHandler('seekto', details => { if (details.seekTime !== undefined) actions.current.seek(details.seekTime); });
     } catch { /* Unsupported MediaSession handlers must not interrupt playback. */ }
   }, [playerState.currentSong?.id]);
-  return { audioRef, playbackAttempts: timing.attempts, playerState, playSong, togglePlay, handleNext: () => handleNext(), handlePrevious, setVolume, seekTo, toggleShuffle, toggleRepeat };
+  return { audioRef, playbackAttempts: timing.attempts, timingStorageError: timing.storageError, playerState, playSong, togglePlay, handleNext: () => handleNext(), handlePrevious, setVolume, seekTo, toggleShuffle, toggleRepeat };
 };
