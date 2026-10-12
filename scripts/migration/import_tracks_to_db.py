@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Import migration manifest rows into mixes table.
-Idempotent: skips rows where file_path already exists.
+Idempotent: skips rows where file_path or a supplied SHA-256 already exists.
 
 Default mode is dry-run. Use --commit to persist changes.
 """
@@ -129,8 +129,8 @@ def main() -> int:
                 file_path = f"{args.base_public_url.rstrip('/')}/{src_file_path.lstrip('/')}"
 
             exists = conn.execute(
-                text("SELECT id FROM mixes WHERE file_path = :file_path LIMIT 1"),
-                {"file_path": file_path},
+                text("SELECT id FROM mixes WHERE file_path = :file_path OR (:file_hash IS NOT NULL AND file_hash = :file_hash) LIMIT 1"),
+                {"file_path": file_path, "file_hash": row.get("file_hash") or None},
             ).fetchone()
             if exists:
                 skipped_existing += 1
@@ -142,22 +142,25 @@ def main() -> int:
             file_size_mb = parse_float(row.get("file_size_mb"), 0.0)
             quality_kbps = parse_int(row.get("quality_kbps"), 0)
             artist_id = parse_int(row.get("artist_id"), default_artist_id)
+            if not row.get("artist_id") and str(row.get("artist_name") or "").strip():
+                artist_id = ensure_artist_id(conn, None, str(row["artist_name"]).strip())
 
             payload = {
                 "title": title,
                 "original_filename": original_filename,
                 "duration_seconds": duration_seconds,
                 "file_path": file_path,
-                "cover_art_url": None,
+                "cover_art_url": row.get("cover_art_url") or None,
+                "file_hash": row.get("file_hash") or None,
                 "file_size_mb": file_size_mb,
                 "quality_kbps": quality_kbps,
-                "release_date": args.release_date,
-                "description": None,
-                "tracklist": None,
-                "tags": "migration",
-                "genre": None,
-                "album": None,
-                "year": None,
+                "release_date": row.get("release_date", args.release_date),
+                "description": row.get("description") or None,
+                "tracklist": row.get("tracklist") or None,
+                "tags": row.get("tags") or "migration",
+                "genre": row.get("genre") or None,
+                "album": row.get("album") or None,
+                "year": parse_int(row.get("year")) or None,
                 "availability": "public",
                 "allow_downloads": "yes",
                 "display_embed": "yes",
@@ -172,12 +175,12 @@ def main() -> int:
                     text(
                         """
                         INSERT INTO mixes (
-                          title, original_filename, duration_seconds, file_path, cover_art_url,
+                          title, original_filename, duration_seconds, file_path, cover_art_url, file_hash,
                           file_size_mb, quality_kbps, release_date, description, tracklist,
                           tags, genre, album, year, availability, allow_downloads,
                           display_embed, age_restriction, play_count, download_count, artist_id
                         ) VALUES (
-                          :title, :original_filename, :duration_seconds, :file_path, :cover_art_url,
+                          :title, :original_filename, :duration_seconds, :file_path, :cover_art_url, :file_hash,
                           :file_size_mb, :quality_kbps, :release_date, :description, :tracklist,
                           :tags, :genre, :album, :year, :availability, :allow_downloads,
                           :display_embed, :age_restriction, :play_count, :download_count, :artist_id
