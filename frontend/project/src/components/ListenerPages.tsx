@@ -1,3 +1,4 @@
+import DeviceVolumeControl from './DeviceVolumeControl';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useLibrary } from '../state/LibraryContext';
@@ -9,7 +10,7 @@ export function ProfilePage() {
   return <form className="space-y-5 max-w-xl" onSubmit={e=>{e.preventDefault();updateProfile({name:name.trim(),bio:bio.trim()});}}><h2 className="text-2xl font-bold">Your profile</h2><p className="text-gray-400">Personalize your listener profile on this browser.</p><label className="block">Display name<input className={input} required maxLength={80} value={name} onChange={e=>setName(e.target.value)}/></label><label className="block">About you<textarea className={input} maxLength={500} value={bio} onChange={e=>setBio(e.target.value)}/></label><button className="bg-purple-600 rounded-lg px-5 py-3">Save profile</button><Link className="block text-purple-300" to="/account">Manage account</Link></form>;
 }
 export function SettingsPage({volume,setVolume}:{volume:number;setVolume:(value:number)=>void}) {
-  return <section className="space-y-5 max-w-xl"><h2 className="text-2xl font-bold">Settings</h2><label className="block">Playback volume: {Math.round(volume*100)}%<input aria-label="Playback volume" type="range" min="0" max="1" step="0.01" value={volume} onChange={e=>setVolume(Number(e.target.value))} className="block w-full my-4"/></label><button className="px-4 py-3 bg-purple-600 rounded-lg" onClick={()=>setVolume(volume===0?0.7:0)}>{volume===0?'Unmute':'Mute'}</button><p className="text-gray-400">Volume, favorites, playlists, and your listener profile stay saved in this browser.</p><Link to="/profile" className="block text-purple-300">Edit listener profile</Link><Link to="/install" className="block text-purple-300">Install the app on your phone →</Link></section>;
+  return <section className="space-y-5 max-w-xl"><h2 className="text-2xl font-bold">Settings</h2><DeviceVolumeControl><label className="block">Playback volume: {Math.round(volume*100)}%<input aria-label="Playback volume" type="range" min="0" max="1" step="0.01" value={volume} onChange={e=>setVolume(Number(e.target.value))} className="block w-full my-4"/></label></DeviceVolumeControl><button className="px-4 py-3 bg-purple-600 rounded-lg" onClick={()=>setVolume(volume===0?0.7:0)}>{volume===0?'Unmute':'Mute'}</button><p className="text-gray-400">Volume, favorites, playlists, and your listener profile stay saved in this browser.</p><Link to="/profile" className="block text-purple-300">Edit listener profile</Link><Link to="/install" className="block text-purple-300">Install the app on your phone →</Link></section>;
 }
 export function NotificationsPage() {
   const {library,clearNotifications}=useLibrary();

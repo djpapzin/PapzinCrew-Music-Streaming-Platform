@@ -40,7 +40,7 @@ export default function InstallAppPage() {
     </div>
     <div className="rounded-xl bg-white/5 p-5 space-y-3">
       <h3 className="font-semibold">Try your first mobile test</h3>
-      <p className="text-gray-300">Play a mix, open Now Playing, seek, minimize, and pause. Then check what happens when you lock the screen or switch apps.</p>
+      <p className="text-gray-300">Play a mix, open Now Playing, seek, minimize, and pause. Use your iPhone’s side buttons to adjust listening volume; the app’s mute button turns sound off or on. Then check what happens when you lock the screen or switch apps.</p>
       <Link className="inline-flex min-h-11 items-center text-purple-300" to="/albums?series=TPW%20%E2%80%94%20The%20Pristine%20World">Open the TPW collection →</Link>
     </div>
   </section>;
