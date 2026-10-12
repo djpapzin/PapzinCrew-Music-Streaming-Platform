@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import UploadPage from './UploadPage';
 
@@ -63,5 +63,47 @@ describe('UploadPage Paperclip context', () => {
     expect(screen.getByText(/Open this upload page with a/i)).toBeInTheDocument();
     expect(screen.getByText(/paperclipTaskId/i)).toBeInTheDocument();
     expect(fetch).not.toHaveBeenCalled();
+  });
+});
+
+
+describe('Upload catalog handoff', () => {
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  it('refreshes the library and opens the saved mix while artwork is pending', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true, json: async () => ({ duplicate: false }),
+    }));
+    const refreshed = vi.fn();
+    const play = vi.fn();
+    window.addEventListener('library:refresh', refreshed);
+    class UploadRequest {
+      upload = { addEventListener: vi.fn() };
+      status = 201;
+      responseText = JSON.stringify({ id: 233, generating_art: true });
+      onload?: () => void;
+      open = vi.fn();
+      setRequestHeader = vi.fn();
+      send() { this.onload?.(); }
+    }
+    vi.stubGlobal('XMLHttpRequest', UploadRequest);
+    const { container } = render(
+      <MemoryRouter initialEntries={['/upload']}>
+        <Routes>
+          <Route path="/upload" element={<UploadPage onPlaySong={play} />} />
+          <Route path="/track/233" element={<div>Saved mix page</div>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    const file = new File(['audio'], 'Guest mix.mp3', { type: 'audio/mpeg' });
+    Object.defineProperty(file, 'size', { value: 30 * 1024 * 1024 });
+    fireEvent.change(container.querySelector('#upload-audio-file')!, { target: { files: [file] } });
+    fireEvent.change(screen.getByPlaceholderText('Enter the main artist name'), { target: { value: 'Guest DJ' } });
+    fireEvent.click(screen.getByRole('button', { name: /Publish Large File/i }));
+    await screen.findByText('Saved mix page');
+    expect(refreshed).toHaveBeenCalledOnce();
+    expect(play).not.toHaveBeenCalled();
+    expect(fetch).not.toHaveBeenCalledWith(expect.stringContaining('art-status'));
+    window.removeEventListener('library:refresh', refreshed);
   });
 });
