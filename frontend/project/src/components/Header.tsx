@@ -2,14 +2,14 @@ import { useState, useEffect } from 'react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { Search, ChevronLeft, ChevronRight, Bell, Settings, User, Menu, Upload } from 'lucide-react';
 import { useLibrary } from '../state/LibraryContext';
-import { getSastGreeting } from '../lib/greeting';
+import { getLocalGreeting } from '../lib/greeting';
 interface Props {searchQuery:string;setSearchQuery:(query:string)=>void;onMenuClick?:()=>void}
 const titles:Record<string,string>={'/library':'Your Library','/search':'Search','/playlists':'Your Playlists','/artists':'Artists','/albums':'Albums & Mix Series','/liked':'Liked Songs','/independent':'Independent Artists','/trending':'Discover mixes','/upload':'Upload Music','/profile':'Your Profile','/account':'Your Account','/settings':'Settings','/notifications':'Notifications','/admin':'Catalog Overview'};
 export default function Header({searchQuery,setSearchQuery,onMenuClick}:Props) {
   const [open,setOpen]=useState(false);const location=useLocation();const navigate=useNavigate();const {library}=useLibrary();
-  const [greeting,setGreeting]=useState(getSastGreeting);
+  const [greeting,setGreeting]=useState(getLocalGreeting);
   useEffect(()=>{
-    const refresh=()=>setGreeting(getSastGreeting());
+    const refresh=()=>setGreeting(getLocalGreeting());
     const timer=window.setInterval(refresh,60_000);
     window.addEventListener('focus',refresh);
     return()=>{window.clearInterval(timer);window.removeEventListener('focus',refresh);};
