@@ -1,11 +1,8 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
 import { Play, Shuffle, Radio } from 'lucide-react';
 import { Song, Playlist } from '../types/music';
 
-export interface QuickPlayCollection { title: string; description: string; songs: Song[]; href: string; }
 interface QuickPlayProps {
-  collections?: QuickPlayCollection[];
   songs: Song[];
   playlists: Playlist[];
   onPlaySong: (song: Song, queue?: Song[]) => void;
@@ -14,7 +11,6 @@ interface QuickPlayProps {
 
 const QuickPlay: React.FC<QuickPlayProps> = ({
   songs,
-  collections = [],
   onPlaySong
 }) => {
   const playable = songs.filter(song => song.playable !== false && song.audioUrl);
@@ -81,20 +77,7 @@ const QuickPlay: React.FC<QuickPlayProps> = ({
           </button>
         </div>
       </div>
-      {collections.length > 0 && <div className="grid sm:grid-cols-2 gap-3 mt-5">
-        {collections.map(collection => {
-          const queue = collection.songs.filter(song => song.playable !== false && song.audioUrl);
-          return <section key={collection.title} className="rounded-xl bg-black/25 border border-white/10 p-4 flex flex-col gap-3 min-w-0">
-            <div><h4 className="text-lg font-bold">{collection.title}</h4><p className="text-sm text-gray-300 mt-1">{collection.description}</p></div>
-            <button disabled={!queue.length} onClick={() => {
-              const index = Math.floor(Math.random() * queue.length);
-              const ordered = [...queue.slice(index), ...queue.slice(0,index)];
-              if (ordered.length) onPlaySong(ordered[0], ordered);
-            }} className="mt-auto min-h-12 rounded-full bg-purple-600 hover:bg-purple-500 disabled:opacity-40 px-4 py-3 font-semibold flex gap-2 items-center justify-center"><Play size={18}/> Play {collection.title}</button>
-            <Link to={collection.href} className="min-h-11 flex items-center justify-center text-purple-200 text-sm">Explore {collection.title} →</Link>
-          </section>;
-        })}
-      </div>}
+
     </div>
   );
 };
