@@ -3,6 +3,7 @@ import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import MainContent from './components/MainContent';
 import Player from './components/Player';
+import PlaybackTiming from './components/PlaybackTiming';
 import MobileNav from './components/MobileNav';
 import { usePlayer } from './hooks/usePlayer';
 import { Song, Playlist, Album, Artist } from './types/music';
@@ -37,6 +38,7 @@ function App() {
   
   const {
     audioRef,
+    playbackAttempts,
     playerState,
     playSong,
     togglePlay,
@@ -166,6 +168,7 @@ function App() {
             onMenuClick={() => setSidebarOpen(true)}
           />
           
+          <PlaybackTiming attempts={playbackAttempts} />
           <MainContent
             searchQuery={searchQuery}
             songs={songs}
