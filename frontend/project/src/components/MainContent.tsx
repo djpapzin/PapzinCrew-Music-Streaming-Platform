@@ -3,7 +3,7 @@ import { Song, Playlist, Album, Artist } from '../types/music';
 import { useLibrary } from '../state/LibraryContext';
 import { PlaylistsPage, PlaylistEditor, TrackList } from './LibraryPages';
 import { ProfilePage, SettingsPage, NotificationsPage, AccountPage } from './ListenerPages';
-import QuickPlay from './QuickPlay';
+import QuickPlay, { QuickPlayCollection } from './QuickPlay';
 import QuickPlayCard from './QuickPlayCard';
 import UploadPage from './UploadPage';
 import AdminAnalyticsPanel from './AdminAnalyticsPanel';
@@ -23,11 +23,16 @@ export default function MainContent({searchQuery,songs,tracksLoading,tracksError
   const {pathname}=useLocation();
   const [searchParams,setSearchParams]=useSearchParams();
   const list=(items:Song[])=> <TrackList songs={items} currentSong={currentSong} isPlaying={isPlaying} onPlaySong={onPlaySong}/>;
-  const quick=(items=songs)=><QuickPlay songs={items} playlists={[]} onPlaySong={onPlaySong} onPlayPlaylist={()=>{}}/>;
+  const quick=(items=songs,collections:QuickPlayCollection[]=[])=> <QuickPlay collections={collections} songs={items} playlists={[]} onPlaySong={onPlaySong} onPlayPlaylist={()=>{}}/>;
   const artistNames=Array.from(new Set(songs.map(song=>song.artist))).sort();
   const albumNames=Array.from(new Set(songs.map(series))).sort();
   const recent=library.recent.map(id=>songs.find(s=>s.id===id)).filter((s):s is Song=>!!s);
   const tpw=sortCollectionTracks(songs.filter(song=>series(song)===TPW_SERIES));
+  const crew=sortCollectionTracks(songs.filter(song=>series(song)!==TPW_SERIES && (/papzin\s*(?:&|and)\s*crew/i.test(song.artist) || /^Cruize /i.test(series(song)))));
+  const homeCollections:QuickPlayCollection[]=[
+    {title:'TPW',description:'The Pristine World · DJ Papzin’s mix archive.',songs:tpw,href:`/albums?series=${encodeURIComponent(TPW_SERIES)}`},
+    {title:'Papzin & Crew',description:'Cruize sessions, guest DJs and crew mixes.',songs:crew,href:'/albums?series=Cruize%20Friday'},
+  ];
   const collectionView=(kind:'artist'|'album')=>{
     const names=kind==='artist'?artistNames:albumNames;
     const key=kind==='artist'?'artist':'series';
@@ -39,7 +44,7 @@ export default function MainContent({searchQuery,songs,tracksLoading,tracksError
   return <main className="flex-1 bg-gradient-to-b from-gray-900/50 to-black p-4 lg:p-6 overflow-y-auto pb-40 lg:pb-32">
     {pathname!=='/install'&&catalogStatus}
     <Routes>
-      <Route path="/" element={<div className="space-y-7"><section className="bg-gradient-to-br from-purple-900/60 to-pink-900/60 rounded-xl p-6 border border-purple-500/30"><h2 className="text-2xl lg:text-4xl font-bold mb-3">Welcome to Papzin & Crew</h2><p className="text-gray-300">Discover the mixes, artists, and sounds of Papzin & Crew.</p><div className="flex flex-wrap gap-3 mt-5"><Link className="bg-white/10 rounded-full px-4 py-2" to="/independent">Discover artists</Link><Link className="bg-white/10 rounded-full px-4 py-2" to="/search">Browse music</Link><Link className="bg-white/10 rounded-full px-4 py-2" to="/install">Get the app</Link></div></section>{quick()}{tpw.length>0&&<section className="rounded-xl bg-white/5 p-5 border border-white/10"><div className="flex items-center gap-4"><img src={tpw[0].imageUrl} alt="DJ Papzin archive artwork" className="w-20 h-20 object-cover rounded-lg"/><div><h2 className="text-xl font-bold">The Pristine World archive</h2><p className="text-gray-400 mt-1">{tpw.length} mixes • Start at TPW 1 and follow the series.</p><Link className="inline-block text-purple-300 mt-3" to={`/albums?series=${encodeURIComponent(TPW_SERIES)}`}>Explore TPW mixes →</Link></div></div></section>}<section><h2 className="text-2xl font-bold mb-4">Featured mixes</h2><div className="grid sm:grid-cols-2 gap-3">{songs.slice(0,6).map(song=><QuickPlayCard key={song.id} item={song} type="song" onPlay={()=>onPlaySong(song,songs)}/>)}</div></section>{recent.length>0&&<section><h2 className="text-2xl font-bold mb-4">Recently played</h2>{list(recent)}</section>}<div className="flex gap-4"><Link to="/albums" className="text-purple-300">Albums & mix series →</Link><Link to="/playlists" className="text-purple-300">Your playlists →</Link></div></div>}/>
+      <Route path="/" element={<div className="space-y-7"><section className="bg-gradient-to-br from-purple-900/60 to-pink-900/60 rounded-xl p-6 border border-purple-500/30"><h2 className="text-2xl lg:text-4xl font-bold mb-3">Welcome to Papzin & Crew</h2><p className="text-gray-300">Discover the mixes, artists, and sounds of Papzin & Crew.</p><div className="flex flex-wrap gap-3 mt-5"><Link className="bg-white/10 rounded-full px-4 py-2" to="/independent">Discover artists</Link><Link className="bg-white/10 rounded-full px-4 py-2" to="/search">Browse music</Link><Link className="bg-white/10 rounded-full px-4 py-2" to="/install">Get the app</Link></div></section>{quick(songs,homeCollections)}<section><h2 className="text-2xl font-bold mb-4">Featured mixes</h2><div className="grid sm:grid-cols-2 gap-3">{songs.slice(0,6).map(song=><QuickPlayCard key={song.id} item={song} type="song" onPlay={()=>onPlaySong(song,songs)}/>)}</div></section>{recent.length>0&&<section><h2 className="text-2xl font-bold mb-4">Recently played</h2>{list(recent)}</section>}<div className="flex gap-4"><Link to="/albums" className="text-purple-300">Albums & mix series →</Link><Link to="/playlists" className="text-purple-300">Your playlists →</Link></div></div>}/>
       <Route path="/search" element={<BrowseMixes songs={songs} query={searchQuery} loading={tracksLoading} error={tracksError} currentSong={currentSong} isPlaying={isPlaying} onPlaySong={onPlaySong}/>}/>
       <Route path="/library" element={<section className="space-y-5"><h2 className="text-2xl font-bold">Your Library</h2><div className="flex flex-wrap gap-4"><Link to="/playlists" className="text-purple-300">Playlists ({library.playlists.length})</Link><Link to="/liked" className="text-purple-300">Liked Songs ({library.liked.length})</Link><Link to="/albums" className="text-purple-300">Albums & Mix Series</Link></div><h3 className="text-xl">{recent.length?'Recently played':'All tracks'}</h3>{list(recent.length?recent:songs)}</section>}/>
       <Route path="/playlists" element={<PlaylistsPage/>}/>
