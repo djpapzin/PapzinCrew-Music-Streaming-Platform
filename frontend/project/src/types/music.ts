@@ -9,6 +9,8 @@ export interface Song {
   genre: string;
   year: number;
   playable?: boolean;
+  description?: string;
+  tracklist?: string;
 }
 
 export interface Album {
