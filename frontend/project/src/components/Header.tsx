@@ -4,7 +4,7 @@ import { Search, ChevronLeft, ChevronRight, Bell, Settings, User, Menu, Upload }
 import { useLibrary } from '../state/LibraryContext';
 import { getLocalGreeting } from '../lib/greeting';
 interface Props {searchQuery:string;setSearchQuery:(query:string)=>void;onMenuClick?:()=>void}
-const titles:Record<string,string>={'/library':'Your Library','/search':'Search','/playlists':'Your Playlists','/artists':'Artists','/albums':'Albums & Mix Series','/liked':'Liked Songs','/independent':'Independent Artists','/trending':'Discover mixes','/upload':'Upload Music','/profile':'Your Profile','/account':'Your Account','/settings':'Settings','/notifications':'Notifications','/admin':'Catalog Overview'};
+const titles:Record<string,string>={'/library':'Your Library','/search':'Search','/playlists':'Your Playlists','/artists':'Artists','/albums':'Albums & Mix Series','/liked':'Liked Songs','/independent':'Independent Artists','/trending':'Discover mixes','/upload':'Upload Music','/profile':'Your Profile','/account':'Your Account','/settings':'Settings','/install':'Get the app','/notifications':'Notifications','/admin':'Catalog Overview'};
 export default function Header({searchQuery,setSearchQuery,onMenuClick}:Props) {
   const [open,setOpen]=useState(false);const location=useLocation();const navigate=useNavigate();const {library}=useLibrary();
   const [greeting,setGreeting]=useState(getLocalGreeting);

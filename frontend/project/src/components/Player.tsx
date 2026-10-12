@@ -67,8 +67,7 @@ const Player: React.FC<PlayerProps> = ({
     <>
       {/* Mobile Mini Player */}
       <div
-        className="lg:hidden fixed bottom-16 left-0 right-0 bg-black/95 backdrop-blur-xl border-t border-white/20 px-3 pt-3 z-40"
-        style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom, 0px))' }}
+        className="mobile-mini-player lg:hidden fixed left-0 right-0 bg-black/95 backdrop-blur-xl border-t border-white/20 pt-3 pb-3 z-40"
       >
         <div
           className="flex items-center space-x-3 cursor-pointer"

@@ -1,3 +1,22 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+  --mobile-nav-height: calc(4rem + max(0.5rem, env(safe-area-inset-bottom, 0px)) + 1px);
+  background: #09090b;
+}
+
+.app-shell {
+  height: 100vh;
+  height: 100dvh;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+.mobile-mini-player {
+  bottom: var(--mobile-nav-height);
+  padding-left: max(0.75rem, env(safe-area-inset-left, 0px));
+  padding-right: max(0.75rem, env(safe-area-inset-right, 0px));
+}
