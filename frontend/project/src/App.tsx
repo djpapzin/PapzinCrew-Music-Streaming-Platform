@@ -97,6 +97,8 @@ function App() {
         genre: mix.genre || '',
         year: mix.year || 0,
         playable: Boolean(mix.file_path),
+        description: typeof mix.description === "string" ? mix.description : "",
+        tracklist: typeof mix.tracklist === "string" ? mix.tracklist : "",
       }));
       setSongs(mapped);
       setTracksError(null);
@@ -178,6 +180,7 @@ function App() {
             setVolume={setVolume}
             onRetry={fetchTracks}
             onPlaySong={playSong}
+            onTogglePlay={togglePlay}
             onPlayPlaylist={handlePlayPlaylist}
           />
         </div>
