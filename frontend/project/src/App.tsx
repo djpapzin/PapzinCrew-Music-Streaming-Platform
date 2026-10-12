@@ -130,7 +130,7 @@ function App() {
   };
 
   return (
-    <LibraryProvider songs={songs}><div className="h-screen bg-black text-white flex flex-col">
+    <LibraryProvider songs={songs}><div className="app-shell bg-black text-white flex flex-col">
       {/* Global toast notifications */}
       <Toast />
       {/* Hidden audio element */}
