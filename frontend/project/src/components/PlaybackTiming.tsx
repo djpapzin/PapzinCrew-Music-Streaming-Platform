@@ -17,7 +17,7 @@ export default function PlaybackTiming({ attempts, storageError }: { attempts: P
   const summary = latest.status === 'waiting' ? `Starting… ${seconds(elapsed)}` : latest.status === 'started' ? `${latest.kind === 'Resume' ? 'Resumed' : 'Started'} in ${seconds(latest.milliseconds!)}` : latest.status === 'failed' ? 'Playback start failed' : 'Playback start cancelled';
   return <details className="mx-4 mt-3 rounded-xl border border-purple-400/20 bg-purple-950/30 text-sm text-purple-100 shrink-0">
     <summary className="cursor-pointer min-h-11 px-4 py-3">{summary} <span className="text-purple-300">· Playback timing</span></summary>
-    <div className="px-4 pb-4 space-y-3">
+    <div className="px-4 pb-4 space-y-3 max-h-[45dvh] overflow-y-auto">
       <p>From your play request to the browser’s first playing event. Device or Bluetooth output delay is not included. The latest 500 attempts are saved in this browser on this device. Export regularly: clearing browser data removes the log. Other browsers and your Home Screen app may have separate storage.</p>
       {starts.length > 0 && <p>Track starts: average {seconds(starts.reduce((sum,item) => sum + item.milliseconds!,0) / starts.length)} · slowest {seconds(Math.max(...starts.map(item => item.milliseconds!)))} · {starts.length} measured. Resumes excluded.</p>}
       <p className="text-purple-300">Showing the latest 20 attempts. Export includes all saved attempts. Buffering is measured separately; seeking is excluded. Connection type may be unavailable on iPhone.</p>
