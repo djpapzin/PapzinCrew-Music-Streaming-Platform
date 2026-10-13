@@ -1,3 +1,13 @@
+import originalArtwork from '../data/originalArtwork.json';
+
+const originals: Record<string, { title: string; url: string }> = originalArtwork;
+
+/** Reviewed originals are scoped to both catalog ID and title to avoid cross-matching. */
+export function originalArtworkForTrack(id: string | number, title: string): string | undefined {
+  const original = originals[String(id)];
+  return original?.title === title ? original.url : undefined;
+}
+
 export const DEFAULT_ARTWORK_DATA_URL =
   "data:image/svg+xml;utf8,\
 <svg xmlns='http://www.w3.org/2000/svg' width='320' height='320' viewBox='0 0 320 320'>\
