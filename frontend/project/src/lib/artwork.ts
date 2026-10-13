@@ -1,4 +1,5 @@
 import originalArtwork from '../data/originalArtwork.json';
+import generatedArtwork from '../data/generatedArtwork.json';
 
 const originals: Record<string, { title: string; url: string }> = originalArtwork;
 
@@ -6,6 +7,13 @@ const originals: Record<string, { title: string; url: string }> = originalArtwor
 export function originalArtworkForTrack(id: string | number, title: string): string | undefined {
   const original = originals[String(id)];
   return original?.title === title ? original.url : undefined;
+}
+
+/** Generated replacements apply only when no original or catalog cover is available. */
+export function generatedArtworkForTrack(id: string | number, title: string): string | undefined {
+  const covers: Record<string, { title: string; url: string }> = generatedArtwork;
+  const cover = covers[String(id)];
+  return cover?.title === title ? cover.url : undefined;
 }
 
 export const DEFAULT_ARTWORK_DATA_URL =
