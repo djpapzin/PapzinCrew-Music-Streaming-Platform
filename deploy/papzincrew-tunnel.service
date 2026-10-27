@@ -1,0 +1,20 @@
+[Unit]
+Description=Papzin and Crew HTTPS tunnel
+After=network-online.target papzincrew-backend.service
+Wants=network-online.target
+[Service]
+Type=simple
+DynamicUser=yes
+LoadCredential=tunnel.json:/etc/papzincrew/tunnel.json
+ExecStart=/usr/local/bin/cloudflared --no-autoupdate --config /etc/papzincrew/tunnel.yml tunnel --credentials-file /run/credentials/papzincrew-tunnel.service/tunnel.json run
+Restart=on-failure
+RestartSec=10
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+MemoryMax=256M
+CPUQuota=25%
+TasksMax=64
+[Install]
+WantedBy=multi-user.target
