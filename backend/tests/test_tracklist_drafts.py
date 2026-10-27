@@ -96,7 +96,12 @@ def test_owner_auth_and_existing_tracklist_are_enforced(tmp_path, monkeypatch):
     app=FastAPI();app.include_router(router)
     def dependency():
         with Session(engine) as db: yield db
-    app.dependency_overrides[get_db]=dependency
+    # Other legacy tests patch the module's get_db symbol during collection.
+    # Override the callable actually captured by each route at registration.
+    for route in app.routes:
+        for dep in getattr(getattr(route, 'dependant', None), 'dependencies', []):
+            if dep.name == 'db':
+                app.dependency_overrides[dep.call] = dependency
     client=TestClient(app)
     assert client.get('/admin/tracklist-drafts/237').status_code==403
     headers={'X-Admin-Api-Key':'private-test-owner-key'}
