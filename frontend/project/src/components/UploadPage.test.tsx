@@ -63,6 +63,8 @@ describe('UploadPage Paperclip context', () => {
     expect(screen.getByText(/Open this upload page with a/i)).toBeInTheDocument();
     expect(screen.getByText(/paperclipTaskId/i)).toBeInTheDocument();
     expect(fetch).not.toHaveBeenCalled();
+    expect(screen.getByText('Visibility: Unlisted — pending review')).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Public', exact: true })).not.toBeInTheDocument();
   });
 });
 
@@ -84,7 +86,7 @@ describe('Upload catalog handoff', () => {
       onload?: () => void;
       open = vi.fn();
       setRequestHeader = vi.fn();
-      send() { this.onload?.(); }
+      send(body: FormData) { expect(body.get('availability')).toBe('unlisted'); this.onload?.(); }
     }
     vi.stubGlobal('XMLHttpRequest', UploadRequest);
     const { container } = render(
@@ -99,7 +101,7 @@ describe('Upload catalog handoff', () => {
     Object.defineProperty(file, 'size', { value: 30 * 1024 * 1024 });
     fireEvent.change(container.querySelector('#upload-audio-file')!, { target: { files: [file] } });
     fireEvent.change(screen.getByPlaceholderText('Enter the main artist name'), { target: { value: 'Guest DJ' } });
-    fireEvent.click(screen.getByRole('button', { name: /Publish Large File/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Upload Large File for Review/i }));
     await screen.findByText('Saved mix page');
     expect(refreshed).toHaveBeenCalledOnce();
     expect(play).not.toHaveBeenCalled();
@@ -128,7 +130,7 @@ describe('Upload duplicate preflight', () => {
     Object.defineProperty(file, 'size', { value: 30 * 1024 * 1024 });
     fireEvent.change(container.querySelector('#upload-audio-file')!, { target: { files: [file] } });
     fireEvent.change(screen.getByPlaceholderText('Enter the main artist name'), { target: { value: 'Mr Dominate SA' } });
-    fireEvent.click(screen.getByRole('button', { name: /Publish Large File/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Upload Large File for Review/i }));
     if (scenario === 'duplicate') await screen.findByText('Existing Guest 47');
     else await screen.findByText(/Could not check the catalog/);
     expect(xhr).not.toHaveBeenCalled();

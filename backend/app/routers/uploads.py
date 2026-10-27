@@ -898,7 +898,7 @@ async def upload_mix(
     tracklist: Optional[str] = Form(None),
     tags: Optional[str] = Form(None),
     genre: Optional[str] = Form(None),
-    availability: Optional[str] = Form('public'),
+    availability: Optional[str] = Form('unlisted'),
     allow_downloads: Optional[str] = Form('yes'),
     display_embed: Optional[str] = Form('yes'),
     age_restriction: Optional[str] = Form('all'),
@@ -915,6 +915,10 @@ async def upload_mix(
     Upload a new mix file with metadata.
     Validates the file and checks for duplicates before saving.
     """
+    # Uploading is intake only. Public release requires a separate catalog review.
+    # Ignore legacy/client visibility requests, including forced duplicate uploads.
+    availability = 'unlisted'
+
     artist_name = (primary_artist or artist_name or '').strip()
 
     if request is not None:

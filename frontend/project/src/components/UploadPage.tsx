@@ -143,7 +143,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
     tagArtists: '',
     tags: '',
     genre: 'Podcast Shows',
-    availability: 'Public',
+    availability: 'Unlisted',
     allowDownloads: 'Yes',
     displayEmbedCode: 'Yes',
     ageRestriction: 'All ages can listen to this stream'
@@ -586,7 +586,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
       uploadFormData.append('tracklist', formData.tracklist);
       uploadFormData.append('tags', formData.tags);
       uploadFormData.append('genre', formData.genre);
-      uploadFormData.append('availability', formData.availability.toLowerCase());
+      uploadFormData.append('availability', 'unlisted');
       uploadFormData.append('allow_downloads', formData.allowDownloads.toLowerCase());
       uploadFormData.append('display_embed', formData.displayEmbedCode.toLowerCase());
       uploadFormData.append('age_restriction', formData.ageRestriction.toLowerCase());
@@ -939,7 +939,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
             <Loader2 className="w-5 h-5 mt-0.5 flex-shrink-0" />
             <div>
               <p className="font-medium">Large file mode is on</p>
-              <p className="text-sm">You can publish immediately. We skip the slow pre-upload scan/hash for larger files so the upload starts faster, and the rest is checked during upload.</p>
+              <p className="text-sm">You can upload for review immediately. We skip the slow pre-upload scan/hash for larger files so the upload starts faster, and the rest is checked during upload.</p>
             </div>
           </div>
         )}
@@ -1360,21 +1360,9 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
               </div>
             </div>
 
-            {/* Availability */}
             <div className="space-y-2">
-              <label className="text-white font-medium">Availability</label>
-              <div className="relative">
-                <select
-                  value={formData.availability}
-                  onChange={(e) => handleInputChange('availability', e.target.value)}
-                  className="w-full bg-white/10 border border-white/20 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent appearance-none cursor-pointer"
-                >
-                  <option value="Public">Public</option>
-                  <option value="Private">Private</option>
-                  <option value="Unlisted">Unlisted</option>
-                </select>
-                <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-              </div>
+              <h3 className="text-white font-medium">Visibility: Unlisted — pending review</h3>
+              <p className="text-sm text-gray-300">Uploads stay out of the public catalog until checked as DJ mixes and tested with playback muted. Solo songs are not published. Test uploads stay unlisted.</p>
             </div>
 
             {/* Allow Downloads */}
@@ -1658,7 +1646,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
           <div className="pt-4 space-y-3">
             {isLargeFilePendingMetadata && !isPublishing && (
               <p className="text-sm text-blue-300">
-                Large file selected — publish starts immediately without the slow pre-upload hash step.
+                Large file selected — upload starts immediately without the slow pre-upload hash step.
               </p>
             )}
             <button
@@ -1689,12 +1677,12 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
               {!isPublishing && (
                 <span>
                   {uploadStatus.stage === 'success' 
-                    ? 'Published Successfully! ' 
+                    ? 'Uploaded for review! '
                     : uploadStatus.stage === 'error'
                     ? 'Try Again'
                     : isLargeFilePendingMetadata
-                    ? 'Publish Large File'
-                    : 'Publish'}
+                    ? 'Upload Large File for Review'
+                    : 'Upload for Review'}
                 </span>
               )}
             </button>
