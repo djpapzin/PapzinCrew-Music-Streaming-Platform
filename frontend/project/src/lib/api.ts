@@ -1,5 +1,4 @@
 const DEFAULT_LOCAL_API_BASE = 'http://localhost:8000';
-const DEFAULT_PROD_API_BASE = 'https://papzincrew-backend.onrender.com';
 const SAME_ORIGIN_API_BASE = '/api';
 
 const isLocalDevHost = (hostname: string) =>

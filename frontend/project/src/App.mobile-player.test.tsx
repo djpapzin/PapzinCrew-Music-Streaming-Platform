@@ -3,7 +3,8 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import App from './App';
 
-vi.mock('./components/MainContent', () => ({ default: ({ songs, onPlaySong, onTogglePlay }: any) => <>
+vi.mock('./components/MainContent', () => ({ default: ({ songs, onPlaySong, onTogglePlay, tracksError }: any) => <>
+  {tracksError && <p role="alert">{tracksError}</p>}
   {songs.map((song: any) => <button key={song.id} onClick={() => onPlaySong(song, songs)}>Select {song.title}</button>)}
   <button onClick={onTogglePlay}>Toggle playback</button>
 </> }));
@@ -32,7 +33,7 @@ beforeEach(() => {
     paused = true; this.dispatchEvent(new Event('pause'));
   });
 });
-afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers(); });
 const dialog = () => screen.queryByRole('dialog', { name: 'Now Playing' });
 async function setup() { render(<MemoryRouter><App /></MemoryRouter>); await screen.findByRole('button', { name: 'Select Mix 1' }); }
 it('opens only for explicit mobile selections; collapse survives resume and automatic advancement', async () => {
@@ -117,4 +118,30 @@ it('shows long mix timing in both compact players and keeps mini controls collap
   fireEvent.click(document.querySelector('.mobile-mini-player button[aria-label="Next track"]')!);
   expect(audio.src).toContain('mix-2.mp3');
   expect(dialog()).toBeNull(); expect(audio.muted).toBe(true);
+});
+
+it('recovers an initial catalog failure automatically', async () => {
+  vi.useFakeTimers();
+  vi.mocked(fetch).mockRejectedValueOnce(new TypeError('temporary outage'));
+  render(<MemoryRouter><App /></MemoryRouter>);
+  await act(async () => {});
+  expect(screen.getByRole('alert')).toBeTruthy();
+  await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
+  expect(screen.getByRole('button', { name: 'Select Mix 1' })).toBeTruthy();
+  expect(screen.queryByRole('alert')).toBeNull();
+});
+it('keeps loaded mixes available if a refresh fails', async () => {
+  await setup();
+  vi.mocked(fetch).mockRejectedValueOnce(new TypeError('temporary outage'));
+  await act(async () => { window.dispatchEvent(new Event('library:refresh')); });
+  expect(screen.getByRole('button', { name: 'Select Mix 1' })).toBeTruthy();
+  expect(screen.getByRole('alert')).toBeTruthy();
+});
+it('stops automatic recovery after three attempts instead of polling indefinitely', async () => {
+  vi.useFakeTimers();
+  vi.mocked(fetch).mockRejectedValue(new TypeError('offline'));
+  render(<MemoryRouter><App /></MemoryRouter>);
+  await act(async () => {});
+  await act(async () => { await vi.advanceTimersByTimeAsync(120000); });
+  expect(fetch).toHaveBeenCalledTimes(4);
 });

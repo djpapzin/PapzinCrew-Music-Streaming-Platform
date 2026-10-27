@@ -1,5 +1,6 @@
+import { fetchCatalog } from './lib/fetchCatalog';
 import { playbackUrl } from './lib/playbackUrl';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import MainContent from './components/MainContent';
@@ -35,6 +36,9 @@ function App() {
   const [playlists] = useState<Playlist[]>([]);
   const [albums] = useState<Album[]>([]);
   const [artists] = useState<Artist[]>([]);
+  const catalogAbort = useRef<AbortController | null>(null);
+  const catalogRetry = useRef<number>();
+  const catalogFailures = useRef(0);
   const [tracksLoading, setTracksLoading] = useState(true);
   const [tracksError, setTracksError] = useState<string | null>(null);
   
@@ -53,42 +57,16 @@ function App() {
     toggleRepeat
   } = usePlayer();
 
-  const fetchTracks = useCallback(async () => {
+  const fetchTracks = useCallback(async (): Promise<void> => {
+    window.clearTimeout(catalogRetry.current);
+    catalogAbort.current?.abort();
+    const controller = new AbortController();
+    catalogAbort.current = controller;
     setTracksLoading(true);
     setTracksError(null);
     try {
-      // Render free instances can outlast Netlify's proxy timeout on a cold start.
-      // Retry once through the backend origin before showing a recoverable error.
-      let res = await fetch(`${API_BASE}/tracks/catalog`);
-      if (res.status === 502 || res.status === 503 || res.status === 504) {
-        res = await fetch('https://papzincrew-backend.onrender.com/tracks/catalog');
-      }
-      if (!res.ok) {
-        let message = `Failed to load tracks (${res.status})`;
-
-        if (res.status >= 500) {
-          message = `Catalog service unavailable (${res.status}).`;
-        } else if (res.status === 404) {
-          message = 'Catalog endpoint not found (404).';
-        } else if (res.status === 401 || res.status === 403) {
-          message = `Catalog request blocked (${res.status}).`;
-        }
-
-        let responseBody = '';
-        try {
-          responseBody = await res.text();
-        } catch {
-          responseBody = '';
-        }
-
-        console.error('Failed to load tracks response', {
-          status: res.status,
-          body: responseBody.slice(0, 500),
-        });
-
-        throw new Error(message);
-      }
-      const mixes = await res.json();
+      const mixes = await fetchCatalog(API_BASE, controller.signal);
+      if (controller.signal.aborted) return;
       const publicMixes = (mixes || []).filter((mix: any) => isPublicTrack(mix));
       const visibleMixes = publicMixes;
       const mapped: Song[] = visibleMixes.map((mix: any) => ({
@@ -106,18 +84,33 @@ function App() {
         tracklist: typeof mix.tracklist === "string" ? mix.tracklist : "",
       }));
       setSongs(mapped);
+      catalogFailures.current = 0;
       setTracksError(null);
     } catch (err) {
+      if (controller.signal.aborted) return;
       console.error('Failed to fetch tracks', err);
-      setSongs([]);
       setTracksError(err instanceof Error ? err.message : 'Unable to load tracks.');
+      if (!(err instanceof Error && 'retryable' in err && err.retryable === false)) {
+        const delay = [5000, 15000, 30000][catalogFailures.current++];
+        if (delay !== undefined) catalogRetry.current = window.setTimeout(() => void fetchTracks(), delay);
+      } else catalogFailures.current = 0;
     } finally {
-      setTracksLoading(false);
+      if (catalogAbort.current === controller) setTracksLoading(false);
     }
   }, [API_BASE]);
 
   useEffect(() => {
-    fetchTracks();
+    void fetchTracks();
+    const recover = () => { if (catalogFailures.current > 0) void fetchTracks(); };
+    const visible = () => { if (document.visibilityState === 'visible') recover(); };
+    window.addEventListener('online', recover);
+    document.addEventListener('visibilitychange', visible);
+    return () => {
+      window.clearTimeout(catalogRetry.current);
+      catalogAbort.current?.abort();
+      window.removeEventListener('online', recover);
+      document.removeEventListener('visibilitychange', visible);
+    };
   }, [fetchTracks]);
 
   useEffect(() => {
