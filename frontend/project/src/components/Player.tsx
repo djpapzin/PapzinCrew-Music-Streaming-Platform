@@ -31,10 +31,12 @@ interface PlayerProps {
 }
 
 const formatTime = (seconds: number): string => {
-  if (isNaN(seconds)) return '0:00';
-  const mins = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60);
-  return `${mins}:${secs.toString().padStart(2, '0')}`;
+  if (!Number.isFinite(seconds) || seconds < 0) return '0:00';
+  const whole = Math.floor(seconds);
+  const hours = Math.floor(whole / 3600);
+  const mins = Math.floor((whole % 3600) / 60);
+  const secs = (whole % 60).toString().padStart(2, '0');
+  return hours > 0 ? `${hours}:${mins.toString().padStart(2, '0')}:${secs}` : `${mins}:${secs}`;
 };
 
 const Player: React.FC<PlayerProps> = ({
@@ -89,7 +91,12 @@ const Player: React.FC<PlayerProps> = ({
   };
 
   const handleSeekChange = (e: React.ChangeEvent<HTMLInputElement>) => onSeek(Number(e.target.value));
-  const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
+  const totalDuration = duration > 0 ? duration : currentSong.duration;
+  const durationLabel = totalDuration > 0 ? formatTime(totalDuration) : '—';
+  const remainingLabel = totalDuration > 0 ? `${formatTime(Math.max(0, totalDuration - currentTime))} left` : 'Duration unknown';
+  const queueLabel = playerState.queue.length > 1 && playerState.currentIndex >= 0
+    ? `Mix ${playerState.currentIndex + 1} of ${playerState.queue.length}` : '';
+  const progressPercent = totalDuration > 0 ? Math.min(100, (currentTime / totalDuration) * 100) : 0;
 
   return (
     <>
@@ -97,38 +104,38 @@ const Player: React.FC<PlayerProps> = ({
       <div
         className="mobile-mini-player lg:hidden fixed left-0 right-0 bg-black/95 backdrop-blur-xl border-t border-white/20 pt-3 pb-3 z-40"
       >
-        <div
-          className="flex items-center space-x-3 cursor-pointer"
-          role="button" tabIndex={0} aria-label="Open Now Playing"
-          onKeyDown={e => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); setShowMobilePlayer(true); } }}
-          onClick={() => setShowMobilePlayer(true)}
-        >
-          <img
-            src={safeArtworkUrl(currentSong.imageUrl)}
-            alt={currentSong.album}
-            className="w-10 h-10 rounded object-cover shadow-lg"
-            onError={(e) => {
-              const el = e.currentTarget as HTMLImageElement;
-              if (el.src !== DEFAULT_ARTWORK_URL) el.src = DEFAULT_ARTWORK_URL;
-            }}
-          />
-          <div className="flex-1 min-w-0">
-            <p className="text-white font-medium text-sm truncate">{currentSong.title}</p>
-            <p className="text-gray-400 text-xs truncate">{currentSong.artist}</p>
-          </div>
+        <div className="flex items-center gap-1">
+          <button
+            className="flex flex-1 min-w-0 items-center gap-3 text-left min-h-11"
+            aria-label="Open Now Playing"
+            onClick={() => setShowMobilePlayer(true)}
+          >
+            <img
+              src={safeArtworkUrl(currentSong.imageUrl)}
+              alt=""
+              className="w-10 h-10 rounded object-cover shadow-lg flex-shrink-0"
+              onError={(e) => {
+                const el = e.currentTarget as HTMLImageElement;
+                if (el.src !== DEFAULT_ARTWORK_URL) el.src = DEFAULT_ARTWORK_URL;
+              }}
+            />
+            <span className="min-w-0">
+              <span title={currentSong.title} className="block text-white font-medium text-sm truncate">{currentSong.title}</span>
+              <span title={currentSong.artist} className="block text-gray-400 text-xs truncate">{currentSong.artist}</span>
+            </span>
+          </button>
+          <button aria-label="Previous track" onClick={onPrevious} className="min-w-11 min-h-11 flex items-center justify-center text-white">
+            <SkipBack className="w-5 h-5" />
+          </button>
           <button
             aria-label={isPlaying ? 'Pause' : 'Play'}
-            onClick={(e) => {
-              e.stopPropagation();
-              onTogglePlay();
-            }}
-            className="w-8 h-8 bg-white hover:bg-gray-200 rounded-full flex items-center justify-center transition-colors duration-200"
+            onClick={onTogglePlay}
+            className="min-w-11 min-h-11 rounded-full bg-white hover:bg-gray-200 flex items-center justify-center"
           >
-            {isPlaying ? (
-              <Pause className="w-4 h-4 text-black" />
-            ) : (
-              <Play className="w-4 h-4 text-black ml-0.5" fill="currentColor" />
-            )}
+            {isPlaying ? <Pause className="w-5 h-5 text-black" /> : <Play className="w-5 h-5 text-black ml-0.5" fill="currentColor" />}
+          </button>
+          <button aria-label="Next track" onClick={onNext} className="min-w-11 min-h-11 flex items-center justify-center text-white">
+            <SkipForward className="w-5 h-5" />
           </button>
         </div>
 
@@ -138,7 +145,7 @@ const Player: React.FC<PlayerProps> = ({
             type="range"
             aria-label="Seek track"
             min="0"
-            max={duration || 100}
+            max={totalDuration || 100}
             value={currentTime}
             onChange={handleSeekChange}
 
@@ -150,6 +157,11 @@ const Player: React.FC<PlayerProps> = ({
               background: `linear-gradient(to right, #ffffff 0%, #ffffff ${progressPercent}%, #4a5568 ${progressPercent}%, #4a5568 100%)`
             }}
           />
+          <div className="mt-1 flex items-center justify-between gap-2 text-[11px] text-gray-400 tabular-nums whitespace-nowrap" aria-label="Playback time">
+            <span aria-label="Elapsed time">{formatTime(currentTime)}</span>
+            <span aria-label="Time remaining">{remainingLabel}</span>
+            <span aria-label="Total duration">{durationLabel}</span>
+          </div>
         </div>
       </div>
 
@@ -309,7 +321,7 @@ const Player: React.FC<PlayerProps> = ({
       )}
 
       {/* Desktop Player */}
-      <div className="hidden lg:block fixed bottom-0 left-0 right-0 bg-black/95 backdrop-blur-xl border-t border-white/20 p-4 z-50">
+      <div aria-label="Desktop player" className="hidden lg:block fixed bottom-0 left-0 right-0 bg-black/95 backdrop-blur-xl border-t border-white/20 p-4 z-50">
         <div className="max-w-screen-xl mx-auto">
           <div className="grid grid-cols-3 items-center gap-4">
             {/* Left: Current song info */}
@@ -324,8 +336,9 @@ const Player: React.FC<PlayerProps> = ({
                 }}
               />
               <div className="min-w-0">
-                <p className="text-white font-medium truncate">{currentSong.title}</p>
-                <p className="text-gray-400 text-sm truncate">{currentSong.artist}</p>
+                <p title={currentSong.title} className="text-white font-medium truncate">{currentSong.title}</p>
+                <p title={currentSong.artist} className="text-gray-400 text-sm truncate">{currentSong.artist}</p>
+                {currentSong.album && <p className="text-gray-500 text-xs truncate">{currentSong.album}</p>}
               </div>
               <div className="flex gap-3"><SongActions song={currentSong}/></div>
             </div>
@@ -388,7 +401,7 @@ const Player: React.FC<PlayerProps> = ({
 
               {/* Progress bar */}
               <div className="flex items-center space-x-2 w-full max-w-md">
-                <span className="text-xs text-gray-400 w-10 text-right">
+                <span aria-label="Elapsed time" className="text-xs text-gray-400 min-w-12 text-right tabular-nums whitespace-nowrap">
                   {formatTime(currentTime)}
                 </span>
                 <div className="flex-1 relative">
@@ -396,7 +409,7 @@ const Player: React.FC<PlayerProps> = ({
                     type="range"
                     aria-label="Seek track"
                     min="0"
-                    max={duration || 100}
+                    max={totalDuration || 100}
                     value={currentTime}
                     onChange={handleSeekChange}
 
@@ -407,9 +420,12 @@ const Player: React.FC<PlayerProps> = ({
                     }}
                   />
                 </div>
-                <span className="text-xs text-gray-400 w-10">
-                  {formatTime(duration)}
+                <span aria-label="Total duration" className="text-xs text-gray-400 min-w-12 tabular-nums whitespace-nowrap">
+                  {durationLabel}
                 </span>
+              </div>
+              <div className="flex justify-between gap-4 w-full max-w-md text-[11px] text-gray-400 tabular-nums">
+                <span>{queueLabel}</span><span aria-label="Time remaining">{remainingLabel}</span>
               </div>
             </div>
 

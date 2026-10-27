@@ -1,6 +1,6 @@
 import os
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import BackgroundTasks, APIRouter, Depends, Header, HTTPException, status
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -59,3 +59,27 @@ def get_analytics(
         "total_storage_mb": round(total_storage_mb, 2),
         "paperclip_summary": paperclip_summary,
     }
+
+
+@router.get('/tracklist-drafts/{mix_id}')
+def get_tracklist_draft(mix_id: int, _: None = Depends(require_admin_api_key)):
+    from ..services import tracklist_drafts as drafts
+    token, budget, download_budget = drafts.settings()
+    return {'enabled': bool(token and budget and download_budget), 'draft': drafts.load(mix_id)}
+
+
+@router.post('/tracklist-drafts/{mix_id}')
+def generate_tracklist_draft(mix_id: int, background_tasks: BackgroundTasks,
+                             db: Session = Depends(get_db),
+                             _: None = Depends(require_admin_api_key)):
+    from ..services import tracklist_drafts as drafts
+    mix = db.query(models.Mix).filter(models.Mix.id == mix_id).first()
+    if mix is None:
+        raise HTTPException(status_code=404, detail='Mix not found')
+    try:
+        draft, created = drafts.prepare(mix)
+    except drafts.DraftError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    if created:
+        background_tasks.add_task(drafts.run, mix.id, mix.file_path)
+    return {'draft': draft}

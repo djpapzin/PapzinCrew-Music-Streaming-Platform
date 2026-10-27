@@ -1,3 +1,4 @@
+import TracklistDraftPanel from './TracklistDraftPanel';
 import { useCallback, useState } from 'react';
 import { AlertCircle, BarChart3, Download, HardDrive, Loader2, PlayCircle } from 'lucide-react';
 import PaperclipInsightCard, { type PaperclipSummary } from './PaperclipInsightCard';
@@ -73,6 +74,7 @@ export default function ProtectedAdminAnalyticsPanel() {
         <input required type="password" autoComplete="off" aria-label="Owner analytics key" value={adminKey} onChange={e => setAdminKey(e.target.value)} placeholder="Private owner key" className="bg-white/10 rounded-lg p-3 flex-1 min-w-0"/>
         <button disabled={loading} className="bg-purple-600 rounded-lg px-4">Load owner analytics</button>
       </form>
+      <TracklistDraftPanel adminKey={adminKey} />
       {loading ? (
         <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300 flex items-center gap-2">
           <Loader2 className="h-4 w-4 animate-spin" />

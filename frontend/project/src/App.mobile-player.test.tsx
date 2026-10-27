@@ -102,3 +102,19 @@ it('ignores short, horizontal, upward, cancelled and control gestures', async ()
   swipe(screen.getByRole('heading', { name: 'Now Playing' }), 0, 130);
   expect(dialog()).toBeNull();
 });
+it('shows long mix timing in both compact players and keeps mini controls collapsed', async () => {
+  await setup();
+  fireEvent.click(screen.getByRole('button', { name: 'Select Mix 1' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Minimize player' }));
+  const audio = document.querySelector('audio')!;
+  Object.defineProperty(audio, 'duration', { configurable: true, value: 7200 });
+  audio.currentTime = 3661;
+  act(() => audio.dispatchEvent(new Event('timeupdate')));
+  expect(screen.getAllByLabelText('Elapsed time').map(e => e.textContent)).toEqual(['1:01:01', '1:01:01']);
+  expect(screen.getAllByLabelText('Total duration').map(e => e.textContent)).toEqual(['2:00:00', '2:00:00']);
+  expect(screen.getAllByLabelText('Time remaining').map(e => e.textContent)).toEqual(['58:59 left', '58:59 left']);
+  expect(screen.getByText('Mix 1 of 3')).toBeTruthy();
+  fireEvent.click(document.querySelector('.mobile-mini-player button[aria-label="Next track"]')!);
+  expect(audio.src).toContain('mix-2.mp3');
+  expect(dialog()).toBeNull(); expect(audio.muted).toBe(true);
+});
