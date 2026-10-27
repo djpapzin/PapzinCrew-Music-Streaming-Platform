@@ -1,0 +1,32 @@
+[Unit]
+Description=Papzin and Crew API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+DynamicUser=yes
+WorkingDirectory=/opt/papzincrew/backend
+EnvironmentFile=/etc/papzincrew/backend.env
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=PYTHONUNBUFFERED=1
+Environment=UPLOAD_DIR=/var/lib/papzincrew/uploads
+Environment=DB_AUTO_MIGRATE=false
+Environment=BACKFILL_TRACK_DURATIONS=false
+Environment=ENFORCE_B2_ONLY=1
+Environment=ENABLE_UPLOAD_PRINTS=0
+ExecStart=/opt/papzincrew/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 18882 --workers 1 --proxy-headers --forwarded-allow-ips 127.0.0.1
+Restart=on-failure
+RestartSec=10
+StateDirectory=papzincrew
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+NoNewPrivileges=yes
+MemoryMax=768M
+CPUQuota=50%
+TasksMax=64
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target
