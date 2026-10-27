@@ -206,6 +206,7 @@ def test_m4a_stores_only_verified_output_and_rejects_normalized_duplicates(test_
         assert put.call_args.args[1] == optimized
         assert finalize.call_args.kwargs['audio_bytes'] == source
         data, files = _form_data('legacy.m4a', source)
+        data['skip_duplicate_check'] = 'false'
         repeated = client.post('/upload', data=data, files=files)
         assert repeated.status_code == 409, repeated.text
         assert put.call_count == 1
