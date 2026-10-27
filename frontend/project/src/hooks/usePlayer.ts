@@ -143,6 +143,8 @@ export const usePlayer = () => {
     };
     const usageTimer=window.setInterval(()=>{if(!audio.paused&&!audio.seeking&&audio.readyState>=3)usage.current.flush();else usage.current.stop();},15000);
     const seeked=()=>{if(!audio.paused&&audio.readyState>=3)usage.current.started();};
+    const preference=()=>usage.current.cancel();
+    window.addEventListener('usage:preference',preference);
     audio.addEventListener('seeked',seeked);
     audio.addEventListener('timeupdate', sync);
     audio.addEventListener('loadedmetadata', sync);
@@ -155,7 +157,7 @@ export const usePlayer = () => {
     audio.addEventListener('ended', ended);
     audio.addEventListener('error', error);
     return () => {
-      window.clearInterval(usageTimer);usage.current.stop();audio.removeEventListener('seeked',seeked);
+      window.removeEventListener('usage:preference',preference);window.clearInterval(usageTimer);usage.current.stop();audio.removeEventListener('seeked',seeked);
       audio.removeEventListener('timeupdate', sync); audio.removeEventListener('loadedmetadata', sync);
       audio.removeEventListener('playing', started);
       audio.removeEventListener('waiting', waiting);

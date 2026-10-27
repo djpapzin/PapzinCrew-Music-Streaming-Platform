@@ -40,3 +40,5 @@ export function LibraryProvider({songs,children}:{songs:Song[];children:ReactNod
   }}>{children}</Context.Provider>;
 }
 export function useLibrary() { const value=useContext(Context); if(!value) throw new Error('LibraryProvider is required'); return value; }
+
+export function useOptionalLibrary() { return useContext(Context); }

@@ -1,15 +1,15 @@
-import { useLibrary } from '../state/LibraryContext';
+import { useOptionalLibrary } from '../state/LibraryContext';
 import { useEffect, useRef, useState } from 'react';
 import { API_BASE } from '../lib/api';
 import { USAGE_OPT_OUT, usageAllowed } from '../lib/anonymousUsage';
 export function AnalyticsPreference(){
   const [enabled,setEnabled]=useState(usageAllowed);
-  return <section className="rounded-xl border border-white/10 p-4 space-y-2"><h3 className="font-semibold">Anonymous usage stats</h3><p className="text-sm text-gray-400">Help improve the beta with visit counts, mix start speed, failed plays and listening time. No names, visitor IDs, locations or browsing history are saved in these stats. Only the owner can see totals, kept for 30 days. Do Not Track and Global Privacy Control are respected.</p><button className="rounded bg-white/10 px-4 py-3" onClick={()=>{try{localStorage.setItem(USAGE_OPT_OUT,enabled?'1':'0');setEnabled(usageAllowed());}catch{}}}>{enabled?'Turn anonymous stats off':'Enable anonymous stats'}</button></section>;
+  return <section className="rounded-xl border border-white/10 p-4 space-y-2"><h3 className="font-semibold">Anonymous usage stats</h3><p className="text-sm text-gray-400">Help improve the beta with visit counts, mix start speed, failed plays and listening time. No names, visitor IDs, locations or browsing history are saved in these stats. Only the owner can see totals, kept for 30 days. Do Not Track and Global Privacy Control are respected.</p><button className="rounded bg-white/10 px-4 py-3" onClick={()=>{try{localStorage.setItem(USAGE_OPT_OUT,enabled?'1':'0');setEnabled(usageAllowed());window.dispatchEvent(new Event('usage:preference'));}catch{}}}>{enabled?'Turn anonymous stats off':'Enable anonymous stats'}</button></section>;
 }
 interface MixStats{attempts:number;starts:number;failures:number;startup_ms:number;startup_samples:number;listen_ms:number;resumes:number}
 interface Day{day:string;visits:number;devices:Record<string,number>;mixes:Record<string,MixStats>}
 export default function AnonymousStats({adminKey}:{adminKey:string}){
-  const {songs}=useLibrary();
+  const songs=useOptionalLibrary()?.songs||[];
   const generation=useRef(0);
   const [days,setDays]=useState<Day[]|null>(null);const [error,setError]=useState('');const [busy,setBusy]=useState(false);
   useEffect(()=>{generation.current++;setDays(null);setError('');setBusy(false);},[adminKey]);
