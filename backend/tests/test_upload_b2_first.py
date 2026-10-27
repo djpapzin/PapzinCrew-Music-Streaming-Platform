@@ -181,3 +181,46 @@ def test_upload_b2_generates_distinct_keys_for_same_metadata(test_app, tmp_path)
     assert first_key != second_key
     assert first_key.startswith("audio/unittest-artist-unittest-title-")
     assert second_key.startswith("audio/unittest-artist-unittest-title-")
+
+
+def test_m4a_stores_only_verified_output_and_rejects_normalized_duplicates(test_app):
+    from unittest.mock import AsyncMock
+    import hashlib
+    client = TestClient(test_app)
+    source, optimized = b'original-m4a-with-chapter', b'optimized-audio'
+    data, files = _form_data('legacy.m4a', source)
+    data['availability'] = 'public'
+    validation = {'valid': True, 'mime_type': 'audio/mp4', 'file_extension': '.m4a', 'file_size_bytes': len(source)}
+    with patch('app.routers.uploads.validate_audio_file', return_value=(True, validation)), \
+         patch('app.routers.uploads.optimize_m4a', return_value=(optimized, {'verified_audio_packets': True})) as normalize, \
+         patch('app.routers.uploads._finalize_mix_processing', new_callable=AsyncMock) as finalize, \
+         patch('app.routers.uploads.B2Storage.is_configured', return_value=True), \
+         patch('app.routers.uploads.B2Storage.put_bytes_safe', return_value={'ok': True, 'key': 'audio/normalized.m4a', 'url': 'https://b2.example/audio/normalized.m4a'}) as put:
+        response = client.post('/upload', data=data, files=files)
+        assert response.status_code == 201, response.text
+        body = response.json()
+        assert body['availability'] == 'unlisted'
+        assert body['file_hash'] == hashlib.sha256(optimized).hexdigest()
+        assert body['audio_optimization']['verified_audio_packets'] is True
+        assert put.call_count == 1
+        assert put.call_args.args[1] == optimized
+        assert finalize.call_args.kwargs['audio_bytes'] == source
+        data, files = _form_data('legacy.m4a', source)
+        repeated = client.post('/upload', data=data, files=files)
+        assert repeated.status_code == 409, repeated.text
+        assert put.call_count == 1
+
+
+def test_m4a_optimization_failure_never_writes_to_b2(test_app):
+    from app.services.m4a_optimizer import M4AOptimizationError
+    client = TestClient(test_app)
+    data, files = _form_data('legacy.m4a')
+    validation = {'valid': True, 'mime_type': 'audio/mp4', 'file_extension': '.m4a', 'file_size_bytes': 11}
+    with patch('app.routers.uploads.validate_audio_file', return_value=(True, validation)), \
+         patch('app.routers.uploads.optimize_m4a', side_effect=M4AOptimizationError('verification failed')), \
+         patch('app.routers.uploads.B2Storage.is_configured', return_value=True), \
+         patch('app.routers.uploads.B2Storage.put_bytes_safe') as put:
+        response = client.post('/upload', data=data, files=files)
+        assert response.status_code == 422, response.text
+        assert response.json()['detail']['error_code'] == 'm4a_optimization_failed'
+        put.assert_not_called()
