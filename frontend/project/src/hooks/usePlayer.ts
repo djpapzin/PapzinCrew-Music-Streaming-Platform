@@ -1,3 +1,4 @@
+import { createPlaybackUsage } from '../lib/anonymousUsage';
 import { useState, useRef, useEffect } from 'react';
 import { Song, PlayerState } from '../types/music';
 import { usePlaybackTiming } from './usePlaybackTiming';
@@ -10,6 +11,7 @@ const available = (song: Song) => !!song.audioUrl && song.playable !== false;
 
 export const usePlayer = () => {
   const timing = usePlaybackTiming();
+  const usage = useRef(createPlaybackUsage());
   const audioRef = useRef<HTMLAudioElement>(null);
   const [playerState, setPlayerState] = useState<PlayerState>({ currentSong: null, isPlaying: false, volume: initialVolume(), currentTime: 0, duration: 0, queue: [], currentIndex: -1, shuffle: false, repeat: 'none' });
   const stateRef = useRef(playerState);
@@ -23,13 +25,15 @@ export const usePlayer = () => {
   const requestPlay = (attemptId?: number) => {
     const audio = audioRef.current;
     if (!audio) return;
+    if(attemptId===undefined)usage.current.begin(stateRef.current.currentSong?.id||'0',true);
     const id = attemptId ?? timing.begin(stateRef.current.currentSong?.title || 'Mix', 'Resume');
     audio.volume = stateRef.current.volume;
     audio.muted = stateRef.current.volume === 0;
     void audio.play().catch((err: Error) => {
       if (timing.pending.current?.id !== id) return;
       timing.finish(err.name === 'AbortError' ? 'cancelled' : 'failed', id);
-      if (err.name === 'AbortError') return;
+      if (err.name === 'AbortError') {usage.current.cancel();return;}
+      usage.current.failed();
       update({ isPlaying: false });
       if (err.name === 'NotAllowedError') notify('Tap Play to start listening.');
     });
@@ -42,6 +46,7 @@ export const usePlayer = () => {
     if (!playableQueue.some(item => item.id === song.id)) playableQueue.unshift(song);
     const kind = stateRef.current.currentSong ? 'Track start' : 'First play';
     audio.pause();
+    usage.current.begin(song.id,false);
     const attemptId = timing.begin(song.title, kind);
     update({ currentSong: song, currentIndex: playableQueue.findIndex(item => item.id === song.id), queue: playableQueue, currentTime: 0, duration: song.duration || 0, isPlaying: false });
     audio.src = song.audioUrl;
@@ -122,12 +127,13 @@ export const usePlayer = () => {
       } catch { /* MediaSession is optional. */ }
     };
     const playing = () => update({isPlaying:true});
-    const started = () => { if (!audio.paused && audio.readyState >= 2) { timing.endBuffer(); timing.finish('started'); } };
-    const waiting = () => { if (!audio.paused && !audio.seeking) timing.startBuffer(); };
-    const stopBuffer = () => timing.endBuffer();
-    const paused = () => { if (audio.paused) { timing.endBuffer(); timing.finish('cancelled'); update({isPlaying:false}); } };
-    const ended = () => { timing.endBuffer(); actions.current.next(true); };
+    const started = () => { if (!audio.paused && audio.readyState >= 2) { timing.endBuffer(); timing.finish('started'); usage.current.started(); } };
+    const waiting = () => { usage.current.stop(); if (!audio.paused && !audio.seeking) timing.startBuffer(); };
+    const stopBuffer = () => {timing.endBuffer();usage.current.stop();};
+    const paused = () => { if (audio.paused) { usage.current.cancel(); timing.endBuffer(); timing.finish('cancelled'); update({isPlaying:false}); } };
+    const ended = () => { usage.current.stop(); timing.endBuffer(); actions.current.next(true); };
     const error = () => {
+      usage.current.failed();
       timing.endBuffer();
       timing.finish('failed');
       const song = stateRef.current.currentSong;
@@ -135,6 +141,11 @@ export const usePlayer = () => {
       notify('This track could not be played. Trying the next track.');
       actions.current.next();
     };
+    const usageTimer=window.setInterval(()=>{if(!audio.paused&&!audio.seeking&&audio.readyState>=3)usage.current.flush();else usage.current.stop();},15000);
+    const seeked=()=>{if(!audio.paused&&audio.readyState>=3)usage.current.started();};
+    const preference=()=>usage.current.cancel();
+    window.addEventListener('usage:preference',preference);
+    audio.addEventListener('seeked',seeked);
     audio.addEventListener('timeupdate', sync);
     audio.addEventListener('loadedmetadata', sync);
     audio.addEventListener('play', playing);
@@ -146,6 +157,7 @@ export const usePlayer = () => {
     audio.addEventListener('ended', ended);
     audio.addEventListener('error', error);
     return () => {
+      window.removeEventListener('usage:preference',preference);window.clearInterval(usageTimer);usage.current.stop();audio.removeEventListener('seeked',seeked);
       audio.removeEventListener('timeupdate', sync); audio.removeEventListener('loadedmetadata', sync);
       audio.removeEventListener('playing', started);
       audio.removeEventListener('waiting', waiting);
