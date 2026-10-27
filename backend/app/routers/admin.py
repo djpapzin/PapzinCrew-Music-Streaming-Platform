@@ -1,6 +1,7 @@
 import os
+import hmac
 
-from fastapi import BackgroundTasks, APIRouter, Depends, Header, HTTPException, status, Query
+from fastapi import BackgroundTasks, APIRouter, Depends, Header, HTTPException, status, Query, Request, Response
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -15,26 +16,56 @@ router = APIRouter(
 )
 
 
-def require_admin_api_key(x_admin_api_key: str | None = Header(default=None)) -> None:
-    admin_api_key = os.getenv("ADMIN_API_KEY")
-
+def require_admin_api_key(request: Request, response: Response, x_admin_api_key: str | None = Header(default=None)) -> None:
+    from ..services import owner_sessions as sessions
+    response.headers['Cache-Control'] = 'private, no-store'
+    response.headers['Vary'] = 'Cookie, X-Admin-Api-Key'
+    admin_api_key = os.getenv('ADMIN_API_KEY')
     if not admin_api_key:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Admin API key is not configured",
-        )
+        raise HTTPException(503, 'Admin API key is not configured')
+    if x_admin_api_key:
+        if hmac.compare_digest(x_admin_api_key, admin_api_key):
+            return
+        raise HTTPException(403, 'Invalid Admin API Key')
+    if sessions.valid(request):
+        if request.method not in ('GET', 'HEAD', 'OPTIONS'):
+            sessions.require_origin(request)
+        return
+    raise HTTPException(403, 'Admin API Key is required, or unlock an owner session')
 
-    if not x_admin_api_key:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin API Key is required",
-        )
 
-    if x_admin_api_key != admin_api_key:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Invalid Admin API Key",
-        )
+@router.get('/session')
+def owner_session(request: Request, response: Response):
+    from ..services import owner_sessions as sessions
+    response.headers['Cache-Control'] = 'no-store'
+    return {'authenticated': bool(os.getenv('ADMIN_API_KEY')) and sessions.valid(request)}
+
+
+@router.post('/session')
+def unlock_owner(request: Request, response: Response, remember: bool = Query(default=False),
+                 x_admin_api_key: str | None = Header(default=None)):
+    from ..services import owner_sessions as sessions
+    sessions.require_origin(request)
+    key = os.getenv('ADMIN_API_KEY')
+    if not key:
+        raise HTTPException(503, 'Owner access is not configured')
+    if not x_admin_api_key or not hmac.compare_digest(x_admin_api_key, key):
+        raise HTTPException(403, 'The owner key is missing or invalid')
+    token, seconds = sessions.create(remember)
+    response.set_cookie(sessions.COOKIE, token, max_age=seconds if remember else None,
+                        httponly=True, secure=True, samesite='strict', path='/')
+    response.headers['Cache-Control'] = 'no-store'
+    return {'authenticated': True, 'remembered': remember, 'expires_in': seconds}
+
+
+@router.delete('/session')
+def lock_owner(request: Request, response: Response):
+    from ..services import owner_sessions as sessions
+    sessions.require_origin(request)
+    sessions.revoke(request)
+    response.delete_cookie(sessions.COOKIE, httponly=True, secure=True, samesite='strict', path='/')
+    response.headers['Cache-Control'] = 'no-store'
+    return {'authenticated': False}
 
 
 @router.get("/analytics")

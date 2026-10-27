@@ -1,7 +1,7 @@
 import AnonymousStats from './AnonymousStats';
 import FeedbackInbox from './FeedbackInbox';
 import TracklistDraftPanel from './TracklistDraftPanel';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { AlertCircle, BarChart3, Download, HardDrive, Loader2, PlayCircle } from 'lucide-react';
 import PaperclipInsightCard, { type PaperclipSummary } from './PaperclipInsightCard';
 import { API_BASE } from '../lib/api';
@@ -25,6 +25,14 @@ export default function ProtectedAdminAnalyticsPanel() {
   const [error, setError] = useState<string | null>(null);
 
   const [adminKey, setAdminKey] = useState('');
+  const authGeneration=useRef(0);
+  const [ownerSession,setOwnerSession]=useState(false);
+  const [remember,setRemember]=useState(false);
+  const [unlocking,setUnlocking]=useState(false);
+  useEffect(()=>{let active=true;const generation=authGeneration.current;void fetch(`${API_BASE}/admin/session`,{cache:'no-store'}).then(r=>r.ok?r.json():null).then(data=>{if(active&&generation===authGeneration.current)setOwnerSession(data?.authenticated===true);}).catch(()=>{});return()=>{active=false;};},[]);
+  async function unlock(){authGeneration.current++;setUnlocking(true);setError(null);try{const response=await fetch(`${API_BASE}/admin/session?remember=${remember}`,{method:'POST',headers:{'X-Admin-Api-Key':adminKey}});if(!response.ok)throw new Error('Could not unlock admin. Check your owner key and try again.');setOwnerSession(true);setAdminKey('');}catch(e){setError(e instanceof Error?e.message:'Could not unlock admin.');}finally{setUnlocking(false);}}
+  async function signOut(){authGeneration.current++;setUnlocking(true);setError(null);try{const response=await fetch(`${API_BASE}/admin/session`,{method:'DELETE'});if(!response.ok)throw new Error('Could not sign out. Please try again.');setOwnerSession(false);setAdminKey('');setData(null);}catch(e){setError(e instanceof Error?e.message:'Could not sign out.');}finally{setUnlocking(false);}}
+
 
   const loadAnalytics = useCallback(async () => {
     setLoading(true);
@@ -61,7 +69,7 @@ export default function ProtectedAdminAnalyticsPanel() {
             Admin analytics
           </div>
           <h2 className="text-lg font-semibold text-white">Publish + ops snapshot</h2>
-          <p className="mt-1 text-sm text-slate-300">Protected play counts, downloads, and owner operations. Your key is kept in memory for this visit.</p>
+          <p className="mt-1 text-sm text-slate-300">Protected play counts, downloads, and owner operations. Unlock once; optionally remember this private device for 30 days.</p>
         </div>
         <button
           type="button"
@@ -72,13 +80,17 @@ export default function ProtectedAdminAnalyticsPanel() {
         </button>
       </div>
 
-      <form onSubmit={e => { e.preventDefault(); void loadAnalytics(); }} className="flex gap-3">
-        <input required type="password" autoComplete="off" aria-label="Owner analytics key" value={adminKey} onChange={e => setAdminKey(e.target.value)} placeholder="Private owner key" className="bg-white/10 rounded-lg p-3 flex-1 min-w-0"/>
-        <button disabled={loading} className="bg-purple-600 rounded-lg px-4">Load owner analytics</button>
-      </form>
-      <AnonymousStats adminKey={adminKey} />
-      <FeedbackInbox adminKey={adminKey} />
-      <TracklistDraftPanel adminKey={adminKey} />
+      {ownerSession?<div className="rounded-xl border border-green-400/20 p-4 flex flex-wrap items-center justify-between gap-3"><p>Owner access is unlocked on this device.</p><button disabled={unlocking} onClick={()=>void signOut()} className="min-h-11 rounded bg-white/10 px-4">Sign out of admin</button></div>:<form onSubmit={e=>{e.preventDefault();void unlock();}} className="space-y-3">
+        <input required type="password" autoComplete="off" aria-label="Owner analytics key" value={adminKey} onChange={e=>setAdminKey(e.target.value)} placeholder="Private owner key" className="bg-white/10 rounded-lg p-3 w-full"/>
+        <label className="flex items-center gap-3 text-sm"><input type="checkbox" checked={remember} onChange={e=>setRemember(e.target.checked)}/>Remember this private device for 30 days</label>
+        <p className="text-xs text-gray-400">Use this only on your own phone or computer. Your owner key is never saved in browser storage.</p>
+        <button disabled={unlocking||!adminKey} className="bg-purple-600 rounded-lg px-4 min-h-11 disabled:opacity-50">{unlocking?'Unlocking…':'Unlock admin'}</button>
+      </form>}
+      {ownerSession&&<>
+        <AnonymousStats adminKey="" ownerSession />
+        <FeedbackInbox adminKey="" ownerSession />
+        <TracklistDraftPanel adminKey="" ownerSession />
+      </>}
       {loading ? (
         <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300 flex items-center gap-2">
           <Loader2 className="h-4 w-4 animate-spin" />
