@@ -44,7 +44,7 @@ export const usePlayer = () => {
     audio.pause();
     const attemptId = timing.begin(song.title, kind);
     update({ currentSong: song, currentIndex: playableQueue.findIndex(item => item.id === song.id), queue: playableQueue, currentTime: 0, duration: song.duration || 0, isPlaying: false });
-    audio.src = song.audioUrl.includes('/stream') && !song.audioUrl.includes('/stream/proxy') ? song.audioUrl.replace('/stream', '/stream/proxy') : song.audioUrl;
+    audio.src = song.audioUrl;
     audio.load();
     requestPlay(attemptId);
     window.dispatchEvent(new CustomEvent('library:played', { detail: song.id }));
