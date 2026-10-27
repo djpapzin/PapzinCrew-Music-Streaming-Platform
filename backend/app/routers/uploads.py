@@ -41,6 +41,7 @@ except Exception:  # pragma: no cover - environment dependent
     magic = None  # type: ignore
     HAS_MAGIC = False
 
+from ..services.m4a_optimizer import optimize_m4a, M4AOptimizationError
 from .. import schemas, crud
 from ..db.database import SessionLocal, get_db
 from ..models import models
@@ -1036,6 +1037,26 @@ async def upload_mix(
             }
         )
 
+    # Preserve original embedded artwork for the existing background cover extractor.
+    source_audio_bytes = audio_bytes
+    audio_optimization = None
+    if file_extension.lower() == '.m4a':
+        try:
+            audio_bytes, audio_optimization = await asyncio.to_thread(optimize_m4a, source_audio_bytes)
+        except M4AOptimizationError as exc:
+            raise HTTPException(status_code=422, detail={
+                'error': str(exc), 'error_code': 'm4a_optimization_failed',
+            }) from exc
+        file_hash = calculate_file_hash(audio_bytes)
+        file_size_mb = len(audio_bytes) / (1024 * 1024)
+        # Original bytes and normalized bytes both participate in duplicate checks.
+        duplicate_info = _get_exact_hash_duplicate(db=db, file_hash=file_hash)
+        if duplicate_info and not skip_duplicate_check:
+            raise HTTPException(status_code=409, detail={
+                'error': 'Duplicate detected after M4A optimization',
+                'error_code': 'duplicate_track', 'duplicate_info': duplicate_info,
+            })
+
     # --- Deferred cover processing payload capture ---
     public_cover_url = None
     try:
@@ -1248,6 +1269,8 @@ async def upload_mix(
         
         # Add frontend-expected properties
         response_content['success'] = True
+        if audio_optimization is not None:
+            response_content['audio_optimization'] = audio_optimization
         response_content['generating_art'] = True
         response_content['processing_status'] = 'pending'
         response_content['metadata'] = {
@@ -1278,7 +1301,7 @@ async def upload_mix(
             background_tasks.add_task(
                 _finalize_mix_processing,
                 mix_id=db_mix.id,
-                audio_bytes=audio_bytes,
+                audio_bytes=source_audio_bytes,
                 upload_dir=UPLOAD_DIR,
                 base_name=base_name,
                 title=title,
