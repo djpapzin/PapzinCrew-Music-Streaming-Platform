@@ -1,5 +1,5 @@
 import DeviceVolumeControl from './DeviceVolumeControl';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Play,
   Pause,
@@ -49,6 +49,7 @@ const Player: React.FC<PlayerProps> = ({
   onToggleRepeat
 }) => {
   const { library, toggleLike } = useLibrary();
+  const swipeStart = useRef<{ id: number; x: number; y: number } | null>(null);
   const [showMobilePlayer, setShowMobilePlayer] = useState(false);
   const [showNowPlayingPopup, setShowNowPlayingPopup] = useState(false);
 
@@ -68,6 +69,24 @@ const Player: React.FC<PlayerProps> = ({
   if (!currentSong) {
     return null;
   }
+
+  const beginSwipe = (event: React.PointerEvent<HTMLDivElement>) => {
+    swipeStart.current = null;
+    const target = event.target as Element;
+    if (!event.isPrimary || event.button !== 0 ||
+        !target.closest('[data-player-swipe-surface]') ||
+        target.closest('button, input, a, [role="button"], [role="slider"]')) return;
+    swipeStart.current = { id: event.pointerId, x: event.clientX, y: event.clientY };
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  };
+  const endSwipe = (event: React.PointerEvent<HTMLDivElement>) => {
+    const start = swipeStart.current;
+    swipeStart.current = null;
+    if (!start || event.pointerId !== start.id) return;
+    const down = event.clientY - start.y;
+    const across = Math.abs(event.clientX - start.x);
+    if (down >= 72 && down > across * 1.5) setShowMobilePlayer(false);
+  };
 
   const handleSeekChange = (e: React.ChangeEvent<HTMLInputElement>) => onSeek(Number(e.target.value));
   const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
@@ -138,13 +157,18 @@ const Player: React.FC<PlayerProps> = ({
       {showMobilePlayer && (
         <div
           role="dialog" aria-modal="true" aria-label="Now Playing"
+          onPointerDown={beginSwipe}
+          onPointerUp={endSwipe}
+          onPointerCancel={() => { swipeStart.current = null; }}
+          onLostPointerCapture={() => { swipeStart.current = null; }}
           className="lg:hidden fixed inset-0 bg-black z-50 flex flex-col overflow-hidden"
           style={{ height: '100dvh', minHeight: '100dvh' }}
         >
           {/* Header */}
           <div
             className="flex items-center justify-between px-4 pb-4 border-b border-white/20"
-            style={{ paddingTop: 'calc(1rem + env(safe-area-inset-top, 0px))' }}
+            data-player-swipe-surface
+            style={{ touchAction: 'pan-x', userSelect: 'none', paddingTop: 'calc(1rem + env(safe-area-inset-top, 0px))' }}
           >
             <button
               aria-label="Minimize player"
@@ -154,15 +178,16 @@ const Player: React.FC<PlayerProps> = ({
               {/* Minimize to mini-player */}
               <Minimize2 className="w-6 h-6" />
             </button>
-            <h2 className="text-white font-medium">Now Playing</h2>
+            <div className="text-center"><h2 className="text-white font-medium">Now Playing</h2><p className="text-xs text-gray-400">Swipe down to browse</p></div>
             <div className="flex gap-3"><SongActions song={currentSong} /></div>
           </div>
 
           {/* Album Art */}
-          <div className="flex-1 min-h-0 flex items-center justify-center px-5 py-4 sm:px-8 sm:py-6">
+          <div data-player-swipe-surface style={{ touchAction: 'pan-x', userSelect: 'none' }} className="flex-1 min-h-0 flex items-center justify-center px-5 py-4 sm:px-8 sm:py-6">
             <img
               src={safeArtworkUrl(currentSong.imageUrl)}
               alt={currentSong.album}
+              draggable={false}
               className="w-full max-w-[min(74vw,18rem)] aspect-square max-h-[30vh] sm:max-h-[36vh] rounded-lg object-cover shadow-2xl"
               onError={(e) => {
                 const el = e.currentTarget as HTMLImageElement;
