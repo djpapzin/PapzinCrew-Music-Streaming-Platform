@@ -19,6 +19,7 @@ import { useLibrary } from '../state/LibraryContext';
 import SongActions from './SongActions';
 
 interface PlayerProps {
+  openRequest?: number;
   playerState: PlayerState;
   onTogglePlay: () => void;
   onNext: () => void;
@@ -38,6 +39,7 @@ const formatTime = (seconds: number): string => {
 
 const Player: React.FC<PlayerProps> = ({
   playerState,
+  openRequest = 0,
   onTogglePlay,
   onNext,
   onPrevious,
@@ -51,6 +53,12 @@ const Player: React.FC<PlayerProps> = ({
   const [showNowPlayingPopup, setShowNowPlayingPopup] = useState(false);
 
   const { currentSong, isPlaying, volume, currentTime, duration, shuffle, repeat } = playerState;
+
+  useEffect(() => {
+    if (openRequest > 0 && window.matchMedia('(max-width: 1023px)').matches) {
+      setShowMobilePlayer(true);
+    }
+  }, [openRequest]);
 
   useEffect(() => {
     const escape = (e: KeyboardEvent) => { if (e.key === 'Escape') { setShowMobilePlayer(false); setShowNowPlayingPopup(false); } };
