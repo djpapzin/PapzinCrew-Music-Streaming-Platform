@@ -128,6 +128,7 @@ default_dev_origins = [
     "http://localhost:8000",
     # Production URLs
     "https://papzincrew.netlify.app",
+    "https://crew.djpapzin.com",
     "https://papzincrew-netlify.app",
     "https://papzincrew-backend.onrender.com",
 ]
