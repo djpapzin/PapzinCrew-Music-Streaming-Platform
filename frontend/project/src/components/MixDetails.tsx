@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Play, Pause, Headphones, ListMusic } from 'lucide-react';
 import { Song } from '../types/music';
@@ -6,6 +7,7 @@ import { relatedMixes, durationLabel } from '../lib/discovery';
 import { safeArtworkUrl, DEFAULT_ARTWORK_URL } from '../lib/artwork';
 import { TrackList } from './LibraryPages';
 import SongActions from './SongActions';
+import { API_BASE, toAbsoluteApiUrl } from '../lib/api';
 
 interface Props {
   songs: Song[]; loading: boolean; error: string | null; currentSong: Song | null; isPlaying: boolean;
@@ -13,11 +15,44 @@ interface Props {
 }
 export default function MixDetails({ songs, loading, error, currentSong, isPlaying, onPlaySong, onTogglePlay }: Props) {
   const { id } = useParams();
-  const song = songs.find(item => item.id === id);
-  if (!song) return loading || error ? null : <p>Mix not found. <Link to="/search" className="text-purple-300">Browse music</Link></p>;
+  const catalogSong = songs.find(item => item.id === id);
+  const [directSong, setDirectSong] = useState<Song | null>(null);
+  const [directStatus, setDirectStatus] = useState<{ id?: string; message: string }>({ message: '' });
+  useEffect(() => {
+    if (!id || catalogSong) return;
+    const controller = new AbortController();
+    setDirectSong(null);
+    setDirectStatus({ id, message: 'Loading mix…' });
+    // Resolve shared/upload links directly without adding unlisted tracks to discovery.
+    fetch(`${API_BASE}/tracks/${encodeURIComponent(id)}`, { signal: controller.signal })
+      .then(async response => {
+        if (!response.ok) throw new Error(response.status === 401 || response.status === 403
+          ? 'This mix requires authorized access.' : response.status === 404
+            ? 'Mix not found.' : 'Unable to load this mix. Please try again.');
+        return response.json();
+      })
+      .then(mix => {
+        if (controller.signal.aborted) return;
+        setDirectSong({
+          id: String(mix.id), title: mix.title || 'Untitled',
+          artist: mix.artist?.name || 'Unknown Artist', album: mix.album || '',
+          duration: mix.duration_seconds || 0, imageUrl: safeArtworkUrl(toAbsoluteApiUrl(mix.cover_art_url)),
+          audioUrl: mix.file_path ? `${API_BASE}/tracks/${mix.id}/stream` : '',
+          genre: mix.genre || '', year: mix.year || 0, playable: Boolean(mix.file_path),
+          description: mix.description || '', tracklist: mix.tracklist || '',
+        });
+        setDirectStatus({ id, message: '' });
+      })
+      .catch(reason => {
+        if (!controller.signal.aborted) setDirectStatus({ id, message: reason.message });
+      });
+    return () => controller.abort();
+  }, [id, catalogSong]);
+  const song = catalogSong || (directSong?.id === id ? directSong : null);
+  if (!song) return <p role="status">{directStatus.id === id ? directStatus.message : 'Loading mix…'} <Link to="/search" className="text-purple-300">Browse music</Link></p>;
   const series = getMixSeries(song);
   const related = relatedMixes(song, songs);
-  const queue = sortCollectionTracks(songs.filter(item => getMixSeries(item) === series));
+  const queue = catalogSong ? sortCollectionTracks(songs.filter(item => getMixSeries(item) === series)) : [song];
   const active = currentSong?.id === song.id;
   const playing = active && isPlaying;
   const unavailable = song.playable === false || !song.audioUrl;
