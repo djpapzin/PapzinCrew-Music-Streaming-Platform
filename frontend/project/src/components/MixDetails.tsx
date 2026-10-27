@@ -1,3 +1,4 @@
+import { playbackUrl } from '../lib/playbackUrl';
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Play, Pause, Headphones, ListMusic } from 'lucide-react';
@@ -37,7 +38,7 @@ export default function MixDetails({ songs, loading, error, currentSong, isPlayi
           id: String(mix.id), title: mix.title || 'Untitled',
           artist: mix.artist?.name || 'Unknown Artist', album: mix.album || '',
           duration: mix.duration_seconds || 0, imageUrl: safeArtworkUrl(toAbsoluteApiUrl(mix.cover_art_url)),
-          audioUrl: mix.file_path ? `${API_BASE}/tracks/${mix.id}/stream` : '',
+          audioUrl: playbackUrl(mix),
           genre: mix.genre || '', year: mix.year || 0, playable: Boolean(mix.file_path),
           description: mix.description || '', tracklist: mix.tracklist || '',
         });
