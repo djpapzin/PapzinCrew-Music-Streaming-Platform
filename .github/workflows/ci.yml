@@ -36,7 +36,13 @@ jobs:
           cache-dependency-path: backend/requirements.txt
 
       - name: Install lossless audio tools
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+        run: |
+          if ! command -v ffmpeg || ! command -v ffprobe; then
+            sudo apt-get update
+            sudo apt-get install -y ffmpeg
+          fi
+          ffmpeg -version
+          ffprobe -version
 
       - name: Install dependencies
         run: |
