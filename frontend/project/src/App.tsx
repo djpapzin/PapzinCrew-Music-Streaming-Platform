@@ -1,3 +1,4 @@
+import { playbackUrl } from './lib/playbackUrl';
 import { useState, useEffect, useCallback } from 'react';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
@@ -96,7 +97,7 @@ function App() {
         album: mix.album || '',
         duration: mix.duration_seconds || 0,
         imageUrl: safeArtworkUrl(originalArtworkForTrack(mix.id, mix.title) ?? (mix.cover_art_url?.trim() ? toAbsoluteApiUrl(mix.cover_art_url) : generatedArtworkForTrack(mix.id, mix.title))),
-        audioUrl: mix.file_path ? `${API_BASE}/tracks/${mix.id}/stream` : '',
+        audioUrl: playbackUrl(mix),
         genre: mix.genre || '',
         year: mix.year || 0,
         playable: Boolean(mix.file_path),
@@ -139,7 +140,7 @@ function App() {
       {/* Global toast notifications */}
       <Toast />
       {/* Hidden audio element */}
-      <audio ref={audioRef} preload="auto" playsInline crossOrigin="anonymous" />
+      <audio ref={audioRef} preload="auto" playsInline />
       
       <div className="flex flex-1 overflow-hidden">
         {/* Desktop Sidebar */}
