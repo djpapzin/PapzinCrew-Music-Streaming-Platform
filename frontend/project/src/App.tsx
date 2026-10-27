@@ -28,6 +28,7 @@ const isPublicTrack = (mix: any): boolean => {
 };
 
 function App() {
+  const [playerOpenRequest, setPlayerOpenRequest] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [songs, setSongs] = useState<Song[]>([]);
@@ -128,10 +129,22 @@ function App() {
     return () => window.removeEventListener('library:refresh', handler as any);
   }, [fetchTracks]);
 
+  // Only an explicit selection opens the mobile player. Resume and queue
+  // advancement use the player's existing actions without changing this token.
+  const handlePlaySong = (song: Song, queue?: Song[]) => {
+    if (playerState.currentSong?.id === song.id) {
+      if (!playerState.isPlaying) togglePlay();
+      return;
+    }
+    if (!song.audioUrl || song.playable === false) return;
+    setPlayerOpenRequest(request => request + 1);
+    playSong(song, queue);
+  };
+
   const handlePlayPlaylist = (playlist: Playlist | Album) => {
     const list = 'songs' in playlist ? playlist.songs : [];
     if (list.length > 0) {
-      playSong(list[0], list);
+      handlePlaySong(list[0], list);
     }
   };
 
@@ -184,7 +197,7 @@ function App() {
             volume={playerState.volume}
             setVolume={setVolume}
             onRetry={fetchTracks}
-            onPlaySong={playSong}
+            onPlaySong={handlePlaySong}
             onTogglePlay={togglePlay}
             onPlayPlaylist={handlePlayPlaylist}
           />
@@ -198,6 +211,7 @@ function App() {
 
       {playerState.currentSong && (
         <Player
+          openRequest={playerOpenRequest}
           playerState={playerState}
           onTogglePlay={togglePlay}
           onNext={handleNext}
