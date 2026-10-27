@@ -62,3 +62,43 @@ it('does not open the mobile dialog on desktop', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Select Mix 1' }));
   expect(dialog()).toBeNull();
 });
+
+function swipe(target: Element, dx: number, dy: number, cancel = false) {
+  const pointer = (type: string, x: number, y: number) => {
+    const event = new Event(type, { bubbles: true });
+    Object.assign(event, { pointerId: 1, isPrimary: true, button: 0, clientX: x, clientY: y });
+    fireEvent(target, event);
+  };
+  pointer('pointerdown', 100, 100);
+  if (cancel) pointer('pointercancel', 100 + dx, 100 + dy);
+  pointer('pointerup', 100 + dx, 100 + dy);
+}
+it('swipes down from artwork to collapse without interrupting muted playback', async () => {
+  await setup();
+  fireEvent.click(screen.getByRole('button', { name: 'Select Mix 1' }));
+  const audio = document.querySelector('audio')!;
+  const art = dialog()!.querySelector('[data-player-swipe-surface] img')!;
+  const plays = vi.mocked(HTMLMediaElement.prototype.play).mock.calls.length;
+  swipe(art, 10, 130);
+  expect(dialog()).toBeNull(); expect(audio.paused).toBe(false); expect(audio.muted).toBe(true);
+  expect(HTMLMediaElement.prototype.play).toHaveBeenCalledTimes(plays);
+  fireEvent.click(screen.getByRole('button', { name: 'Toggle playback' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Toggle playback' }));
+  act(() => audio.dispatchEvent(new Event('ended')));
+  expect(dialog()).toBeNull(); expect(audio.muted).toBe(true);
+});
+it('ignores short, horizontal, upward, cancelled and control gestures', async () => {
+  await setup();
+  fireEvent.click(screen.getByRole('button', { name: 'Select Mix 1' }));
+  const art = dialog()!.querySelector('[data-player-swipe-surface] img')!;
+  for (const [dx, dy] of [[0, 30], [130, 80], [0, -130]]) {
+    swipe(art, dx, dy); expect(dialog()).toBeTruthy();
+  }
+  swipe(art, 0, 130, true); expect(dialog()).toBeTruthy();
+  swipe(dialog()!.querySelector('input[aria-label="Seek track"]')!, 0, 130);
+  expect(dialog()).toBeTruthy();
+  swipe(screen.getByRole('button', { name: 'Minimize player' }), 0, 130);
+  expect(dialog()).toBeTruthy();
+  swipe(screen.getByRole('heading', { name: 'Now Playing' }), 0, 130);
+  expect(dialog()).toBeNull();
+});
