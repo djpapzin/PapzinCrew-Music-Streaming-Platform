@@ -3,6 +3,7 @@ import fcntl
 import json
 import math
 import os
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
@@ -81,6 +82,7 @@ def _prepare(mix):
     directory().mkdir(parents=True, exist_ok=True, mode=0o700)
     draft = {'mix_id': mix.id, 'mix_title': mix.title, 'state': 'queued', 'provider': 'AudD',
              'created_at': datetime.now(timezone.utc).isoformat(), 'chunks': chunks,
+             'download_limit_bytes': byte_count,
              'note': 'Sampled draft: up to the first 30 minutes, one 12-second sample per minute. Times are first detections, not exact transitions. Review all matches.',
              'entries': []}
     save(draft)
@@ -107,7 +109,8 @@ def offset_seconds(value):
 
 def parse_entries(payload):
     if payload.get('status') != 'success' or not isinstance(payload.get('result'), list):
-        raise DraftError('AudD did not return a successful scan. No automatic retry was made.')
+        error = payload.get('error') or {}
+        raise DraftError(f"AudD rejected the scan (code {error.get('error_code', 'unknown')}): {str(error.get('error_message', 'Invalid result'))[:400]}")
     entries = []
     previous = set()
     for chunk in sorted(payload['result'], key=lambda c: offset_seconds(c['offset'])):
@@ -129,16 +132,38 @@ def parse_entries(payload):
 
 def run(mix_id, audio_url):
     draft = load(mix_id)
+    token = ''
     try:
         draft['state'] = 'scanning'; save(draft)
         token, _, _ = settings()
-        response = requests.post('https://enterprise.audd.io/', data={
-            'api_token': token, 'url': audio_url, 'skip': '4', 'every': '1',
-            'limit': str(draft['chunks']), 'accurate_offsets': 'true',
-        }, timeout=(10, 180), allow_redirects=False)
-        response.raise_for_status()
+        # AudD trial accounts accept file uploads; URL recognition is paid-only.
+        # Fetch once within the already-reserved byte allowance, then upload it.
+        with tempfile.SpooledTemporaryFile(max_size=1024**2) as audio_file:
+            source = requests.get(audio_url, stream=True, timeout=(10, 60), allow_redirects=False)
+            try:
+                source.raise_for_status()
+                if 300 <= source.status_code < 400:
+                    raise DraftError('Audio redirects are not allowed.')
+                received = 0
+                for chunk in source.iter_content(64 * 1024):
+                    received += len(chunk)
+                    if received > draft['download_limit_bytes']:
+                        raise DraftError('Audio exceeds its reserved free download allowance.')
+                    audio_file.write(chunk)
+                if not received:
+                    raise DraftError('Audio download was empty.')
+            finally:
+                source.close()
+            audio_file.seek(0)
+            response = requests.post('https://enterprise.audd.io/', data={
+                'api_token': token, 'skip': '4', 'every': '1',
+                'limit': str(draft['chunks']), 'accurate_offsets': 'true',
+            }, files={'file': (Path(urlparse(audio_url).path).name, audio_file)},
+                timeout=(10, 180), allow_redirects=False)
+            response.raise_for_status()
         draft['entries'] = parse_entries(response.json())
         draft['state'] = 'ready' if draft['entries'] else 'no_matches'
-    except Exception:
-        draft.update(state='failed', error='The scan failed or timed out. Credits remain reserved; no automatic retry was made.')
+    except Exception as exc:
+        reason = str(exc).replace(token, '[redacted]') if isinstance(exc, DraftError) and token else type(exc).__name__
+        draft.update(state='failed', error=f'{reason[:500]} Credits remain reserved; no automatic retry was made.')
     save(draft)
