@@ -8,7 +8,7 @@ import httpx
 
 from .. import schemas, crud
 from ..db.database import get_db
-from ..models.models import Mix
+from ..models.models import Mix, Artist
 
 # Expose symbol for tests to patch
 # RedirectResponse is imported at module level so unit tests can patch
@@ -27,16 +27,17 @@ logger = logging.getLogger(__name__)
 
 # Dependency wrapper to allow tests to patch `get_db` after router creation
 def _get_db_dyn():
-    try:
-        db_or_gen = get_db()
-    except Exception:
-        return None
+    db_or_gen = get_db()
     if inspect.isgenerator(db_or_gen):
+        # Keep the generator alive until the request completes. Returning next()
+        # closes it too early; subsequent ORM queries reopen an unclosed session.
+        yield from db_or_gen
+    else:
         try:
-            return next(db_or_gen)
-        except StopIteration:
-            return None
-    return db_or_gen
+            yield db_or_gen
+        finally:
+            if db_or_gen is not None:
+                db_or_gen.close()
 
 # Dependency wrapper to allow tests to patch `get_current_user` dynamically
 def _get_current_user_dyn():
@@ -164,6 +165,19 @@ def read_tracks(skip: int = 0, limit: int = 100, db: Session = Depends(_get_db_d
     """
     tracks = crud.get_mixes(db, skip=skip, limit=limit)
     return tracks
+
+@router.get('/catalog')
+def public_catalog(db: Session = Depends(get_db)):
+    """Browsing fields only: omit embedded tags and private/test uploads."""
+    fields = ('id', 'title', 'duration_seconds', 'file_path', 'cover_art_url',
+              'genre', 'album', 'year', 'description', 'tracklist', 'availability')
+    rows = (db.query(*(getattr(Mix, field) for field in fields), Artist.name.label('artist_name'))
+            .outerjoin(Artist, Artist.id == Mix.artist_id)
+            .filter((Mix.availability == 'public') | (Mix.availability.is_(None)))
+            .order_by(Mix.id).all())
+    return [dict({field: getattr(row, field) for field in fields},
+                 artist={'name': row.artist_name}) for row in rows]
+
 
 @router.get("/{track_id}")
 def read_track(track_id: int, db: Session = Depends(_get_db_dyn), current_user: object = Depends(_get_current_user_dyn)):

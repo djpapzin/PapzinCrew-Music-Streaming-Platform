@@ -59,9 +59,9 @@ function App() {
     try {
       // Render free instances can outlast Netlify's proxy timeout on a cold start.
       // Retry once through the backend origin before showing a recoverable error.
-      let res = await fetch(`${API_BASE}/tracks/?limit=1000`);
+      let res = await fetch(`${API_BASE}/tracks/catalog`);
       if (res.status === 502 || res.status === 503 || res.status === 504) {
-        res = await fetch('https://papzincrew-backend.onrender.com/tracks/?limit=1000');
+        res = await fetch('https://papzincrew-backend.onrender.com/tracks/catalog');
       }
       if (!res.ok) {
         let message = `Failed to load tracks (${res.status})`;
