@@ -1,6 +1,6 @@
 import os
 
-from fastapi import BackgroundTasks, APIRouter, Depends, Header, HTTPException, status
+from fastapi import BackgroundTasks, APIRouter, Depends, Header, HTTPException, status, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -62,20 +62,45 @@ def get_analytics(
 
 
 @router.get('/tracklist-drafts/{mix_id}')
-def get_tracklist_draft(mix_id: int, _: None = Depends(require_admin_api_key)):
+def get_tracklist_draft(mix_id: int, provider: str = Query(default='audd'), _: None = Depends(require_admin_api_key)):
     from ..services import tracklist_drafts as drafts
+    from ..services import free_tracklist_drafts as free
+    if provider != 'audd':
+        try:
+            option = next((o for o in free.options() if o['id'] == provider), None)
+            if option is None:
+                raise free.DraftError('Unknown free provider.')
+            return {'enabled': option['enabled'], 'draft': free.load(mix_id, provider), 'providers': free.options()}
+        except free.DraftError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
     token, budget, download_budget = drafts.settings()
-    return {'enabled': bool(token and budget and download_budget), 'draft': drafts.load(mix_id)}
+    return {'enabled': bool(token and budget and download_budget) and os.getenv('AUDD_SCANS_ENABLED', '1') != '0', 'draft': drafts.load(mix_id)}
 
 
 @router.post('/tracklist-drafts/{mix_id}')
 def generate_tracklist_draft(mix_id: int, background_tasks: BackgroundTasks,
+                             provider: str = Query(default='audd'),
+                             body: dict | None = None,
                              db: Session = Depends(get_db),
                              _: None = Depends(require_admin_api_key)):
     from ..services import tracklist_drafts as drafts
     mix = db.query(models.Mix).filter(models.Mix.id == mix_id).first()
     if mix is None:
         raise HTTPException(status_code=404, detail='Mix not found')
+    if provider != 'audd':
+        from ..services import free_tracklist_drafts as free
+        try:
+            text = (body or {}).get('text', '')
+            if not isinstance(text, str) or len(text) > 100000:
+                raise free.DraftError('Manual draft is too long or invalid.')
+            draft, created = free.prepare(mix, provider, text)
+        except free.DraftError as exc:
+            raise HTTPException(status_code=409, detail=str(exc))
+        if created:
+            background_tasks.add_task(free.run, mix.id, provider, mix.file_path)
+        return {'draft': draft}
+    if os.getenv('AUDD_SCANS_ENABLED', '1') == '0':
+        raise HTTPException(status_code=409, detail='AudD scans are disabled. Choose a free provider; saved drafts remain available.')
     try:
         draft, created = drafts.prepare(mix)
     except drafts.DraftError as exc:
