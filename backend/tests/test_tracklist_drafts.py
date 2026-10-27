@@ -9,6 +9,8 @@ def configured(tmp_path, monkeypatch):
     monkeypatch.setenv('AUDD_API_TOKEN', 'fake-test-token')
     monkeypatch.setenv('AUDD_FREE_REQUEST_BUDGET', '40')
     monkeypatch.setenv('AUDD_FREE_DOWNLOAD_BYTES', str(30 * 1024**2))
+    source=Mock();source.status_code=200;source.iter_content.return_value=[b'audio-test']
+    monkeypatch.setattr(drafts.requests,'get',Mock(return_value=source))
 
 
 def mix(**changes):
@@ -62,6 +64,8 @@ def test_scan_writes_only_draft_and_preserves_mix(monkeypatch):
     assert original.tracklist=='' and original.tracklist_items==[]
     assert post.call_args.kwargs['data']['limit']=='20'
     assert post.call_args.kwargs['allow_redirects'] is False
+    assert 'url' not in post.call_args.kwargs['data']
+    assert 'file' in post.call_args.kwargs['files']
 
 
 def test_failures_are_saved_without_retry_or_budget_refund(monkeypatch):
@@ -108,3 +112,15 @@ def test_owner_auth_and_existing_tracklist_are_enforced(tmp_path, monkeypatch):
     assert client.get('/admin/tracklist-drafts/237',headers=headers).json()=={'enabled':False,'draft':None}
     assert client.post('/admin/tracklist-drafts/237',headers=headers).status_code==409
     with Session(engine) as db: assert db.get(Mix,237).tracklist=='Original credits'
+
+
+def test_download_is_capped_before_any_recognition_request(monkeypatch):
+    drafts.prepare(mix(file_size_mb=0.000001))
+    source=Mock();source.status_code=200;source.iter_content.return_value=[b'too much audio']
+    monkeypatch.setattr(drafts.requests,'get',Mock(return_value=source))
+    post=Mock();monkeypatch.setattr(drafts.requests,'post',post)
+    drafts.run(237,mix().file_path)
+    assert drafts.load(237)['state']=='failed'
+    assert 'allowance' in drafts.load(237)['error']
+    post.assert_not_called()
+    source.close.assert_called_once()
