@@ -1,3 +1,4 @@
+import { recordVisit } from './lib/anonymousUsage';
 import { fetchCatalog } from './lib/fetchCatalog';
 import { playbackUrl } from './lib/playbackUrl';
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -29,6 +30,7 @@ const isPublicTrack = (mix: any): boolean => {
 };
 
 function App() {
+  useEffect(()=>{recordVisit();},[]);
   const [playerOpenRequest, setPlayerOpenRequest] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(false);
