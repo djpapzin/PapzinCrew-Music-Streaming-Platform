@@ -51,10 +51,14 @@ def _form_data(file_name: str = "test.mp3", content: bytes = b"dummy-audio"):
     return data, files
 
 
-def test_upload_b2_success(test_app, tmp_path):
+@pytest.mark.parametrize('requested_visibility', [None, 'public', 'Public', 'private', 'unlisted'])
+def test_upload_b2_success(test_app, tmp_path, requested_visibility):
     client = TestClient(test_app)
 
     data, files = _form_data()
+    if requested_visibility is not None:
+        data['availability'] = requested_visibility
+    data['skip_duplicate_check'] = 'true'
     returned_key = "audio/unittest-artist-unittest-title-hash-token.mp3"
 
     # Patch validate to skip real parsing; patch B2 to succeed; block AI cover generation
@@ -75,6 +79,10 @@ def test_upload_b2_success(test_app, tmp_path):
 
     assert resp.status_code == 201, resp.text
     body = resp.json()
+    assert body['availability'] == 'unlisted'
+    saved = client.get(f"/tracks/{body['id']}")
+    assert saved.status_code == 200
+    assert saved.json()['availability'] == 'unlisted'
     assert body.get("storage") == "b2"
     # Location should prefer key when present
     assert body.get("location") == returned_key
