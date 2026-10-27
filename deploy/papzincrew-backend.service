@@ -15,7 +15,7 @@ Environment=DB_AUTO_MIGRATE=false
 Environment=BACKFILL_TRACK_DURATIONS=false
 Environment=ENFORCE_B2_ONLY=1
 Environment=ENABLE_UPLOAD_PRINTS=0
-ExecStart=/opt/papzincrew/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 18882 --workers 1 --no-proxy-headers
+ExecStart=/opt/papzincrew/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 18882 --workers 1 --proxy-headers --forwarded-allow-ips 127.0.0.1
 Restart=on-failure
 RestartSec=10
 StateDirectory=papzincrew
