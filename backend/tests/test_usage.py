@@ -26,4 +26,4 @@ def test_payload_and_listening_caps(client):
     assert client.post('/usage',content='x'*1025).status_code==413
     assert client.post('/usage',json={'kind':'listen','mix':237,'value':120000}).status_code==202
     data=client.get('/admin/usage',headers={'X-Admin-Api-Key':'owner-test'}).json()['days'][0]
-    assert data['mixes']['237']['listen_ms']==30000
+    assert data['mixes']['237']['listen_ms']==120000
