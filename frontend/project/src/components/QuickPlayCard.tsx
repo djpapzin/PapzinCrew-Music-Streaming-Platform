@@ -52,10 +52,11 @@ const QuickPlayCard: React.FC<QuickPlayCardProps> = ({ item, type, onPlay }) => 
     <div 
       role="button" tabIndex={0} aria-label={`Play ${getTitle()}`} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();onPlay();}}}
       onClick={onPlay}
-      className="group flex items-center bg-white/5 hover:bg-white/10 rounded-lg p-3 cursor-pointer transition-all duration-200 hover:scale-[1.02]"
+      className="group flex min-w-0 w-full overflow-hidden items-center bg-white/5 hover:bg-white/10 rounded-lg p-3 cursor-pointer transition-all duration-200 hover:scale-[1.02]"
     >
       <div className="relative flex-shrink-0">
         <img
+          loading="lazy" decoding="async"
           src={safeArtworkUrl(getImageUrl())}
           alt={getTitle()}
           className="w-10 lg:w-12 h-10 lg:h-12 rounded object-cover shadow-lg"

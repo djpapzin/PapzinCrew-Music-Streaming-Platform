@@ -1,3 +1,4 @@
+import { useLocation } from 'react-router-dom';
 import { recordVisit } from './lib/anonymousUsage';
 import { fetchCatalog } from './lib/fetchCatalog';
 import { playbackUrl } from './lib/playbackUrl';
@@ -30,6 +31,7 @@ const isPublicTrack = (mix: any): boolean => {
 };
 
 function App() {
+  const location=useLocation();
   useEffect(()=>{recordVisit();},[]);
   const [playerOpenRequest, setPlayerOpenRequest] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
@@ -178,13 +180,14 @@ function App() {
             onMenuClick={() => setSidebarOpen(true)}
           />
           
-          <PlaybackTiming attempts={playbackAttempts} storageError={timingStorageError} />
+          {location.pathname==='/settings'&&<PlaybackTiming attempts={playbackAttempts} storageError={timingStorageError} />}
           <MainContent
             searchQuery={searchQuery}
             songs={songs}
             playlists={playlists}
             albums={albums}
             artists={artists}
+            playbackPending={playbackAttempts[0]?.status==='waiting'}
             tracksLoading={tracksLoading}
             tracksError={tracksError}
             currentSong={playerState.currentSong}
@@ -206,6 +209,7 @@ function App() {
 
       {playerState.currentSong && (
         <Player
+          isLoading={playbackAttempts[0]?.status==='waiting'}
           openRequest={playerOpenRequest}
           playerState={playerState}
           onTogglePlay={togglePlay}
