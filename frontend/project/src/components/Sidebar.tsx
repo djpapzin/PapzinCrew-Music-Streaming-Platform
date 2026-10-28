@@ -140,10 +140,10 @@ const Sidebar: React.FC<SidebarProps> = ({ onNavigate }) => {
         <div className="bg-gradient-to-r from-purple-600/20 to-pink-600/20 rounded-lg p-4 border border-purple-500/20">
           <h4 className="text-white font-semibold mb-1">Join Papzin & Crew</h4>
           <p className="text-gray-400 text-sm mb-3">
-            Connect with independent artists and discover fresh talent.
+            Free DJ mixes. Listen without an account.
           </p>
           <button onClick={() => { navigate('/account'); onNavigate?.(); }} className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:shadow-lg transition-shadow duration-200 w-full">
-            Get Started
+            Sign in (optional)
           </button>
         </div>
       </div>

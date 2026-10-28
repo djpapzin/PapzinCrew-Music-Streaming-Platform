@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { MessageSquare } from 'lucide-react';
 import { API_BASE } from '../lib/api';
@@ -15,6 +15,7 @@ export default function FeedbackButton() {
   const [error,setError]=useState('');
   const [sent,setSent]=useState(false);
   const [page,setPage]=useState('/');
+  useEffect(()=>{dialog.current?.close();setPage(location.pathname);},[location.key]);
   const close=()=>{dialog.current?.close();trigger.current?.focus();};
   async function submit(e:React.FormEvent) {
     e.preventDefault(); if(busy)return;

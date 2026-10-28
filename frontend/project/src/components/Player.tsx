@@ -20,6 +20,7 @@ import SongActions from './SongActions';
 
 interface PlayerProps {
   openRequest?: number;
+  isLoading?: boolean;
   playerState: PlayerState;
   onTogglePlay: () => void;
   onNext: () => void;
@@ -42,6 +43,7 @@ const formatTime = (seconds: number): string => {
 const Player: React.FC<PlayerProps> = ({
   playerState,
   openRequest = 0,
+  isLoading = false,
   onTogglePlay,
   onNext,
   onPrevious,
@@ -190,7 +192,7 @@ const Player: React.FC<PlayerProps> = ({
               {/* Minimize to mini-player */}
               <Minimize2 className="w-6 h-6" />
             </button>
-            <div className="text-center"><h2 className="text-white font-medium">Now Playing</h2><p className="text-xs text-gray-400">Swipe down to browse</p></div>
+            <div className="text-center"><h2 className="text-white font-medium">Now Playing</h2><p className="text-xs text-gray-400">{isLoading?'Loading mix… you can pause to cancel':'Swipe down to browse'}</p></div>
             <div className="flex gap-3"><SongActions song={currentSong} /></div>
           </div>
 

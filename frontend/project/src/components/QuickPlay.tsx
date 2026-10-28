@@ -1,85 +1,27 @@
-import React from 'react';
-import { Play, Shuffle, Radio } from 'lucide-react';
+import { useRef } from 'react';
+import { Play, Pause, Shuffle, Radio } from 'lucide-react';
 import { Song, Playlist } from '../types/music';
-
-interface QuickPlayProps {
-  songs: Song[];
-  playlists: Playlist[];
-  onPlaySong: (song: Song, queue?: Song[]) => void;
-  onPlayPlaylist: (playlist: Playlist) => void;
+interface Props {
+  songs:Song[];playlists:Playlist[];onPlaySong:(song:Song,queue?:Song[])=>void;
+  onPlayPlaylist:(playlist:Playlist)=>void;currentSong?:Song|null;isPlaying?:boolean;onTogglePlay?:()=>void;isLoading?:boolean;
 }
-
-const QuickPlay: React.FC<QuickPlayProps> = ({
-  songs,
-  onPlaySong
-}) => {
-  const playable = songs.filter(song => song.playable !== false && song.audioUrl);
-  const hasSongs = playable.length > 0;
-
-  const handleQuickPlay = () => {
-    if (!hasSongs) return;
-    // Play a random song from all available songs
-    const randomSong = playable[Math.floor(Math.random() * playable.length)];
-    onPlaySong(randomSong, playable);
-  };
-
-  const handleShufflePlay = () => {
-    if (!hasSongs) return;
-    // Create a shuffled queue and start playing
-    const shuffledSongs = [...playable].sort(() => Math.random() - 0.5);
-    onPlaySong(shuffledSongs[0], shuffledSongs);
-  };
-
-  const handleRadioPlay = () => {
-    if (!hasSongs) return;
-    const seed = playable[Math.floor(Math.random() * playable.length)];
-    const related = playable.filter(song => song.id !== seed.id && (song.artist === seed.artist || (seed.genre && song.genre === seed.genre)));
-    const others = playable.filter(song => song.id !== seed.id && !related.some(item => item.id === song.id));
-    onPlaySong(seed, [seed, ...related.sort(() => Math.random() - 0.5), ...others.sort(() => Math.random() - 0.5)]);
-  };
-
-  return (
-    <div className="bg-gradient-to-r from-purple-600/20 to-pink-600/20 rounded-xl p-4 lg:p-6 border border-purple-500/20 mb-6 lg:mb-8">
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
-        <div>
-          <h3 className="text-lg lg:text-xl font-bold text-white mb-2">Quick Play</h3>
-          <p className="text-gray-300 text-sm">
-            Jump right into the music with one click
-          </p>
-        </div>
-        
-        <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3">
-          <button
-            onClick={handleQuickPlay}
-            disabled={!hasSongs}
-            className={`flex items-center justify-center space-x-2 bg-white text-black px-4 py-2 min-h-11 rounded-full font-medium transition-all duration-200 ${hasSongs ? 'hover:bg-gray-200 hover:scale-105' : 'opacity-50 cursor-not-allowed'}`}
-          >
-            <Play className="w-4 h-4" fill="currentColor" />
-            <span>Play</span>
-          </button>
-          
-          <button
-            onClick={handleShufflePlay}
-            disabled={!hasSongs}
-            className={`flex items-center justify-center space-x-2 bg-green-500 text-white px-4 py-2 min-h-11 rounded-full font-medium transition-all duration-200 ${hasSongs ? 'hover:bg-green-400 hover:scale-105' : 'opacity-50 cursor-not-allowed'}`}
-          >
-            <Shuffle className="w-4 h-4" />
-            <span>Shuffle</span>
-          </button>
-          
-          <button
-            onClick={handleRadioPlay}
-            disabled={!hasSongs}
-            className={`flex items-center justify-center space-x-2 bg-purple-500 text-white px-4 py-2 min-h-11 rounded-full font-medium transition-all duration-200 ${hasSongs ? 'hover:bg-purple-400 hover:scale-105' : 'opacity-50 cursor-not-allowed'}`}
-          >
-            <Radio className="w-4 h-4" />
-            <span>Radio</span>
-          </button>
-        </div>
-      </div>
-
-    </div>
-  );
-};
-
-export default QuickPlay;
+export default function QuickPlay({songs,onPlaySong,currentSong,isPlaying=false,onTogglePlay,isLoading=false}:Props){
+  const playable=songs.filter(song=>song.playable!==false&&song.audioUrl);
+  const selected=playable.find(song=>song.id===currentSong?.id)||playable.find(song=>song.audioUrl.includes('playback-optimized'))||playable[0];
+  const active=Boolean(selected&&selected.id===currentSong?.id);
+  const lastAction=useRef(-Infinity);
+  const once=(action:()=>void)=>{const now=performance.now();if(now-lastAction.current<450)return;lastAction.current=now;action();};
+  const play=()=>once(()=>{if(!selected)return;if(active&&onTogglePlay)onTogglePlay();else onPlaySong(selected,playable);});
+  const shuffle=()=>once(()=>{if(!playable.length)return;const queue=[...playable];for(let i=queue.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[queue[i],queue[j]]=[queue[j],queue[i]];}onPlaySong(queue[0],queue);});
+  const similar=()=>once(()=>{if(!selected)return;const related=playable.filter(song=>song.id!==selected.id&&(song.artist===selected.artist||(selected.genre&&song.genre===selected.genre)));const rest=playable.filter(song=>song.id!==selected.id&&!related.includes(song));onPlaySong(selected,[selected,...related,...rest]);});
+  const label=active?(isLoading?'Cancel loading':isPlaying?'Pause mix':'Resume mix'):'Play mix';
+  return <section className="min-w-0 rounded-xl border border-purple-500/20 bg-gradient-to-r from-purple-600/20 to-pink-600/20 p-4 lg:p-6 space-y-4">
+    <div><h3 className="text-lg lg:text-xl font-bold">Listen to a DJ mix</h3><p className="text-sm text-gray-300 mt-2 break-words">{selected?<>{active?'Selected mix: ':'Start with: '}<strong>{selected.title}</strong> · {selected.artist}</>:'Loading DJ mixes…'}</p><p className="text-sm text-gray-400 mt-1">Free listening. No account needed.</p></div>
+    {active&&isLoading&&<p role="status" className="text-purple-200 text-sm">Loading this mix… Slow connections may take longer. You can cancel below.</p>}
+    <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+      <button onClick={play} disabled={!selected} className="min-h-11 flex items-center justify-center gap-2 rounded-full bg-white text-black px-4 py-2 disabled:opacity-50">{active&&isPlaying?<Pause className="w-4 h-4"/>:<Play className="w-4 h-4"/>}{label}</button>
+      <button onClick={shuffle} disabled={!selected} className="min-h-11 flex items-center justify-center gap-2 rounded-full bg-green-700 px-4 py-2 disabled:opacity-50"><Shuffle className="w-4 h-4"/>Shuffle mixes</button>
+      <button onClick={similar} disabled={!selected} className="min-h-11 flex items-center justify-center gap-2 rounded-full bg-purple-700 px-4 py-2 disabled:opacity-50"><Radio className="w-4 h-4"/>Play similar mixes</button>
+    </div><p className="text-xs text-gray-400">Shuffle picks a random mix. Similar mixes follows the selected artist or genre.</p>
+  </section>;
+}
