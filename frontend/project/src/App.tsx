@@ -155,7 +155,7 @@ function App() {
       <div className="flex flex-1 overflow-hidden">
         {/* Desktop Sidebar */}
         <div className="hidden lg:block">
-          <Sidebar />
+          <Sidebar playerActive={Boolean(playerState.currentSong)} />
         </div>
 
         {/* Mobile Sidebar Overlay */}
@@ -166,7 +166,7 @@ function App() {
               onClick={() => setSidebarOpen(false)}
             />
             <div className="relative w-64 h-full">
-              <Sidebar 
+              <Sidebar playerActive={Boolean(playerState.currentSong)}
                 onNavigate={() => setSidebarOpen(false)} 
               />
             </div>

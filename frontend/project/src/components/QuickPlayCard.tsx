@@ -1,3 +1,4 @@
+import DeferredImage from './DeferredImage';
 import React from 'react';
 import { Play, Clock } from 'lucide-react';
 import { Song, Playlist, Album } from '../types/music';
@@ -55,7 +56,7 @@ const QuickPlayCard: React.FC<QuickPlayCardProps> = ({ item, type, onPlay }) => 
       className="group flex min-w-0 w-full overflow-hidden items-center bg-white/5 hover:bg-white/10 rounded-lg p-3 cursor-pointer transition-all duration-200 hover:scale-[1.02]"
     >
       <div className="relative flex-shrink-0">
-        <img
+        <DeferredImage
           loading="lazy" decoding="async"
           src={safeArtworkUrl(getImageUrl())}
           alt={getTitle()}
