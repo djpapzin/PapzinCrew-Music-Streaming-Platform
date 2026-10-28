@@ -55,3 +55,16 @@ def test_nonpublic_never_downloaded_even_if_selected(job):
         mix.availability='unlisted'
     warm.main()
     assert not s3.head_object.called and not s3.get_object.called
+
+
+@pytest.mark.parametrize('url,expected', [
+    ('https://s3.us-east-005.backblazeb2.com/bucket/a%20b.mp3','a b.mp3'),
+    ('https://f005.backblazeb2.com/file/bucket/a%20b.mp3','a b.mp3'),
+    ('https://f006.backblazeb2.com/file/bucket/a.mp3',None),
+    ('https://f005.backblazeb2.com/file/other/a.mp3',None),
+    ('https://evil.example/file/bucket/a.mp3',None),
+    ('https://f005.backblazeb2.com/file/bucket/a.mp3?x=1',None),
+])
+def test_source_bucket_boundary(url,expected):
+    storage=SimpleNamespace(bucket='bucket',endpoint_url='https://s3.us-east-005.backblazeb2.com')
+    assert warm.source_key(url,storage)==expected

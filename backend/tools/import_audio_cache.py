@@ -49,7 +49,7 @@ def main():
                     raise ImportCheckError('catalog_hash_mismatch')
             sys.argv=['seed_audio_cache.py','--mix-id',str(ident),'--file',str(scratch)]
             seed()
-        except Exception as error:
+        except (Exception, SystemExit) as error:
             # Never log requests exceptions: they can contain the signed URL.
             print(json.dumps({'mix':ident,'import_skipped':True,'reason':str(error) if isinstance(error,ImportCheckError) else type(error).__name__}),flush=True)
         finally:

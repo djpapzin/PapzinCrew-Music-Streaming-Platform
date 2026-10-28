@@ -17,6 +17,24 @@ from app.services.audio_cache import directory, version
 from app.services.b2_storage import B2Storage
 
 
+def source_key(source, storage):
+    """Resolve only this account's configured S3 or native B2 bucket URL."""
+    origin = urlparse(source or '')
+    endpoint = urlparse(storage.endpoint_url or '')
+    if origin.scheme != 'https' or origin.username or origin.password or origin.port or origin.query or origin.fragment:
+        return None
+    bucket = storage.bucket or ''
+    prefix = '/' + bucket + '/'
+    if origin.netloc == endpoint.netloc and origin.path.startswith(prefix):
+        return unquote(origin.path[len(prefix):]) or None
+    # B2 native download hosts use the cluster number from the S3 endpoint.
+    cluster = (endpoint.hostname or '').split('.')[1].split('-')[-1] if (endpoint.hostname or '').startswith('s3.') else ''
+    native_prefix = '/file/' + bucket + '/'
+    if cluster.isdigit() and origin.netloc == 'f' + cluster + '.backblazeb2.com' and origin.path.startswith(native_prefix):
+        return unquote(origin.path[len(native_prefix):]) or None
+    return None
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--mix-id', required=True, type=int)
@@ -28,16 +46,15 @@ def main():
             raise SystemExit('Only current public mixes may be cached')
         source = mix.file_path
     storage = B2Storage()
-    origin, endpoint = urlparse(source), urlparse(storage.endpoint_url or '')
-    prefix = '/' + (storage.bucket or '') + '/'
-    if not storage.s3 or origin.scheme != 'https' or origin.netloc != endpoint.netloc or not origin.path.startswith(prefix):
+    key = source_key(source, storage)
+    if not storage.s3 or key is None:
         raise SystemExit('Source must be in the existing Backblaze bucket')
     size = args.file.stat().st_size
     sha = hashlib.sha256(); md5 = hashlib.md5()
     with args.file.open('rb') as audio:
         for chunk in iter(lambda: audio.read(1024*1024), b''):
             sha.update(chunk); md5.update(chunk)
-    head = storage.s3.head_object(Bucket=storage.bucket, Key=unquote(origin.path[len(prefix):]))
+    head = storage.s3.head_object(Bucket=storage.bucket, Key=key)
     if head['ContentLength'] != size or head['ETag'].strip('"') != md5.hexdigest():
         raise SystemExit('Local copy does not match B2 exactly; cache unchanged')
     root = directory(); root.mkdir(parents=True, exist_ok=True, mode=0o700)

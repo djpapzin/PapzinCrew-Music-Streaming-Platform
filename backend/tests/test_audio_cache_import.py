@@ -51,3 +51,10 @@ def test_untrusted_download_destination_is_rejected_before_network(importing):
     job['download_url']='https://example.com/not-dropbox';incoming.write_text(json.dumps([job]))
     with pytest.raises(RuntimeError): importer.main()
     assert not download.called and not seed.called
+
+
+def test_seed_refusal_skips_the_copy_without_terminating_import(importing):
+    incoming,root,job,download,seed,response=importing
+    seed.side_effect=SystemExit('Local copy does not match B2 exactly')
+    importer.main()
+    assert not list(root.glob('*.part'))

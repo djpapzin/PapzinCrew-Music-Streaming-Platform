@@ -10,12 +10,11 @@ import shutil
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from urllib.parse import urlparse, unquote
 from app.db.database import SessionLocal
 from app.models.models import Mix
 from app.services.audio_cache import directory, entry
 from app.services.b2_storage import B2Storage
-from tools.seed_audio_cache import main as seed
+from tools.seed_audio_cache import main as seed, source_key
 
 
 def main():
@@ -38,10 +37,8 @@ def main():
             if used>=budget: break
             if (visibility or 'public')!='public': continue
             if entry(ident,source,visibility): continue
-            origin=urlparse(source or '');endpoint=urlparse(storage.endpoint_url or '')
-            prefix='/'+(storage.bucket or '')+'/'
-            if origin.scheme!='https' or origin.netloc!=endpoint.netloc or not origin.path.startswith(prefix): continue
-            key=unquote(origin.path[len(prefix):])
+            key=source_key(source,storage)
+            if key is None: continue
             head=storage.s3.head_object(Bucket=storage.bucket,Key=key)
             size=head['ContentLength']
             # Single-part MD5 ETags are required for a byte-exact seed.
