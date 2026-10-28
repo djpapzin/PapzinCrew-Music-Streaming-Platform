@@ -44,7 +44,7 @@ async def collect(request:Request):
             mix=data['mixes'].setdefault(key,{'attempts':0,'starts':0,'failures':0,'startup_ms':0,'startup_samples':0,'startup_buckets':[0]*6,'listen_ms':0,'resumes':0})
             if event.kind=='attempt': mix['attempts']+=1
             elif event.kind=='failed': mix['failures']+=1
-            elif event.kind=='listen': mix['listen_ms']+=min(event.value,30000)
+            elif event.kind=='listen': mix['listen_ms']+=min(event.value,120000)
             elif event.resume: mix['resumes']+=1
             else:
                 mix['starts']+=1;mix['startup_ms']+=event.value;mix['startup_samples']+=1

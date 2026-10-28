@@ -1,5 +1,6 @@
 import { API_BASE } from './api';
 export const USAGE_OPT_OUT='papzincrew:anonymous-stats-off';
+export const LISTEN_FLUSH_INTERVAL_MS=60000;
 export function usageAllowed() {
   try {
     return navigator.doNotTrack!=='1' && !(navigator as Navigator&{globalPrivacyControl?:boolean}).globalPrivacyControl && localStorage.getItem(USAGE_OPT_OUT)!=='1' && !location.hostname.includes('--') && location.hostname!=='localhost' && location.hostname!=='127.0.0.1';
@@ -23,7 +24,7 @@ export function recordVisit() {
 }
 export function createPlaybackUsage() {
   let mix=0;let requested=0;let resume=false;let pending=false;let failure=false;let since:number|null=null;
-  const flush=()=>{if(since!==null){const now=performance.now();sendUsage('listen',mix,Math.min(30000,now-since));since=now;}};
+  const flush=()=>{if(since!==null){const now=performance.now();sendUsage('listen',mix,Math.min(120000,now-since));since=now;}};
   const stop=()=>{flush();since=null;};
   return {
     begin(id:string,isResume:boolean){stop();mix=Number(id)||0;resume=isResume;requested=performance.now();pending=true;failure=false;sendUsage('attempt',mix,0,resume);},

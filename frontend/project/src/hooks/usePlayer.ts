@@ -1,4 +1,4 @@
-import { createPlaybackUsage } from '../lib/anonymousUsage';
+import { createPlaybackUsage, LISTEN_FLUSH_INTERVAL_MS } from '../lib/anonymousUsage';
 import { useState, useRef, useEffect } from 'react';
 import { Song, PlayerState } from '../types/music';
 import { usePlaybackTiming } from './usePlaybackTiming';
@@ -141,7 +141,7 @@ export const usePlayer = () => {
       notify('This track could not be played. Trying the next track.');
       actions.current.next();
     };
-    const usageTimer=window.setInterval(()=>{if(!audio.paused&&!audio.seeking&&audio.readyState>=3)usage.current.flush();else usage.current.stop();},15000);
+    const usageTimer=window.setInterval(()=>{if(!audio.paused&&!audio.seeking&&audio.readyState>=3)usage.current.flush();else usage.current.stop();},LISTEN_FLUSH_INTERVAL_MS);
     const seeked=()=>{if(!audio.paused&&audio.readyState>=3)usage.current.started();};
     const preference=()=>usage.current.cancel();
     window.addEventListener('usage:preference',preference);

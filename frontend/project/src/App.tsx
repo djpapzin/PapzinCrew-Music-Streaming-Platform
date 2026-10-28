@@ -150,7 +150,7 @@ function App() {
       {/* Global toast notifications */}
       <Toast />
       {/* Hidden audio element */}
-      <audio ref={audioRef} preload="auto" playsInline />
+      <audio ref={audioRef} preload="none" playsInline />
       
       <div className="flex flex-1 overflow-hidden">
         {/* Desktop Sidebar */}
