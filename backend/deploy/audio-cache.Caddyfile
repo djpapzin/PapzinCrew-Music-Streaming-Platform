@@ -18,6 +18,8 @@ audio.djpapzin.com {
         path_regexp cached "^/tracks/[0-9]+/cached/[a-f0-9]{24}$"
         method GET HEAD
     }
-    reverse_proxy @cached 127.0.0.1:18882
-    respond 404
+    route {
+        reverse_proxy @cached 127.0.0.1:18882
+        respond 404
+    }
 }

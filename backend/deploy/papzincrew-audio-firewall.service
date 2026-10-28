@@ -1,0 +1,17 @@
+[Unit]
+Description=HTTPS-only host firewall rule for Papzin & Crew audio
+After=network-pre.target netfilter-persistent.service
+Before=papzincrew-audio.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/sh -c '/usr/sbin/iptables -C INPUT -i enp0s6 -d 10.0.0.211 -p tcp --dport 443 -j ACCEPT 2>/dev/null || /usr/sbin/iptables -I INPUT 2 -i enp0s6 -d 10.0.0.211 -p tcp --dport 443 -j ACCEPT'
+ExecStop=-/usr/sbin/iptables -D INPUT -i enp0s6 -d 10.0.0.211 -p tcp --dport 443 -j ACCEPT
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+
+[Install]
+WantedBy=multi-user.target

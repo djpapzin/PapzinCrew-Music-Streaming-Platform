@@ -1,6 +1,7 @@
 [Unit]
 Description=Papzin & Crew public cached audio HTTPS
-After=network-online.target papzincrew-backend.service
+After=network-online.target papzincrew-backend.service papzincrew-audio-firewall.service
+Requires=papzincrew-audio-firewall.service
 Wants=network-online.target
 
 [Service]
