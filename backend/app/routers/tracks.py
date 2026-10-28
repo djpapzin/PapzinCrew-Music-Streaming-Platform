@@ -18,6 +18,8 @@ from ..models.models import Mix, Artist
 def get_current_user():
     return None
 from ..services.b2_storage import B2Storage
+from ..services.audio_cache import public_url as cached_audio_url
+from ..services.audio_cache import manifest as audio_cache_manifest
 from ..rate_limit import enforce_rate_limit
 from ..security import require_admin
 import inspect
@@ -175,8 +177,10 @@ def public_catalog(db: Session = Depends(get_db)):
             .outerjoin(Artist, Artist.id == Mix.artist_id)
             .filter((Mix.availability == 'public') | (Mix.availability.is_(None)))
             .order_by(Mix.id).all())
+    cache_snapshot = audio_cache_manifest() if os.getenv('AUDIO_CACHE_PUBLIC_BASE') else {}
     return [dict({field: getattr(row, field) for field in fields},
-                 artist={'name': row.artist_name}) for row in rows]
+                 artist={'name': row.artist_name},
+                 cached_audio_url=cached_audio_url(row.id, row.file_path, row.availability, cache_snapshot)) for row in rows]
 
 
 @router.get("/{track_id}")

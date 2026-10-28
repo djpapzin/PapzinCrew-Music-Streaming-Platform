@@ -1,0 +1,20 @@
+[Unit]
+Description=Bounded daily fill of public Papzin & Crew audio cache
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=papzincrew-backend
+EnvironmentFile=/etc/papzincrew/backend.env
+WorkingDirectory=/opt/papzincrew/backend
+ExecStart=/opt/papzincrew/venv/bin/python -m tools.warm_audio_cache
+StateDirectory=papzincrew
+DynamicUser=yes
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+MemoryMax=256M
+CPUQuota=25%
+TimeoutStartSec=30min
+

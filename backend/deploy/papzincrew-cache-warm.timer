@@ -1,0 +1,11 @@
+[Unit]
+Description=Fill public audio cache after the daily free quota resets
+
+[Timer]
+OnCalendar=*-*-* 00:15:00 UTC
+RandomizedDelaySec=5min
+Persistent=false
+Unit=papzincrew-cache-warm.service
+
+[Install]
+WantedBy=timers.target
