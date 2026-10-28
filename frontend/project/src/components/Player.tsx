@@ -113,7 +113,7 @@ const Player: React.FC<PlayerProps> = ({
             onClick={() => setShowMobilePlayer(true)}
           >
             <img
-              src={safeArtworkUrl(currentSong.imageUrl)}
+              src={isLoading ? DEFAULT_ARTWORK_URL : safeArtworkUrl(currentSong.imageUrl)}
               alt=""
               className="w-10 h-10 rounded object-cover shadow-lg flex-shrink-0"
               onError={(e) => {
@@ -199,7 +199,7 @@ const Player: React.FC<PlayerProps> = ({
           {/* Album Art */}
           <div data-player-swipe-surface style={{ touchAction: 'pan-x', userSelect: 'none' }} className="flex-1 min-h-0 flex items-center justify-center px-5 py-4 sm:px-8 sm:py-6">
             <img
-              src={safeArtworkUrl(currentSong.imageUrl)}
+              src={isLoading ? DEFAULT_ARTWORK_URL : safeArtworkUrl(currentSong.imageUrl)}
               alt={currentSong.album}
               draggable={false}
               className="w-full max-w-[min(74vw,18rem)] aspect-square max-h-[30vh] sm:max-h-[36vh] rounded-lg object-cover shadow-2xl"
@@ -329,7 +329,7 @@ const Player: React.FC<PlayerProps> = ({
             {/* Left: Current song info */}
             <div className="flex items-center space-x-3">
               <img
-                src={safeArtworkUrl(currentSong.imageUrl)}
+                src={isLoading ? DEFAULT_ARTWORK_URL : safeArtworkUrl(currentSong.imageUrl)}
                 alt={currentSong.album}
                 className="w-14 h-14 rounded-lg object-cover shadow-lg"
                 onError={(e) => {
@@ -474,7 +474,7 @@ const Player: React.FC<PlayerProps> = ({
           id: currentSong.id,
           title: currentSong.title,
           artist: currentSong.artist,
-          coverArt: safeArtworkUrl(currentSong.imageUrl),
+          coverArt: isLoading ? DEFAULT_ARTWORK_URL : safeArtworkUrl(currentSong.imageUrl),
           audioUrl: currentSong.audioUrl
         }}
         isVisible={showNowPlayingPopup}

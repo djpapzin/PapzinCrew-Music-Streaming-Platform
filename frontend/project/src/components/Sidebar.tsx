@@ -44,7 +44,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onNavigate }) => {
   );
 
   return (
-    <div className="w-64 bg-black/90 backdrop-blur-xl border-r border-white/10 flex flex-col h-full">
+    <div className="w-64 bg-black/90 backdrop-blur-xl border-r border-white/10 flex flex-col h-full overflow-y-auto pb-40">
       {/* Logo */}
       <div className="p-6 border-b border-white/10 flex-shrink-0">
         <Link to="/" onClick={onNavigate} aria-label="Go to Home" className="flex items-center space-x-2 group">
