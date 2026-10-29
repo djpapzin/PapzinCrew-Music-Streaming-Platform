@@ -1,0 +1,11 @@
+{
+  "name": "papzincrew-whatsapp-pilot",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": { "pair": "node pair.mjs" },
+  "dependencies": {
+    "@whiskeysockets/baileys": "7.0.0-rc14",
+    "pino": "10.4.0"
+  }
+}
