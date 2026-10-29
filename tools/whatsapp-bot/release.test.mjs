@@ -94,3 +94,9 @@ test('launch date uses SAST midnight and sends the approved launch copy',async t
  assert.equal(sent.length,1);assert.match(sent[0][1].text,/Mr Dominate SA/);assert.match(sent[0][1].text,/https:\/\/crew.djpapzin.com\/track\/241/);
  await ask('preview guest48 teaser');await ask('approve guest48 teaser');assert.match(await ask('send guest48 teaser'),/release date/);assert.equal(sent.length,1);
 });
+
+test('owner can revoke approval without erasing delivery history',async t=>{
+ const {ask,sent}=await setup(t);await ask('release guest48 groups pilot');await ask('preview guest48 teaser');await ask('approve guest48 teaser');
+ assert.match(await ask('cancel guest48 teaser'),/cancelled/);
+ assert.match(await ask('send guest48 teaser'),/preview|Preview/);assert.equal(sent.length,0);
+});

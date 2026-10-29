@@ -62,14 +62,14 @@ export function createReleaseAssistant(directory, { groups=[], enabled=false, se
   }
   async function handle({role,question}) {
     const input=question.trim();
-    const relevant=/^(release|prepare)\b|^(preview|approve|send)\s+[a-z0-9-]+\s+(teaser|launch)\b/i.test(input);
+    const relevant=/^(release|prepare)\b|^(preview|approve|send|cancel)\s+[a-z0-9-]+\s+(teaser|launch)\b/i.test(input);
     if(!relevant) return null;
     if(role!=='owner') return 'Release drafts and announcements are managed privately by DJ Papzin. Ask me for a public mix link or send feedback.';
     if(/^(release|release help)$/i.test(input)) return 'Release assistant 🎧\n\nPrepare guest48 — see the release\nPreview guest48 teaser — review teaser\nPreview guest48 launch — review release post\nApprove guest48 teaser — approve exactly that preview\nSend guest48 teaser — separate send step, only to selected approved groups\n\nTo attach video/art, send it with caption “!crew release guest48 teaser” or “!crew release guest48 artwork”. Nothing is scheduled or sent automatically. Group sending is off unless explicitly configured.';
     const create=input.match(/^release new ([a-z0-9-]+)\s*\|\s*(.+?)\s*\|\s*(.+?)\s*\|\s*(\d{4}-\d{2}-\d{2})\s*\|\s*(\S+)$/i);
     if(create) {try {const added=await seed({id:create[1].toLowerCase(),title:create[2],credit:create[3],date:create[4],url:create[5]});return added?'Private release prepared. Say “prepare '+create[1]+'” to review it.':'That release already exists; nothing overwritten.';}catch{return 'Check the release title, credit, YYYY-MM-DD date and canonical mix link. No release was saved.';}}
     const records=await load();
-    const match=input.match(/^(?:(prepare|preview|approve|send)\s+|release\s+)([a-z0-9-]+)(?:\s+(teaser|launch|groups))?(?:\s+(text)\s+([\s\S]+)|\s+([a-z0-9,-]+))?$/i);
+    const match=input.match(/^(?:(prepare|preview|approve|send|cancel)\s+|release\s+)([a-z0-9-]+)(?:\s+(teaser|launch|groups))?(?:\s+(text)\s+([\s\S]+)|\s+([a-z0-9,-]+))?$/i);
     if(!match) return 'Say “prepare guest48”, “preview guest48 teaser” or “release help”.';
     const [,verb,id,slot,edit,text,groupKeys]=match;
     const record=records.find(r=>r.id===id.toLowerCase());
@@ -92,6 +92,10 @@ export function createReleaseAssistant(directory, { groups=[], enabled=false, se
     if(action==='preview'||action==='prepare') {
       draft.preview=view.hash;await save(records);
       return `PRIVATE ${kind} preview — ${record.title}\n\nAudience: ${view.selected.map(g=>g.name).join(', ')||'none selected — group sending blocked'}\nAttachment: ${view.asset?view.asset.name:'none (text only)'}\n\n${draft.text}\n\nNothing sent. To approve exactly this version: approve ${record.id} ${kind}`;
+    }
+    if(action==='cancel') {
+      delete draft.approved;delete draft.preview;await save(records);
+      return 'Approval cancelled. Nothing new sent. Existing delivery records are preserved; messages already sent cannot be recalled here.';
     }
     if(action==='approve') {
       if(draft.preview!==view.hash) return 'Preview the current announcement first. Nothing approved or sent.';

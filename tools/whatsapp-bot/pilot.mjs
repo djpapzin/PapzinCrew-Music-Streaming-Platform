@@ -1,5 +1,5 @@
 import { privateAuth } from './auth.mjs';
-import { readFile } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import { createReleaseAssistant } from './release.mjs';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -31,6 +31,7 @@ const sock = makeWASocket({ auth: state, logger: pino({ level: 'silent' }),
 const releaseEnabled = process.env.WA_RELEASE_ASSISTANT === '1';
 const groupConfig = releaseEnabled ? process.env.WA_RELEASE_GROUPS_FILE : undefined;
 if(groupConfig && !path.isAbsolute(groupConfig)) throw new Error('Absolute approved groups file required');
+if(groupConfig && ((await stat(groupConfig)).mode & 0o077)) throw new Error('Approved groups file must be private');
 const releaseGroups = groupConfig ? JSON.parse(await readFile(groupConfig,'utf8')) : [];
 const releases = releaseEnabled ? createReleaseAssistant(process.env.WA_REQUEST_DIR, {
   groups: releaseGroups,

@@ -43,6 +43,7 @@ Set `WA_RELEASE_ASSISTANT=1` only after approval to enable the private workflow.
 - `prepare guest48` — see reviewed release details and missing assets.
 - `preview guest48 teaser` / `preview guest48 launch` — see exact text, attachment and selected recipients. The actual attachment is returned in the owner's private chat.
 - `approve guest48 teaser` — approve that exact preview, without sending it.
+- `cancel guest48 teaser` — revoke approval; it never recalls an already sent message.
 - `send guest48 teaser` — a separate explicit action. It is blocked in the private pilot.
 - `!crew release guest48 teaser text <new text>` — edit; prior approval becomes invalid.
 - Attach an MP4 video with caption `!crew release guest48 teaser`, or JPEG/PNG cover with caption `!crew release guest48 artwork`.
