@@ -17,7 +17,7 @@ it('saves an older same-site link and rejects links outside this site',()=>{
  fireEvent.submit(screen.getByRole('button',{name:'Save mix link'}).closest('form')!);
  expect(screen.getByRole('alert')).toHaveTextContent('Paste a mix link');
  expect(localStorage.getItem(UPLOAD_RECEIPTS_KEY)).toBeNull();
- fireEvent.change(screen.getByLabelText('Mix link'),{target:{value:window.location.origin+'/track/241'}});
+ fireEvent.change(screen.getByLabelText('Mix link'),{target:{value:window.location.origin+'/track/241?uploaded=bookmark'}});
  fireEvent.submit(screen.getByRole('button',{name:'Save mix link'}).closest('form')!);
  expect(screen.getByRole('link',{name:'Saved mix 241 — Open mix'})).toHaveAttribute('href','/track/241');
 });

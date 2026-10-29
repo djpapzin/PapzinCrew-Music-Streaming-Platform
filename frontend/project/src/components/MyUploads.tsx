@@ -15,7 +15,8 @@ export default function MyUploads() {
       try {
         const url = new URL(link);
         const match = url.pathname.match(/^\/track\/(\d+)\/?$/);
-        if (url.origin !== window.location.origin || !match || url.search || url.hash) throw new Error('Paste a mix link from this site, such as crew.djpapzin.com/track/241.');
+        const validQuery = [...url.searchParams].every(([key, value]) => key === 'uploaded' && ['saved', 'bookmark'].includes(value));
+        if (url.origin !== window.location.origin || !match || !validQuery || url.hash) throw new Error('Paste a mix link from this site, such as crew.djpapzin.com/track/241.');
         if (!saveUploadReceipt(match[1], `Saved mix ${match[1]}`)) throw new Error('This browser cannot save links. Please bookmark the mix instead.');
         setItems(readUploadReceipts()); setLink('');
       } catch (err) { setError(err instanceof Error ? err.message : 'Please check the mix link.'); }
