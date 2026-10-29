@@ -4,7 +4,7 @@ import path from 'node:path';
 
 export const PROFILE = Object.freeze({
   name: 'Crew Helper',
-  about: 'Papzin & Crew assistant 🤖 Mix links, website help & feedback. Beta. crew.djpapzin.com',
+  about: 'Papzin & Crew assistant. Mix links & site help.',
 });
 const PRIVATE_COMMAND = /^(owner|change|requests|request|submit|deploy|approve|learn)\b/i;
 const SENSITIVE = /(?:password|owner[ _-]?key|api[ _-]?key|access[ _-]?token|private[ _-]?key|-----BEGIN|gh[pousr]_[A-Za-z0-9]|github_pat_)/i;
