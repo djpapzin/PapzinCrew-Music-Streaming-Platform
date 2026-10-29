@@ -13,6 +13,7 @@ from app.services import audio_cache
 def cache(tmp_path, monkeypatch):
     monkeypatch.setenv('AUDIO_CACHE_DIR',str(tmp_path))
     monkeypatch.setenv('AUDIO_CACHE_SERVE_ENABLED','1')
+    monkeypatch.setenv('AUDIO_DOWNLOADS_ENABLED','1')
     monkeypatch.setenv('AUDIO_CACHE_EGRESS_BYTES','10000')
     data=b'0123456789'*100
     sha=hashlib.sha256(data).hexdigest(); source='https://s3.us-east-005.backblazeb2.com/bucket/mix.m4a'
@@ -123,3 +124,14 @@ def test_download_never_exposes_nonpublic_cached_files(cache,visibility):
     mix.allow_downloads='yes';mix.availability=visibility
     assert client.get(url+'?download=1').status_code==404
     assert not db.commit.called and not list(root.glob('egress-*.json'))
+
+
+def test_paused_downloads_block_old_links_but_keep_streaming(cache,monkeypatch):
+    client,url,root,mix,db,data,item=cache
+    mix.allow_downloads='yes'
+    monkeypatch.delenv('AUDIO_DOWNLOADS_ENABLED',raising=False)
+    for method in (client.get,client.head):
+        response=method(url+'?download=1')
+        assert response.status_code==503
+    assert not list(root.glob('egress-*.json')) and not db.commit.called
+    assert client.get(url).content==data

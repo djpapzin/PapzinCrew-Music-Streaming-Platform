@@ -24,6 +24,17 @@ app = FastAPI()
 app.include_router(router)
 client = TestClient(app)
 
+@pytest.fixture(autouse=True)
+def enabled_download_feature_for_legacy_download_tests(monkeypatch):
+    monkeypatch.setenv('AUDIO_DOWNLOADS_ENABLED','1')
+
+def test_paused_downloads_return_coming_soon_without_redirect(monkeypatch):
+    monkeypatch.delenv('AUDIO_DOWNLOADS_ENABLED',raising=False)
+    with patch('app.routers.tracks.get_db',return_value=MagicMock()) as db:
+        response=client.get('/tracks/1/download',follow_redirects=False)
+    assert response.status_code==503 and response.json()['detail']=='Downloads coming soon'
+    assert not db.return_value.query.called
+
 class TestTrackStreaming:
     """Test track streaming functionality."""
     
