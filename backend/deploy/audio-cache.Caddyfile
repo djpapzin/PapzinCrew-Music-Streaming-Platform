@@ -18,7 +18,26 @@ audio.djpapzin.com {
         path_regexp cached "^/tracks/[0-9]+/cached/[a-f0-9]{24}$"
         method GET HEAD
     }
+    # Optional intake route: owner approval is required before this config is
+    # activated. No DNS/firewall changes or admin API exposure are needed.
+    @intake {
+        path /intake/upload
+        method POST OPTIONS
+    }
     route {
+        handle @intake {
+            rewrite * /upload
+            request_body {
+                max_size 220200960
+            }
+            reverse_proxy 127.0.0.1:18882 {
+                transport http {
+                    read_timeout 30m
+                    write_timeout 30m
+                    response_header_timeout 30m
+                }
+            }
+        }
         reverse_proxy @cached 127.0.0.1:18882
         respond 404
     }

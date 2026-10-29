@@ -3,6 +3,8 @@ import { Upload, Image, Music, Tag, Globe, Download, Eye, Users, ChevronDown, Lo
 import { useNavigate, useLocation, useSearchParams, useParams } from 'react-router-dom';
 import { Song } from '../types/music';
 import { API_BASE as API_URL } from '../lib/api';
+import { uploadEndpoint, uploadFailureMessage } from '../lib/uploadTransport';
+import { prepareCover } from '../lib/coverUpload';
 import PaperclipInsightCard from './PaperclipInsightCard';
 const MAX_UPLOAD_SIZE_MB = 200;
 const MAX_UPLOAD_SIZE_BYTES = MAX_UPLOAD_SIZE_MB * 1024 * 1024;
@@ -84,6 +86,32 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [extractingMetadata, setExtractingMetadata] = useState(false);
   const [coverArt, setCoverArt] = useState<string | null>(null);
+  const [coverFile, setCoverFile] = useState<File | null>(null);
+  const [coverError, setCoverError] = useState('');
+  const [preparingCover, setPreparingCover] = useState(false);
+  const coverInputRef = useRef<HTMLInputElement>(null);
+  const manualCoverRef = useRef(false);
+  const coverRequestRef = useRef(0);
+  useEffect(() => () => { if (coverArt?.startsWith('blob:')) URL.revokeObjectURL(coverArt); }, [coverArt]);
+  const handleCoverChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = event.target.files?.[0];
+    event.target.value = '';
+    if (!selected) return;
+    const request = ++coverRequestRef.current;
+    const wasManual = manualCoverRef.current;
+    manualCoverRef.current = true;
+    setPreparingCover(true); setCoverError('');
+    try {
+      const prepared = await prepareCover(selected);
+      if (request !== coverRequestRef.current) return;
+      setCoverFile(prepared); setCoverArt(URL.createObjectURL(prepared));
+    } catch (error) {
+      if (request === coverRequestRef.current) {
+        manualCoverRef.current = wasManual;
+        setCoverError(error instanceof Error ? error.message : 'Please choose another image.');
+      }
+    } finally { if (request === coverRequestRef.current) setPreparingCover(false); }
+  };
   const [isPublishing, setIsPublishing] = useState(false);
   const [showCustomPrompt, setShowCustomPrompt] = useState(false);
   const [customPrompt, setCustomPrompt] = useState('');
@@ -203,6 +231,8 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
     // Set file immediately so the form stays responsive and Publish is available.
     setUploadedFile(file);
     setCoverArt(null);
+    setCoverFile(null); setCoverError(''); setPreparingCover(false);
+    manualCoverRef.current = false; coverRequestRef.current += 1;
     setFormData(prev => ({
       ...prev,
       title: fallbackMetadata.title || prev.title,
@@ -283,7 +313,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
         }));
         
         // Set cover art if available
-        if (metadata.cover_art) {
+        if (metadata.cover_art && !manualCoverRef.current) {
           setCoverArt(metadata.cover_art);
         }
         
@@ -576,6 +606,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
       
       // Add the audio file
       uploadFormData.append('file', uploadedFile);
+      if (coverFile) uploadFormData.append('cover_art', coverFile);
       
       // Add all form fields
       uploadFormData.append('title', formData.title);
@@ -760,7 +791,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
             console.error('Response text:', xhr.responseText);
             
             // Prefer server-provided message when available
-            const serverMsg = detail?.error || parsed?.error || detail?.message || xhr.statusText;
+            const serverMsg = uploadFailureMessage(xhr.status, parsed, xhr.statusText || '');
             const serverErrorCode = detail?.error_code || parsed?.error_code || null;
             setUploadStatus(prev => ({
               ...prev,
@@ -795,7 +826,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
         };
         
         console.log('[Upload] Opening XHR to /upload');
-        xhr.open('POST', `${API_URL}/upload`, true);
+        xhr.open('POST', uploadEndpoint(), true);
         // Set withCredentials to include cookies if needed
         xhr.withCredentials = false;
         
@@ -1088,7 +1119,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
                   <button
                     type="button"
                     onClick={(e) => { e.preventDefault(); e.stopPropagation(); console.log('[Upload] Upload Anyway clicked'); handlePublish(true); }}
-                    disabled={isPublishing}
+                    disabled={isPublishing || preparingCover}
                     className={`min-h-12 px-4 py-3 rounded-xl text-sm font-semibold transition-colors border inline-flex items-center justify-center space-x-2 ${isPublishing ? 'opacity-50 cursor-not-allowed bg-yellow-500/10 border-yellow-500/20 text-yellow-400/70' : 'bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-200 border-yellow-500/30 hover:border-yellow-500/50'}`}
                   >
                     <Upload className="w-4 h-4" />
@@ -1188,7 +1219,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
           {/* Track Image Upload */}
           <div className="bg-white/5 rounded-xl p-6 border border-white/10 space-y-4">
             <div className="flex items-start space-x-4">
-              <div className="w-24 h-24 bg-gray-700 rounded-lg border-2 border-dashed border-gray-600 flex items-center justify-center overflow-hidden">
+              <button type="button" onClick={() => coverInputRef.current?.click()} disabled={isPublishing || preparingCover} aria-label="Choose cover image" className="w-24 h-24 shrink-0 bg-gray-700 rounded-lg border-2 border-dashed border-gray-600 flex items-center justify-center overflow-hidden focus:ring-2 focus:ring-purple-400">
                 {coverArt ? (
                   <img 
                     src={coverArt} 
@@ -1198,22 +1229,28 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
                 ) : (
                   <Image className="w-8 h-8 text-gray-400" />
                 )}
-              </div>
+              </button>
               <div>
                 <h3 className="text-white font-semibold mb-2">
-                  {coverArt ? 'Track image' : 'Upload track image'}
+                  {coverArt ? 'Track image' : 'Add cover image (optional)'}
                 </h3>
                 <p className="text-gray-400 text-sm">
                   {coverArt 
-                    ? 'Cover art extracted from audio file metadata' 
+                    ? (coverFile ? 'Your selected cover image' : 'Cover art extracted from audio file metadata')
                     : 'Image resolution should be greater than 150 X 150px'
                   }
                 </p>
                 <p className="text-gray-500 text-xs mt-1">
-                  {coverArt ? '(Auto-extracted)' : '(Recommended)'}
+                  {coverArt ? (coverFile ? coverFile.name : '(Auto-extracted)') : 'JPEG, PNG or WebP · up to 5 MB'}
                 </p>
               </div>
             </div>
+
+            <input ref={coverInputRef} id="upload-cover-image" type="file" accept="image/jpeg,image/png,image/webp" onChange={handleCoverChange} className="sr-only" aria-label="Select cover image file" />
+            <button type="button" onClick={() => coverInputRef.current?.click()} disabled={isPublishing || preparingCover} className="min-h-12 px-5 py-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-semibold disabled:opacity-50" aria-controls="upload-cover-image">
+              {preparingCover ? 'Preparing cover…' : coverArt ? 'Change cover image' : 'Choose cover image'}
+            </button>
+            {coverError && <p role="alert" className="text-red-300 text-sm">{coverError}</p>}
 
             {!coverArt && !showCustomPrompt && (
               <div className="pt-2">
@@ -1652,8 +1689,8 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
             <button
               type="button"
               onClick={() => handlePublish()}
-              disabled={isPublishing || !uploadedFile}
-              aria-disabled={isPublishing || !uploadedFile}
+              disabled={isPublishing || preparingCover || !uploadedFile}
+              aria-disabled={isPublishing || preparingCover || !uploadedFile}
               className={`w-full sm:w-auto min-h-12 px-8 py-3 rounded-xl font-semibold transition-all duration-200 inline-flex items-center justify-center space-x-2 ${
                 isPublishing || !uploadedFile
                   ? 'bg-gray-600 cursor-not-allowed'
