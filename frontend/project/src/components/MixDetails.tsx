@@ -1,6 +1,6 @@
 import { playbackUrl, downloadUrl } from '../lib/playbackUrl';
 import { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { Play, Pause, Headphones, ListMusic, Download } from 'lucide-react';
 import { Song } from '../types/music';
 import { getMixSeries, sortCollectionTracks } from '../lib/catalog';
@@ -16,6 +16,7 @@ interface Props {
 }
 export default function MixDetails({ songs, loading, error, currentSong, isPlaying, onPlaySong, onTogglePlay }: Props) {
   const { id } = useParams();
+  const [searchParams] = useSearchParams();
   const catalogSong = songs.find(item => item.id === id);
   const [directSong, setDirectSong] = useState<Song | null>(null);
   const [downloadNotice, setDownloadNotice] = useState(false);
@@ -61,6 +62,7 @@ export default function MixDetails({ songs, loading, error, currentSong, isPlayi
   const playing = active && isPlaying;
   const unavailable = song.playable === false || !song.audioUrl;
   return <article className="max-w-5xl mx-auto space-y-8">
+    {searchParams.has('uploaded') && <section role="status" className="rounded-xl border border-purple-400/40 bg-purple-950/30 p-4 space-y-2"><h2 className="font-semibold">Upload received — saved for review</h2><p>Your mix starts unlisted, so it won’t appear in public search until DJ Papzin approves it.</p><p>{searchParams.get('uploaded') === 'saved' ? 'Find this link again in My uploads on this browser.' : 'This browser couldn’t save your link. Bookmark this page so you can find it again.'} No account needed.</p><Link to="/upload#my-uploads" className="text-purple-200 underline">My uploads</Link></section>}
     <Link to="/search" className="inline-flex min-h-11 items-center text-purple-300">← Browse mixes</Link>
     <section className="rounded-3xl border border-purple-400/20 bg-gradient-to-br from-purple-900/50 via-gray-900 to-black p-5 sm:p-8 flex flex-col sm:flex-row gap-6">
       <img src={safeArtworkUrl(song.imageUrl)} alt={`${song.title} cover`} onError={e => { if (e.currentTarget.src !== DEFAULT_ARTWORK_URL) e.currentTarget.src = DEFAULT_ARTWORK_URL; }} className="w-48 self-center sm:self-start sm:w-56 aspect-square object-cover rounded-2xl shadow-xl" />
