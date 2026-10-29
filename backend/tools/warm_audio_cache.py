@@ -8,6 +8,7 @@ import json
 import os
 import shutil
 import sys
+from botocore.exceptions import ClientError
 from datetime import datetime, timezone
 from pathlib import Path
 from app.db.database import SessionLocal
@@ -39,7 +40,15 @@ def main():
             if entry(ident,source,visibility): continue
             key=source_key(source,storage)
             if key is None: continue
-            head=storage.s3.head_object(Bucket=storage.bucket,Key=key)
+            try:
+                head=storage.s3.head_object(Bucket=storage.bucket,Key=key)
+            except ClientError as error:
+                if error.response.get('ResponseMetadata',{}).get('HTTPStatusCode') == 404 or error.response.get('Error',{}).get('Code') in ('404','NoSuchKey','NotFound'):
+                    print(json.dumps({'mix':ident,'warming_skipped':True,'reason':'source_missing'}),flush=True)
+                    continue
+                # Authentication, quota and other service failures still stop
+                # the run; do not retry transfers or relax the free allowance.
+                raise
             size=head['ContentLength']
             # Single-part MD5 ETags are required for a byte-exact seed.
             if '-' in head['ETag'] or not size or size>budget-used: continue

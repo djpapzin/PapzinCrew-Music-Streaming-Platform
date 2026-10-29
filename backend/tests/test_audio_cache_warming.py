@@ -2,6 +2,7 @@ import io
 import json
 from types import SimpleNamespace
 from unittest.mock import MagicMock
+from botocore.exceptions import ClientError
 import pytest
 from tools import warm_audio_cache as warm
 
@@ -55,6 +56,24 @@ def test_nonpublic_never_downloaded_even_if_selected(job):
         mix.availability='unlisted'
     warm.main()
     assert not s3.head_object.called and not s3.get_object.called
+
+
+def test_missing_source_is_skipped_without_consuming_download_budget(job):
+    root,s3,seed,db=job
+    s3.head_object.side_effect=[ClientError({'Error':{'Code':'404'},'ResponseMetadata':{'HTTPStatusCode':404}},'HeadObject'),{'ContentLength':6,'ETag':'"abcdef"'}]
+    warm.main()
+    assert s3.head_object.call_count==2 and s3.get_object.call_count==1
+    assert s3.get_object.call_args.kwargs['Key']=='2'
+    assert json.loads(next(root.glob('fill-*.json')).read_text())['reserved_bytes']==6
+
+
+@pytest.mark.parametrize('code,status',[('AccessDenied',403),('TooManyRequests',429),('InternalError',500)])
+def test_service_and_quota_failures_still_stop_before_downloading(job,code,status):
+    root,s3,seed,db=job
+    s3.head_object.side_effect=ClientError({'Error':{'Code':code},'ResponseMetadata':{'HTTPStatusCode':status}},'HeadObject')
+    with pytest.raises(ClientError): warm.main()
+    assert s3.head_object.call_count==1 and not s3.get_object.called
+    assert not list(root.glob('fill-*.json'))
 
 
 @pytest.mark.parametrize('url,expected', [
