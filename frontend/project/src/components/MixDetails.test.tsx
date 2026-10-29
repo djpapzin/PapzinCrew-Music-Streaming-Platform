@@ -30,3 +30,24 @@ describe('Direct mix links', () => {
   await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Mix not found.'));
  });
 });
+
+
+it('offers a download on a permitted cached public mix without requiring sign in',async()=>{
+ const cached_audio_url='https://audio.djpapzin.com/tracks/236/cached/abcdefabcdefabcdefabcdef';
+ vi.stubGlobal('fetch',vi.fn().mockResolvedValue({ok:true,json:async()=>({...mix,availability:'public',allow_downloads:'yes',cached_audio_url})}));
+ show();
+ expect(await screen.findByRole('link',{name:'Download mix'})).toHaveAttribute('href',cached_audio_url+'?download=1');
+ expect(screen.getByText(/No account needed/)).toBeInTheDocument();
+});
+it('keeps an allowed download unavailable until the cache is prepared',async()=>{
+ vi.stubGlobal('fetch',vi.fn().mockResolvedValue({ok:true,json:async()=>({...mix,availability:'public',allow_downloads:'yes'})}));
+ show();
+ expect(await screen.findByText(/Download is being prepared/)).toBeInTheDocument();
+ expect(screen.queryByRole('link',{name:'Download mix'})).not.toBeInTheDocument();
+});
+it('never offers downloads for an unlisted upload even when downloads were allowed',async()=>{
+ vi.stubGlobal('fetch',vi.fn().mockResolvedValue({ok:true,json:async()=>({...mix,allow_downloads:'yes',cached_audio_url:'https://audio.djpapzin.com/tracks/236/cached/abcdefabcdefabcdefabcdef'})}));
+ show();await screen.findByRole('heading',{name:'Unlisted test'});
+ expect(screen.queryByRole('link',{name:'Download mix'})).not.toBeInTheDocument();
+ expect(screen.queryByText(/Download is being prepared/)).not.toBeInTheDocument();
+});

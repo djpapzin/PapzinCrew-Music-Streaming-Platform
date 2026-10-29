@@ -39,11 +39,14 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--mix-id', required=True, type=int)
     parser.add_argument('--file', required=True, type=Path)
+    parser.add_argument('--reviewed-unlisted', action='store_true',
+                        help='Prepare a checked unlisted mix before release; does not publish or expose it')
     args = parser.parse_args()
     with SessionLocal() as db:
         mix = db.query(Mix).filter(Mix.id == args.mix_id).first()
-        if not mix or (mix.availability or 'public') != 'public':
-            raise SystemExit('Only current public mixes may be cached')
+        if not mix or ((mix.availability or 'public') != 'public' and
+                       not (args.reviewed_unlisted and mix.availability == 'unlisted')):
+            raise SystemExit('Only public mixes or explicitly reviewed unlisted mixes may be cached')
         source = mix.file_path
     storage = B2Storage()
     key = source_key(source, storage)

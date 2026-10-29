@@ -1,7 +1,7 @@
 import { useLocation } from 'react-router-dom';
 import { recordVisit } from './lib/anonymousUsage';
 import { fetchCatalog } from './lib/fetchCatalog';
-import { playbackUrl } from './lib/playbackUrl';
+import { playbackUrl, downloadUrl } from './lib/playbackUrl';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
@@ -81,6 +81,8 @@ function App() {
         duration: mix.duration_seconds || 0,
         imageUrl: safeArtworkUrl(originalArtworkForTrack(mix.id, mix.title) ?? (mix.cover_art_url?.trim() ? toAbsoluteApiUrl(mix.cover_art_url) : generatedArtworkForTrack(mix.id, mix.title))),
         audioUrl: playbackUrl(mix),
+        downloadUrl: downloadUrl(mix),
+        downloadAllowed: mix.allow_downloads === 'yes',
         genre: mix.genre || '',
         year: mix.year || 0,
         playable: Boolean(mix.file_path),
