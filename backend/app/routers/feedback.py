@@ -5,6 +5,7 @@ import os
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from uuid import UUID
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field, ValidationError, field_validator
@@ -19,7 +20,8 @@ def directory():
 
 class Feedback(BaseModel):
     id: UUID
-    message: str = Field(min_length=10, max_length=3000)
+    message: str = Field(min_length=3, max_length=3000)
+    category: Literal['problem', 'idea', 'improvement', 'removal', 'other'] = 'problem'
     name: str = Field(default='', max_length=80)
     page: str = Field(default='/', max_length=250)
     device: str = Field(default='unknown', pattern='^(mobile|desktop|unknown)$')
@@ -28,8 +30,8 @@ class Feedback(BaseModel):
     @field_validator('message')
     @classmethod
     def trim_message(cls, value):
-        if len(value.strip()) < 10:
-            raise ValueError('Please describe the problem in at least 10 characters.')
+        if len(value.strip()) < 3:
+            raise ValueError('Please add a message with at least 3 characters.')
         return value.strip()
 
     @field_validator('page')
@@ -52,7 +54,7 @@ async def submit_feedback(request: Request):
     try:
         report = Feedback.model_validate_json(bytes(raw))
     except ValidationError:
-        raise HTTPException(422, 'Add a problem description (10–3000 characters); name is optional.')
+        raise HTTPException(422, 'Add a message (3–3000 characters); name is optional.')
     if report.website:
         return {'id': str(report.id)}
     root = directory(); root.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -66,10 +68,11 @@ async def submit_feedback(request: Request):
         if len(files) >= 1000:
             raise HTTPException(503, 'Feedback inbox is full. Please try later.')
         recent = sum(datetime.fromisoformat(json.loads(file.read_text())['created_at']) > now - timedelta(hours=1) for file in files)
-        if recent >= 30:
+        if recent >= 120:
             raise HTTPException(429, 'Too many reports right now. Please try again later.')
         data = report.model_dump(mode='json', exclude={'website'})
         data['created_at'] = now.isoformat()
+        data['status'] = 'new'
         temporary = target.with_suffix('.tmp')
         with temporary.open('w') as file:
             os.chmod(temporary, 0o600)
@@ -87,3 +90,28 @@ def list_feedback(_: None = Depends(require_admin_api_key)):
         fcntl.flock(lock, fcntl.LOCK_SH)
         reports = [json.loads(file.read_text()) for file in root.glob('*.json')]
     return {'reports': sorted(reports, key=lambda report: report['created_at'], reverse=True)[:100]}
+
+
+class FeedbackStatus(BaseModel):
+    status: Literal['new', 'reviewed', 'done']
+
+
+@router.patch('/admin/feedback/{report_id}')
+def update_feedback(report_id: UUID, change: FeedbackStatus, _: None = Depends(require_admin_api_key)):
+    root = directory()
+    if not root.exists():
+        raise HTTPException(404, 'Feedback not found')
+    with (root / 'inbox.lock').open('a') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        target = root / f'{report_id}.json'
+        if not target.exists():
+            raise HTTPException(404, 'Feedback not found')
+        data = json.loads(target.read_text())
+        data['status'] = change.status
+        data['updated_at'] = datetime.now(timezone.utc).isoformat()
+        temporary = target.with_suffix('.tmp')
+        with temporary.open('w') as file:
+            os.chmod(temporary, 0o600)
+            json.dump(data, file); file.flush(); os.fsync(file.fileno())
+        temporary.replace(target)
+    return {'report': data}
