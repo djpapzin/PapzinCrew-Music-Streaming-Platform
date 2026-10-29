@@ -37,6 +37,12 @@ def answer_question(question, mixes=(), downloads_enabled=False):
         return reply('help', 'I’m Crew Helper, Papzin & Crew’s beta assistant. Try a mix name, music won’t play, downloads, uploading a mix, or feedback. In WhatsApp, start each question with !crew. Only DJ Papzin has owner commands; website changes need review.', [('Browse mixes', SITE+'/search')])
     if re.search(r'who are you|your name|are you.*bot', text):
         return reply('identity', 'I’m Crew Helper, Papzin & Crew’s automated assistant. I help with public DJ mixes and using the website. DJ Papzin owns the site and handles approvals. I’ll say when I cannot confirm something.')
+    if re.search(r'full player|minimi[sz]|collapse|swipe|keep.*brows|next mix', text):
+        return reply('mobile_player', 'On mobile, tapping Play on a mix opens the full player. Collapse it or swipe down to keep browsing while music plays. Resuming or moving to the next mix should not reopen it. If this behaves differently, tap Feedback → Something broke and include your phone/browser.', [('Browse mixes', SITE+'/search')])
+    if re.search(r'track.?list|identify.*(song|track)|what.*(song|track).*mix', text):
+        return reply('tracklists', 'Open the mix page to check its DJ-supplied tracklist. Automatic matches, where available, are private suggestions until reviewed; they do not overwrite existing tracklists. If a tracklist is missing, ask DJ Papzin or send Feedback with the mix name.', [('Browse mixes', SITE+'/search')])
+    if re.search(r'analytics|tracking|privacy|listening time|visitor stats', text):
+        return reply('privacy', 'The site uses anonymous visitor and playback statistics to spot problems and understand listening. Stats and feedback are visible only to DJ Papzin in admin. You do not need a listener account. Do not include sensitive information in feedback.')
     if re.search(r'\b(password|owner key|api key|token|private messages|admin key)\b', text):
         return reply('private_access', 'I can help with public mixes and using the website. Never share passwords or owner keys in the group. Ask DJ Papzin privately about owner access.', needs_owner=True)
     if re.search(r'\b(download|downloads|offline|save.*(music|mix|song))\b', text):

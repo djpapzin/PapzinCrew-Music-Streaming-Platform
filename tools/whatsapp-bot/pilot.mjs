@@ -1,7 +1,8 @@
+import { privateAuth } from './auth.mjs';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import makeWASocket, { useMultiFileAuthState } from '@whiskeysockets/baileys';
+import makeWASocket from '@whiskeysockets/baileys';
 import pino from 'pino';
 import { createPolicy, renderReply } from './policy.mjs';
 import { createOwnerCommands } from './owner.mjs';
@@ -13,7 +14,7 @@ const python = process.env.WA_PYTHON;
 if (![authDir, catalog, python].every(p => p && path.isAbsolute(p))) throw new Error('Absolute auth, catalog and Python paths required.');
 const decide = createPolicy({ tester: process.env.WA_TESTER_PHONE, owner: process.env.WA_OWNER_PHONE, enabled: process.env.WA_ENABLE_TEST_REPLIES === '1' });
 const ownerCommands = createOwnerCommands(process.env.WA_REQUEST_DIR);
-const { state, saveCreds } = await useMultiFileAuthState(authDir);
+const { state, saveCreds } = await privateAuth(authDir);
 if (!state.creds.registered) throw new Error('Pair the bot number first.');
 const ownPhone = state.creds.me?.id?.split(':')[0]?.split('@')[0];
 if (!/^\d{10,15}$/.test(process.env.WA_BOT_PHONE ?? '') || ownPhone !== process.env.WA_BOT_PHONE) throw new Error('Linked account does not match the configured bot number.');
@@ -57,5 +58,5 @@ sock.ev.on('messages.upsert', ({ type, messages }) => {
   }
 });
 setTimeout(() => { console.log('30-minute private test ended.'); sock.end(); process.exit(0); }, 30 * 60_000);
-process.on('SIGTERM', () => { sock.end(); process.exit(0); });
-process.on('SIGINT', () => { sock.end(); process.exit(0); });
+process.on('SIGTERM', async () => { await saveCreds(); sock.end(); process.exit(0); });
+process.on('SIGINT', async () => { await saveCreds(); sock.end(); process.exit(0); });

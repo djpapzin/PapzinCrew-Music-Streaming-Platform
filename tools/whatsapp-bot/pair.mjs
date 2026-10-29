@@ -1,7 +1,8 @@
+import { privateAuth } from './auth.mjs';
 // Pairing only: intentionally has no message handlers, sends or group actions.
 import { mkdir, chmod } from 'node:fs/promises';
 import path from 'node:path';
-import makeWASocket, { useMultiFileAuthState, DisconnectReason } from '@whiskeysockets/baileys';
+import makeWASocket, { DisconnectReason } from '@whiskeysockets/baileys';
 import pino from 'pino';
 
 process.umask(0o077);
@@ -16,7 +17,7 @@ let pairingRequested = false;
 let restarts = 0;
 const deadline = setTimeout(() => { console.log('Pairing window ended; rerun when the phone is ready.'); process.exit(0); }, 5 * 60_000);
 async function connect() {
-  const { state, saveCreds } = await useMultiFileAuthState(directory);
+  const { state, saveCreds } = await privateAuth(directory);
   const sock = makeWASocket({
     auth: state,
     logger: pino({ level: 'silent' }),

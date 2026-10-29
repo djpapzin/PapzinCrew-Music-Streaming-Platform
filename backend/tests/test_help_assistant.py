@@ -50,3 +50,8 @@ def test_profile_and_menu_are_public_help_not_owner_access():
     assert answer_question('help',MIXES)['intent']=='help'
     assert 'Crew Helper' in answer_question('Who are you?',MIXES)['answer']
     assert 'owner commands' in answer_question('help',MIXES)['answer']
+
+
+@pytest.mark.parametrize('q,intent',[('Can I collapse the full player?','mobile_player'),('Where is the tracklist?','tracklists'),('Who can see analytics?','privacy')])
+def test_reviewed_website_facts(q,intent):
+    assert answer_question(q,MIXES)['intent']==intent
