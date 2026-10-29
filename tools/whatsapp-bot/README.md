@@ -17,3 +17,7 @@ Only fresh `!crew` commands from that tester in one-to-one chat are answered. Ex
 The catalog file is a read-only snapshot of public API records, reduced to public ID, title, artist and created date. Do not put a database export or unlisted/private records there. Only canonical site links can be sent; source-storage URLs are excluded. Refresh the snapshot before a new test. Existing tracklists, music, feedback, caps and website deployments are untouched.
 
 The tester number must be supplied by DJ Papzin before replies are enabled. Do not choose a number from contacts or message anyone to recruit testers. No community rollout is included in this pilot.
+
+## Owner profile and requests
+
+See deploy/WHATSAPP_HELPER.md for the profile, reviewed facts and role boundaries. Set WA_OWNER_PHONE explicitly to the verified owner and WA_REQUEST_DIR to an absolute private directory. Without the matching owner number, owner commands are denied. Only private change drafts are stored; there is no GitHub posting, Codex messaging or code execution. The pilot remains restricted to the configured tester and blocks every group. Run `npm test` for listener and owner access checks.

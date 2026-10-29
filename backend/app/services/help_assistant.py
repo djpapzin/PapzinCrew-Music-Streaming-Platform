@@ -5,7 +5,6 @@ A WhatsApp transport must be separately approved and verified before connecting.
 """
 import re
 import unicodedata
-from urllib.parse import urlencode
 
 SITE = 'https://crew.djpapzin.com'
 STOP = set('a an and are can could dj do find for from give hello hi how i is it link listen listening me mix mixes music of on play please pls send share song songs stream the there this to want where with you your'.split())
@@ -34,6 +33,10 @@ def answer_question(question, mixes=(), downloads_enabled=False):
         raise ValueError('Add a question with 1–1500 characters.')
     text = normalized(question)
     records = public_mixes(mixes)
+    if re.fullmatch(r'\s*(help|menu|hello|hi)\s*', text):
+        return reply('help', 'I’m Crew Helper, Papzin & Crew’s beta assistant. Try a mix name, music won’t play, downloads, uploading a mix, or feedback. In WhatsApp, start each question with !crew. Only DJ Papzin has owner commands; website changes need review.', [('Browse mixes', SITE+'/search')])
+    if re.search(r'who are you|your name|are you.*bot', text):
+        return reply('identity', 'I’m Crew Helper, Papzin & Crew’s automated assistant. I help with public DJ mixes and using the website. DJ Papzin owns the site and handles approvals. I’ll say when I cannot confirm something.')
     if re.search(r'\b(password|owner key|api key|token|private messages|admin key)\b', text):
         return reply('private_access', 'I can help with public mixes and using the website. Never share passwords or owner keys in the group. Ask DJ Papzin privately about owner access.', needs_owner=True)
     if re.search(r'\b(download|downloads|offline|save.*(music|mix|song))\b', text):

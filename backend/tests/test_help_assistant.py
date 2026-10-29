@@ -44,3 +44,9 @@ def test_bounded_input(q):
 def test_compact_mix_number_and_website_explanation():
     assert answer_question('TPW12 link',MIXES)['links'][0]['url'].endswith('/12')
     assert answer_question('What is Papzin & Crew?',MIXES)['intent']=='about'
+
+
+def test_profile_and_menu_are_public_help_not_owner_access():
+    assert answer_question('help',MIXES)['intent']=='help'
+    assert 'Crew Helper' in answer_question('Who are you?',MIXES)['answer']
+    assert 'owner commands' in answer_question('help',MIXES)['answer']
