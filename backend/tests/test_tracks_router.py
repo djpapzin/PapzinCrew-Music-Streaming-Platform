@@ -237,6 +237,7 @@ class TestTrackMetadata:
         track.album = "Test Album"
         track.year = 2024
         track.bpm = 128
+        track.cover_art_url = "https://example.com/guest-cover.jpg"
         track.availability = "public"
         track.artist = MagicMock()
         track.artist.name = "Test Artist"
@@ -256,6 +257,14 @@ class TestTrackMetadata:
         assert data["quality_kbps"] == 320
         assert data["genre"] == "Electronic"
         assert data["artist"]["name"] == "Test Artist"
+
+    def test_unlisted_upload_retains_cover_on_direct_page(self, mock_db_session, detailed_track):
+        detailed_track.availability = "unlisted"
+        mock_db_session.query().filter().first.return_value = detailed_track
+        response = client.get("/tracks/1")
+        assert response.status_code == 200
+        assert response.json()["availability"] == "unlisted"
+        assert response.json()["cover_art_url"] == detailed_track.cover_art_url
     
     def test_get_track_metadata_not_found(self, mock_db_session):
         """Test metadata retrieval for non-existent track."""
