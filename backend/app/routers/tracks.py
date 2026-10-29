@@ -221,6 +221,7 @@ def read_track(track_id: int, db: Session = Depends(_get_db_dyn), current_user: 
         "allow_downloads": safe_get(db_track, 'allow_downloads', 'no'),
         "cached_audio_url": cached_audio_url(db_track.id, db_track.file_path, db_track.availability),
         "file_path": safe_get(db_track, 'file_path'),
+        "cover_art_url": safe_get(db_track, 'cover_art_url'),
         "artist": {"id": artist_id, "name": artist_name} if (artist_id is not None or artist_name is not None) else None,
     }
 
