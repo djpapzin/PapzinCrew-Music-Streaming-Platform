@@ -79,14 +79,14 @@ sock.ev.on('messages.upsert', ({ type, messages }) => {
       try {
         let releaseReply=null;
         if(releases && decision.attachment) {
-          releaseReply=await releases.attach(decision,async limit=>{
+          try { releaseReply=await releases.attach(decision,async limit=>{
             const directPath=decision.mediaMessage?.directPath;
             if(typeof directPath!=='string'||!directPath.startsWith('/')||directPath.startsWith('//')||/[\\\r\n]/.test(directPath)) throw new Error('Invalid WhatsApp media path');
             const stream=await downloadContentFromMessage({...decision.mediaMessage,url:undefined},decision.media,{host:'mmg.whatsapp.net',options:{signal:AbortSignal.timeout(60000),redirect:'error'}});
             let size=0;const chunks=[];
             for await (const chunk of stream) {size+=chunk.length;if(size>limit) {stream.destroy();throw new Error('Media too large');}chunks.push(chunk);}
             return Buffer.concat(chunks);
-          });
+          }); } catch { releaseReply="I couldn’t save that attachment. Nothing sent. Please resend an MP4 teaser under 30 MB or JPEG/PNG artwork under 5 MB."; }
         } else if(releases) releaseReply=await releases.handle(decision);
         const text = releaseReply ?? (decision.command ? await ownerCommands(decision) : await listenerChat(decision)) ?? await answer(decision.question);
         await sock.sendMessage(decision.jid, { text, linkPreview: null });
