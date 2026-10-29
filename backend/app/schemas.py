@@ -125,10 +125,10 @@ class AuthRegisterRequest(BaseModel):
     @classmethod
     def validate_username(cls, value: str) -> str:
         username = value.strip().lower()
-        if not username:
-            raise ValueError("username must not be empty")
-        if not all(ch.isalnum() or ch in {"_", "."} for ch in username):
-            raise ValueError("username may only contain letters, numbers, underscores, and dots")
+        if len(username) < 3:
+            raise ValueError("username must contain at least 3 characters")
+        if not all(ch.isalnum() or ch in {"_", ".", "-", " "} for ch in username):
+            raise ValueError("username may only contain letters, numbers, spaces, hyphens, underscores, and dots")
         return username
 
     @field_validator("password")
