@@ -23,6 +23,6 @@ it('keeps registration disabled while sign-in is pending and clears old errors o
 it('closes feedback on navigation and preserves unsent draft with updated page context',()=>{
  HTMLDialogElement.prototype.showModal=function(){this.setAttribute('open','');};HTMLDialogElement.prototype.close=function(){this.removeAttribute('open');};
  let navigate!:(to:number)=>void;function Harness(){navigate=useNavigate();return <FeedbackButton/>;}
- render(<MemoryRouter initialEntries={['/','/account']} initialIndex={1}><Harness/></MemoryRouter>);fireEvent.click(screen.getByRole('button',{name:'Report a problem'}));fireEvent.change(screen.getByLabelText('What happened?'),{target:{value:'An unsent test message'}});
- act(()=>navigate(-1));expect(document.querySelector('dialog')?.hasAttribute('open')).toBe(false);fireEvent.click(screen.getByRole('button',{name:'Report a problem'}));expect((screen.getByLabelText('What happened?') as HTMLTextAreaElement).value).toBe('An unsent test message');expect(screen.getByText(/Page: \/\./)).toBeTruthy();
+ render(<MemoryRouter initialEntries={['/','/account']} initialIndex={1}><Harness/></MemoryRouter>);fireEvent.click(screen.getByRole('button',{name:'Send feedback'}));fireEvent.change(screen.getByLabelText('Your message'),{target:{value:'An unsent test message'}});
+ act(()=>navigate(-1));expect(document.querySelector('dialog')?.hasAttribute('open')).toBe(false);fireEvent.click(screen.getByRole('button',{name:'Send feedback'}));expect((screen.getByLabelText('Your message') as HTMLTextAreaElement).value).toBe('An unsent test message');expect(screen.getByText(/Page: \/\./)).toBeTruthy();
 });
