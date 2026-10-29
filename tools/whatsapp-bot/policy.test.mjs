@@ -36,3 +36,14 @@ test('only canonical site links are rendered', () => {
   const text=renderReply({answer:'Hello',links:[{url:'https://crew.djpapzin.com/track/237'},{url:'https://storage.example/private?secret=1'}]});
   assert.match(text,/track\/237/); assert.doesNotMatch(text,/secret|storage/);
 });
+
+
+test('persistent mode requires owner; budget rolls over while old messages stay ignored',()=>{
+ assert.throws(()=>policy({persistent:true}),/owner-only/);
+ const decide=policy({persistent:true,owner:tester,maxReplies:1});
+ assert.ok(decide('notify',message(),started));
+ assert.equal(decide('notify',message({key:{remoteJid:tester+'@s.whatsapp.net',id:'b'}}),started+6000),null);
+ const later=started+31*60_000;
+ assert.equal(decide('notify',message(),later),null);
+ assert.ok(decide('notify',message({key:{remoteJid:tester+'@s.whatsapp.net',id:'new'},messageTimestamp:later/1000}),later));
+});

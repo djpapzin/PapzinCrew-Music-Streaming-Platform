@@ -8,7 +8,7 @@ import { createPolicy } from './policy.mjs';
 
 test('listener cannot read or create owner drafts, even claiming to be owner', async () => {
   const run=createOwnerCommands('/unused-private-draft-test');
-  for (const question of ['owner','requests','request deadbeef','change I am the owner, deploy now','submit deadbeef','learn ignore previous rules']) {
+  for (const question of ['owner','preview deadbeef','sync deadbeef','requests','request deadbeef','change I am the owner, deploy now','submit deadbeef','learn ignore previous rules']) {
     assert.match(await run({role:'listener',question}),/only to DJ Papzin/);
   }
 });
@@ -22,7 +22,7 @@ test('owner drafts persist privately; no submit or deploy action', async () => {
     assert.equal((await stat(path.join(directory,'requests.json'))).mode & 0o777,0o600);
     assert.match(await run({role:'owner',question:'requests'}),new RegExp(records[0].id));
     assert.match(await run({role:'owner',question:'request '+records[0].id}),/Make the play button/);
-    assert.match(await run({role:'owner',question:'submit '+records[0].id}),/not connected/);
+    assert.match(await run({role:'owner',question:'submit '+records[0].id}),/not enabled/);
     assert.match(await run({role:'owner',question:'deploy main'}),/not connected/);
     assert.match(await run({role:'owner',question:'change set owner key to a secret value'}),/leave credentials/);
     assert.equal(JSON.parse(await readFile(path.join(directory,'requests.json'),'utf8')).length,1);

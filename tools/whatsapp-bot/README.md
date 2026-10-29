@@ -21,3 +21,14 @@ The tester number must be supplied by DJ Papzin before replies are enabled. Do n
 ## Owner profile and requests
 
 See deploy/WHATSAPP_HELPER.md for the profile, reviewed facts and role boundaries. Set WA_OWNER_PHONE explicitly to the verified owner and WA_REQUEST_DIR to an absolute private directory. Without the matching owner number, owner commands are denied. Only private change drafts are stored; there is no GitHub posting, Codex messaging or code execution. The pilot remains restricted to the configured tester and blocks every group. Run `npm test` for listener and owner access checks.
+
+## GitHub change requests
+
+1. `!crew change <what should change and why>` saves a private draft.
+2. `!crew preview <ID>` shows the exact issue title/body and PUBLIC repository destination.
+3. `!crew submit <ID> CONFIRM` posts that preview and returns the issue link.
+4. `!crew request <ID>` shows recorded status; `!crew sync <ID>` reconciles an uncertain submission without creating another issue.
+
+Only the verified owner can use these commands. The adapter runs fixed `gh api` issue operations through the existing VPS account, with arguments passed directly (no shell interpolation). It cannot push code, dispatch a coding workflow, merge or deploy. Issues instruct that work belongs on dev and main requires DJ Papzin’s explicit approval. Creating an issue does not implement it. Repository visibility is public; do not submit secrets/private details. No paid models or coding agents are invoked.
+
+For an ongoing owner service, use deploy/papzincrew-whatsapp-owner.service with a private environment file. Persistent mode refuses to start unless the tester and owner numbers match. It keeps groups blocked and limits replies to 20 per 30 minutes. The initial community rollout remains out of scope.

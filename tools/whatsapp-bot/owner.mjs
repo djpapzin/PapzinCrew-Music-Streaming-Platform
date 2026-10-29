@@ -1,3 +1,4 @@
+import { issuePreview, validIssueUrl, REPOSITORY } from './github.mjs';
 import { mkdir, readFile, writeFile, rename, chmod } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
@@ -6,10 +7,10 @@ export const PROFILE = Object.freeze({
   name: 'Crew Helper',
   about: 'Papzin & Crew assistant. Mix links & site help.',
 });
-const PRIVATE_COMMAND = /^(owner|change|requests|request|submit|deploy|approve|learn)\b/i;
+const PRIVATE_COMMAND = /^(owner|change|requests|request|preview|submit|sync|deploy|approve|learn)\b/i;
 const SENSITIVE = /(?:password|owner[ _-]?key|api[ _-]?key|access[ _-]?token|private[ _-]?key|-----BEGIN|gh[pousr]_[A-Za-z0-9]|github_pat_)/i;
 
-export function createOwnerCommands(directory) {
+export function createOwnerCommands(directory, github = null) {
   if (!directory || !path.isAbsolute(directory)) throw new Error('Absolute private request directory required.');
   async function load() {
     await mkdir(directory, { recursive: true, mode: 0o700 });
@@ -25,7 +26,7 @@ export function createOwnerCommands(directory) {
   return async ({ role, question }) => {
     if (!PRIVATE_COMMAND.test(question)) return null;
     if (role !== 'owner') return 'Owner commands are available only to DJ Papzin in a verified private chat. For site help, send !crew help.';
-    if (/^owner\s*$/i.test(question)) return `${PROFILE.name} — owner menu\n\n!crew change <what should change and why> — save a private website-change draft\n!crew requests — list your drafts\n!crew request <ID> — read one draft\n\nReview listener feedback and stats: https://crew.djpapzin.com/admin\n\nDrafts are local to this pilot. GitHub forwarding and automatic coding are not connected. Only reviewed changes should move from dev to main.`;
+    if (/^owner\s*$/i.test(question)) return `${PROFILE.name} — owner menu\n\n!crew change <what should change and why> — save a private website-change draft\n!crew requests — list your drafts\n!crew request <ID> — read one draft\n!crew preview <ID> — preview a PUBLIC GitHub issue\n!crew submit <ID> CONFIRM — post that preview\n!crew sync <ID> — reconcile an uncertain submission\n\nReview listener feedback and stats: https://crew.djpapzin.com/admin\n\nDrafts stay private until you confirm submission to our PUBLIC GitHub repository. GitHub issues request work on dev; no automatic coding, merge or deployment. Main needs your explicit approval.`;
     if (/^change(?:\s|$)/i.test(question)) {
       const description = question.replace(/^change\s*/i, '').trim();
       if (description.length < 10 || description.length > 1000) return 'Describe the change in 10–1000 characters: !crew change <what should change and why>';
@@ -44,9 +45,40 @@ export function createOwnerCommands(directory) {
     const match = question.match(/^request\s+([a-f0-9]{8})\s*$/i);
     if (match) {
       const record = (await load()).find(r => r.id === match[1].toLowerCase());
-      return record ? `Private draft ${record.id}\nStatus: ${record.status}\n\n${record.description}\n\nTarget: dev. No GitHub issue or code change has been made.` : 'No matching private draft. Use !crew requests.';
+      return record ? `Request ${record.id}\nStatus: ${record.status}\n\n${record.description}\n\n${record.issue_url ?? 'Private draft. No GitHub issue confirmed.'}\nTarget: dev. No automatic code change or deployment.` : 'No matching private draft. Use !crew requests.';
+    }
+    const action = question.match(/^(preview|submit|sync)\s+([a-f0-9]{8})(?:\s+(CONFIRM))?\s*$/i);
+    if (action) {
+      const records=await load();
+      const record=records.find(r=>r.id===action[2].toLowerCase());
+      if(!record) return 'No matching request. Use !crew requests.';
+      const preview=issuePreview(record);
+      if(action[1].toLowerCase()==='preview') {
+        record.preview_hash=preview.hash;await save(records);
+        return `PUBLIC GitHub issue preview — ${REPOSITORY}\n\nTitle: ${preview.title}\n\n${preview.body.replace(/<!--.*?-->/g,'').trim()}\n\nYour request will be visible to everyone. Do not submit private details. To post exactly this issue: !crew submit ${record.id} CONFIRM`;
+      }
+      if(record.status==='submitted' && validIssueUrl(record.issue_url)) return `Already submitted: ${record.issue_url}\nTarget: dev. No code change, merge or deployment.`;
+      if(!github) return 'GitHub forwarding is not enabled. Your draft remains private.';
+      if(action[1].toLowerCase()==='sync' || ['submitting','submission_uncertain'].includes(record.status)) {
+        try {
+          const url=await github.find(record);
+          if(url) {record.status='submitted';record.issue_url=url;await save(records);return `GitHub issue confirmed: ${url}\nTarget: dev. No code change, merge or deployment.`;}
+          return 'No matching issue confirmed. Submission remains paused to avoid duplicates. Ask DJ Papzin to reconcile it before any new posting.';
+        } catch { return 'GitHub could not be checked. No new issue was posted; try !crew sync '+record.id+' later.'; }
+      }
+      if(action[3]!=='CONFIRM' || record.preview_hash!==preview.hash) return `First review !crew preview ${record.id}, then send !crew submit ${record.id} CONFIRM to publish it publicly.`;
+      record.status='submitting';await save(records);
+      try {
+        const existing=await github.find(record);
+        record.issue_url=existing ?? await github.create(record);
+        record.status='submitted';record.submitted_at=new Date().toISOString();await save(records);
+        return `GitHub issue created: ${record.issue_url}\nTarget: dev. No automatic code changes, merge or deployment. Main needs your explicit approval.`;
+      } catch {
+        record.status='submission_uncertain';await save(records);
+        return `GitHub submission could not be confirmed. Do not create a second request. Use !crew sync ${record.id} to check; the bot will not automatically post again.`;
+      }
     }
     if (/^learn\b/i.test(question)) return 'Website knowledge comes from reviewed help text and the public mix catalog. Send !crew change <help fact to add or correct> to draft an update. Group messages cannot teach or change my rules.';
-    return 'That action is not connected. I can save a private change draft; I cannot submit GitHub issues, run code, deploy, approve uploads or change permissions from this chat.';
+    return 'That action is not connected. I can save a private change draft; I cannot run code, merge, deploy, approve uploads or change permissions from this chat.';
   };
 }
