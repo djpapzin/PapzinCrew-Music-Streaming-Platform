@@ -2,6 +2,9 @@
   command = "npm ci && npm run build"
   publish = "dist"
 
+[build.environment]
+  VITE_UPLOAD_URL = "https://audio.djpapzin.com/intake/upload"
+
 # Proxy API requests to the live backend so the browser stays same-origin on Netlify.
 [[redirects]]
   from = "/api/*"

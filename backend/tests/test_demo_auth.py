@@ -41,3 +41,15 @@ def test_invalid_credentials_and_duplicate_registration(client):
     assert client.post('/auth/register', json=payload).status_code == 409
     assert client.post('/auth/login', json={'identifier': 'demo@example.com', 'password': 'wrong-password'}).status_code == 401
     assert client.get('/auth/profile').status_code == 401
+
+
+def test_dj_name_with_spaces_and_hyphen_can_register_and_login(client):
+    payload = {'email': 'guest@example.com', 'username': 'DJ T-Virus', 'password': 'test-password-123'}
+    assert client.post('/auth/register', json=payload).status_code == 201
+    assert client.post('/auth/login', json={'identifier': 'DJ T-Virus', 'password': payload['password']}).status_code == 200
+
+
+def test_registration_preserves_password_requirements(client):
+    response = client.post('/auth/register', json={'email': 'guest@example.com', 'username': 'Guest DJ', 'password': 'onlyletters'})
+    assert response.status_code == 422
+    assert any(error['loc'][-1] == 'password' for error in response.json()['detail'])
