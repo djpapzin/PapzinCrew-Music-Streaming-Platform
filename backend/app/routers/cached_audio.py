@@ -3,6 +3,7 @@ import fcntl
 import json
 import os
 import re
+from urllib.parse import quote, urlparse
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import StreamingResponse
@@ -59,6 +60,13 @@ def cached_audio(mix_id: int, source_version: str, request: Request, db: Session
     try:
         mix = db.query(Mix).filter(Mix.id == mix_id).first()
         item = entry(mix_id, mix.file_path, mix.availability) if mix else None
+        download = request.query_params.get('download') == '1'
+        if download and (not mix or getattr(mix, 'allow_downloads', 'no') != 'yes'):
+            raise HTTPException(404, 'Download unavailable')
+        title = getattr(mix, 'title', 'DJ mix') or 'DJ mix'
+        suffix = os.path.splitext(urlparse(mix.file_path).path)[1].lower() if mix else ''
+        if suffix not in ('.mp3', '.m4a', '.mp4', '.wav', '.ogg', '.flac', '.aac'):
+            suffix = '.m4a' if item and item.get('content_type') == 'audio/mp4' else '.mp3'
     finally:
         # Never hold a database connection while a listener streams a long mix.
         db.close()
@@ -68,6 +76,9 @@ def cached_audio(mix_id: int, source_version: str, request: Request, db: Session
     headers = {'Accept-Ranges': 'bytes', 'ETag': etag,
                'Cache-Control': 'private, max-age=0, must-revalidate',
                'X-Content-Type-Options': 'nosniff', 'X-Audio-Source': 'vps-cache'}
+    if download:
+        filename = re.sub(r'[\x00-\x1f\x7f/\\]', '_', title)[:160] + suffix
+        headers['Content-Disposition'] = f"attachment; filename=\"DJ-mix-{mix_id}{suffix}\"; filename*=UTF-8''{quote(filename, safe='')}"
     if request.headers.get('if-none-match') == etag:
         return Response(status_code=304, headers=headers)
     wanted = request.headers.get('range')
@@ -82,6 +93,12 @@ def cached_audio(mix_id: int, source_version: str, request: Request, db: Session
     if request.method == 'HEAD':
         return Response(status_code=status, headers=headers, media_type=media_type)
     reserve_egress(length)
+    if download and start == 0:
+        try:
+            db.query(Mix).filter(Mix.id == mix_id).update({Mix.download_count: Mix.download_count + 1}, synchronize_session=False)
+            db.commit()
+        finally:
+            db.close()
     def chunks():
         with item['path'].open('rb') as audio:
             audio.seek(start); remaining = length

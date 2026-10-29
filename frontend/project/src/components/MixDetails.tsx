@@ -1,7 +1,7 @@
-import { playbackUrl } from '../lib/playbackUrl';
+import { playbackUrl, downloadUrl } from '../lib/playbackUrl';
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { Play, Pause, Headphones, ListMusic } from 'lucide-react';
+import { Play, Pause, Headphones, ListMusic, Download } from 'lucide-react';
 import { Song } from '../types/music';
 import { getMixSeries, sortCollectionTracks } from '../lib/catalog';
 import { relatedMixes, durationLabel } from '../lib/discovery';
@@ -39,6 +39,8 @@ export default function MixDetails({ songs, loading, error, currentSong, isPlayi
           artist: mix.artist?.name || 'Unknown Artist', album: mix.album || '',
           duration: mix.duration_seconds || 0, imageUrl: safeArtworkUrl(toAbsoluteApiUrl(mix.cover_art_url)),
           audioUrl: playbackUrl(mix),
+          downloadUrl: downloadUrl(mix),
+          downloadAllowed: (mix.availability || 'public') === 'public' && mix.allow_downloads === 'yes',
           genre: mix.genre || '', year: mix.year || 0, playable: Boolean(mix.file_path),
           description: mix.description || '', tracklist: mix.tracklist || '',
         });
@@ -73,7 +75,9 @@ export default function MixDetails({ songs, loading, error, currentSong, isPlayi
         <div className="flex flex-wrap gap-4 items-center pt-2">
           <button disabled={unavailable} onClick={() => active ? onTogglePlay() : onPlaySong(song, queue)} className="inline-flex items-center gap-2 min-h-12 rounded-full bg-purple-600 hover:bg-purple-500 px-6 font-semibold disabled:opacity-40">{playing ? <Pause size={19}/> : <Play size={19}/>} {unavailable ? 'Unavailable' : playing ? 'Pause mix' : active ? 'Resume mix' : 'Play mix'}</button>
           <div className="flex items-center gap-4"><SongActions song={song}/></div>
+          {song.downloadUrl && <a href={song.downloadUrl} className="inline-flex items-center gap-2 min-h-12 rounded-full border border-purple-300/50 hover:bg-purple-500/20 px-5 font-semibold"><Download size={19}/> Download mix</a>}
         </div>
+        {song.downloadAllowed && <p className="text-sm text-gray-300">{song.downloadUrl ? 'Save the mix for offline listening. No account needed.' : 'Download is being prepared. You can still stream this mix.'}</p>}
       </div>
     </section>
     <div className="grid md:grid-cols-2 gap-5">

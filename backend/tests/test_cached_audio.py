@@ -97,3 +97,29 @@ def test_catalog_url_requires_both_feature_flags_and_current_cached_file(cache,m
     assert audio_cache.public_url(234,mix.file_path,'public')=='https://audio.djpapzin.com'+url
     monkeypatch.setenv('AUDIO_CACHE_SERVE_ENABLED','0')
     assert audio_cache.public_url(234,mix.file_path,'public') is None
+
+
+def test_download_requires_permission_and_reserves_same_egress_budget(cache):
+    client,url,root,mix,db,data,item=cache
+    assert client.get(url+'?download=1').status_code==404
+    mix.allow_downloads='yes';mix.title='DJ mix / café\r\nUnsafe'
+    response=client.head(url+'?download=1')
+    assert response.status_code==200 and response.content==b''
+    assert response.headers['content-disposition'].startswith('attachment;')
+    assert 'filename*=UTF-8' in response.headers['content-disposition']
+    assert not list(root.glob('egress-*.json')) and not db.commit.called
+    response=client.get(url+'?download=1')
+    assert response.status_code==200 and response.content==data
+    assert db.commit.call_count==1
+    assert json.loads(next(root.glob('egress-*.json')).read_text())['reserved_bytes']==len(data)
+    response=client.get(url+'?download=1',headers={'Range':'bytes=500-'})
+    assert response.status_code==206 and response.content==data[500:]
+    assert db.commit.call_count==1
+
+
+@pytest.mark.parametrize('visibility',['unlisted','private','test'])
+def test_download_never_exposes_nonpublic_cached_files(cache,visibility):
+    client,url,root,mix,db,data,item=cache
+    mix.allow_downloads='yes';mix.availability=visibility
+    assert client.get(url+'?download=1').status_code==404
+    assert not db.commit.called and not list(root.glob('egress-*.json'))

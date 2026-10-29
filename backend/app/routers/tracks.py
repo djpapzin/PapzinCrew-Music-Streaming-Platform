@@ -172,7 +172,7 @@ def read_tracks(skip: int = 0, limit: int = 100, db: Session = Depends(_get_db_d
 def public_catalog(db: Session = Depends(get_db)):
     """Browsing fields only: omit embedded tags and private/test uploads."""
     fields = ('id', 'title', 'duration_seconds', 'file_path', 'cover_art_url',
-              'genre', 'album', 'year', 'description', 'tracklist', 'availability')
+              'genre', 'album', 'year', 'description', 'tracklist', 'availability', 'allow_downloads')
     rows = (db.query(*(getattr(Mix, field) for field in fields), Artist.name.label('artist_name'))
             .outerjoin(Artist, Artist.id == Mix.artist_id)
             .filter((Mix.availability == 'public') | (Mix.availability.is_(None)))
@@ -218,6 +218,8 @@ def read_track(track_id: int, db: Session = Depends(_get_db_dyn), current_user: 
         "album": safe_get(db_track, 'album'),
         "year": safe_get(db_track, 'year'),
         "availability": safe_get(db_track, 'availability', 'public'),
+        "allow_downloads": safe_get(db_track, 'allow_downloads', 'no'),
+        "cached_audio_url": cached_audio_url(db_track.id, db_track.file_path, db_track.availability),
         "file_path": safe_get(db_track, 'file_path'),
         "artist": {"id": artist_id, "name": artist_name} if (artist_id is not None or artist_name is not None) else None,
     }

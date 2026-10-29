@@ -11,6 +11,8 @@ export interface Song {
   playable?: boolean;
   description?: string;
   tracklist?: string;
+  downloadUrl?: string;
+  downloadAllowed?: boolean;
 }
 
 export interface Album {

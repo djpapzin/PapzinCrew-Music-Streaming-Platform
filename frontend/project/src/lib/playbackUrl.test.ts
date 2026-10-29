@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { playbackUrl } from './playbackUrl';
+import { playbackUrl, downloadUrl } from './playbackUrl';
 const file_path = 'https://s3.us-east-005.backblazeb2.com/bucket/mix.mp3';
 describe('playback routing', () => {
  it('streams public B2 mixes directly', () => expect(playbackUrl({ id: 1, file_path, availability: 'Public' })).toBe(file_path));
@@ -12,4 +12,14 @@ describe('playback routing', () => {
   for(const availability of ['private','unlisted']) expect(playbackUrl({id:1,file_path,availability,cached_audio_url})).toMatch(/\/tracks\/1\/stream$/);
  });
  it.each(['https://audio.djpapzin.com.evil.test/tracks/1/cached/x','http://audio.djpapzin.com/tracks/1/cached/x','https://audio.djpapzin.com/tracks/2/cached/x'])('rejects an unexpected cache destination %s',cached_audio_url=>expect(playbackUrl({id:1,file_path,cached_audio_url})).toBe(file_path));
+});
+
+
+it('offers only approved public cache downloads, with no origin fallback', () => {
+ const mix={id:1,file_path:'https://s3.us-east-005.backblazeb2.com/bucket/mix.mp3',availability:'public',allow_downloads:'yes',cached_audio_url:'https://audio.djpapzin.com/tracks/1/cached/abcdefabcdefabcdefabcdef'};
+ expect(downloadUrl(mix)).toBe(mix.cached_audio_url+'?download=1');
+ for(const availability of ['private','unlisted','test']) expect(downloadUrl({...mix,availability})).toBeUndefined();
+ expect(downloadUrl({...mix,allow_downloads:'no'})).toBeUndefined();
+ expect(downloadUrl({...mix,cached_audio_url:undefined})).toBeUndefined();
+ expect(downloadUrl({...mix,cached_audio_url:'https://evil.example/file'})).toBeUndefined();
 });
