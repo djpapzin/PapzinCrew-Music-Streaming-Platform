@@ -1,6 +1,6 @@
 # WhatsApp private pilot (development only)
 
-Baileys is an unofficial WhatsApp Web client. Keep the bot on its separate number and test in a small private group before any community rollout. This package currently performs **pairing only**: no incoming-message handler, replies, group joins, history collection or automatic moderation. Linking is not registration: WhatsApp must already be registered on the phone.
+Baileys is an unofficial WhatsApp Web client. Keep the bot on its separate number and test in a small private group before any community rollout. Pairing is separate from the explicitly enabled private reply service below. Groups, history collection and automatic moderation remain blocked by default. Linking is not registration: WhatsApp must already be registered on the phone.
 
 Use Node 20 or newer, `npm ci`, then set `WA_BOT_PHONE` to international digits (no leading +) and `WA_AUTH_DIR` to an absolute private directory outside the repository. Run `npm run pair`. On the bot phone: WhatsApp → Linked devices → Link a device → Link with phone number instead. Enter the displayed code. The process exits after linking or five minutes; it is not a running bot service.
 
@@ -34,3 +34,23 @@ Only the verified owner can use these commands. The adapter runs fixed `gh api` 
 For an ongoing owner service, use deploy/papzincrew-whatsapp-owner.service with a private environment file. Persistent mode refuses to start unless the tester and owner numbers match. It keeps groups blocked and limits replies to 20 per 30 minutes. The initial community rollout remains out of scope.
 
 Plain conversation: enable WA_NATURAL_CHAT=1. Try “Hi”, “Send me the Many More mix”, “The music won’t play”, “When is the next mix coming?” or “I have a suggestion”. Feedback is previewed and saved privately only after yes. The owner can say “show feedback”. Optional WA_LISTENER_PHONES is an explicit allowlist; no new contacts or groups are enabled automatically. Natural messages never submit GitHub issues or run owner commands. Full details are in deploy/WHATSAPP_HELPER.md.
+
+
+## Release assistant (development; off by default)
+
+Set `WA_RELEASE_ASSISTANT=1` only after approval to enable the private workflow. Incoming group messages remain blocked. The existing owner envelope check applies to every release command and attachment; listeners cannot create, inspect, approve or send release drafts. No paid model or media service is used.
+
+- `prepare guest48` — see reviewed release details and missing assets.
+- `preview guest48 teaser` / `preview guest48 launch` — see exact text, attachment and selected recipients. The actual attachment is returned in the owner's private chat.
+- `approve guest48 teaser` — approve that exact preview, without sending it.
+- `send guest48 teaser` — a separate explicit action. It is blocked in the private pilot.
+- `!crew release guest48 teaser text <new text>` — edit; prior approval becomes invalid.
+- Attach an MP4 video with caption `!crew release guest48 teaser`, or JPEG/PNG cover with caption `!crew release guest48 artwork`.
+
+A new release can be prepared with `!crew release new ID | title | DJ credit | YYYY-MM-DD | https://crew.djpapzin.com/track/ID`. A duplicate ID never overwrites owner edits. Tracklist and alternative-platform links are optional; neither is invented or required. Assets remain private on the existing VPS (0600 files/0700 directory), with 30 MB video and 5 MB cover limits, at most 50 release records, and a 15 GB free-disk floor. The original media bytes are preserved; nothing is uploaded to Backblaze or transcribed/generated through a paid provider.
+
+**Group setup is a separate approval step.** Leave `WA_RELEASE_GROUP_SEND` unset and `WA_RELEASE_GROUPS_FILE` unset in the private test. No group is selected or enabled automatically. After DJ explicitly approves recipient groups, an absolute private JSON config may contain `{key,name,jid}` entries; only configured group IDs can be selected via `!crew release guest48 groups key1,key2`. Set `WA_RELEASE_GROUP_SEND=1` only after that separate approval. Any changed text, attachment or recipient invalidates approval. A current public-catalog check and South Africa release-date check also gate sending. Approval itself never sends or schedules anything.
+
+Delivery attempts are recorded before transmission. Repeat commands do not duplicate a recorded send. If any delivery is uncertain, the batch stops and automatic retries are blocked across restarts; the owner must inspect WhatsApp before any reconciliation. Do not clear delivery markers to force a resend.
+
+Guest 48 first test: release title Cruize Friday Guest 48, credit Mr Dominate SA, date 2026-10-30 SAST, canonical mix 241. The actual user-supplied teaser was tested in an isolated private VPS folder, with group sending disabled and zero group messages. The running bot and website were not changed by that test. Keep original audio, existing tracklists, public catalog and Backblaze $0 caps unchanged.

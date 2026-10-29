@@ -47,3 +47,11 @@ test('persistent mode requires owner; budget rolls over while old messages stay 
  assert.equal(decide('notify',message(),later),null);
  assert.ok(decide('notify',message({key:{remoteJid:tester+'@s.whatsapp.net',id:'new'},messageTimestamp:later/1000}),later));
 });
+
+test('release media is accepted only from the envelope-verified owner with an explicit caption',()=>{
+ const media={videoMessage:{caption:'!crew release guest48 teaser',mimetype:'video/mp4',fileLength:100}};
+ assert.ok(policy({owner:tester})('notify',message({message:media})).attachment);
+ assert.equal(policy()('notify',message({message:media})),null);
+ assert.equal(policy({owner:tester})('notify',message({message:{videoMessage:{...media.videoMessage,caption:'hi'}}})),null);
+ assert.equal(policy({owner:tester})('notify',message({key:{remoteJid:'123@g.us',id:'a'},message:media})),null);
+});

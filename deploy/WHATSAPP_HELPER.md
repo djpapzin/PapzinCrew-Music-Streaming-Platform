@@ -40,3 +40,12 @@ WA_NATURAL_CHAT=1 accepts ordinary text from the configured owner/tester and any
 Listeners can ask for a mix by name, describe playback trouble, ask about releases or say “I have a suggestion”. Feedback is conversational: ask for the message, show its exact text, and save only after yes. Cancel or ten minutes without a reply discards the in-memory draft. Sensitive-looking input is refused. Reports contain no automatic sender name/phone or chat history and are saved privately in listener-feedback.json inside WA_REQUEST_DIR (0600), capped at 500. The owner can say “show feedback” to read the latest five. This is separate from the website Feedback inbox; the bot does not claim to notify the owner immediately or change the website. No paid AI provider is used. Reviewed patterns handle common questions; unrecognised wording may need clarification.
 
 Before inviting listeners, test with an explicitly approved small contact list. Community-group access, announcements, moderation and unsolicited messages are not enabled by this change. The website and main remain unchanged.
+
+
+## Release assistant rollout
+
+The next private feature is documented in tools/whatsapp-bot/README.md. Owner-only release cards hold teaser, artwork, title, DJ credit, date and canonical listening link. Start with Guest 48, credited to Mr Dominate SA, on Friday 30 October 2026. Its listing is already owner-approved/public; group announcements still need separate approval.
+
+First stage: prepare and preview privately, accept the owner's MP4/JPEG/PNG attachments, and require an exact preview approval. Enable this private workflow only after DJ approves the bot deployment. Keep group sending disabled, group config absent, community groups unjoined, and main unchanged. Existing listener help/feedback and GitHub owner-request controls retain their permissions.
+
+Later stage: DJ identifies the exact groups; configure only those recipients after explicit approval. Each announcement needs a fresh preview naming those groups, explicit approval of that version, and a separate send instruction. There is no automatic schedule, broadcast, group join or paid AI call. Feedback continues in the existing private listener-feedback flow; this feature does not claim to read community conversations or automatically collect group replies.

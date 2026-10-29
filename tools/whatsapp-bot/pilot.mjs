@@ -1,8 +1,10 @@
 import { privateAuth } from './auth.mjs';
+import { readFile } from 'node:fs/promises';
+import { createReleaseAssistant } from './release.mjs';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import makeWASocket, { DisconnectReason } from '@whiskeysockets/baileys';
+import makeWASocket, { DisconnectReason, downloadContentFromMessage } from '@whiskeysockets/baileys';
 import pino from 'pino';
 import { createPolicy, renderReply } from './policy.mjs';
 import { createOwnerCommands } from './owner.mjs';
@@ -26,6 +28,21 @@ const sock = makeWASocket({ auth: state, logger: pino({ level: 'silent' }),
   markOnlineOnConnect: false, syncFullHistory: false, shouldSyncHistoryMessage: () => false,
   shouldIgnoreJid: jid => !/^\d+@(s\.whatsapp\.net|lid)$/.test(jid),
   generateHighQualityLinkPreview: false });
+const releaseEnabled = process.env.WA_RELEASE_ASSISTANT === '1';
+const groupConfig = releaseEnabled ? process.env.WA_RELEASE_GROUPS_FILE : undefined;
+if(groupConfig && !path.isAbsolute(groupConfig)) throw new Error('Absolute approved groups file required');
+const releaseGroups = groupConfig ? JSON.parse(await readFile(groupConfig,'utf8')) : [];
+const releases = releaseEnabled ? createReleaseAssistant(process.env.WA_REQUEST_DIR, {
+  groups: releaseGroups,
+  enabled: process.env.WA_RELEASE_GROUP_SEND === '1',
+  send: (jid,content)=>sock.sendMessage(jid,content),
+  isPublic: async url => {
+    const response=await fetch('http://127.0.0.1:18882/tracks/catalog',{signal:AbortSignal.timeout(5000)});
+    if(!response.ok) return false;
+    const rows=await response.json();
+    return Array.isArray(rows) && rows.some(row=>String(row.id)===url.split('/').at(-1) && row.availability==='public');
+  },
+}) : null;
 let queue = Promise.resolve();
 function answer(question) {
   return new Promise((resolve, reject) => {
@@ -59,8 +76,21 @@ sock.ev.on('messages.upsert', ({ type, messages }) => {
     if (!decision) continue;
     queue = queue.then(async () => {
       try {
-        const text = (decision.command ? await ownerCommands(decision) : await listenerChat(decision)) ?? await answer(decision.question);
+        let releaseReply=null;
+        if(releases && decision.attachment) {
+          releaseReply=await releases.attach(decision,async limit=>{
+            const stream=await downloadContentFromMessage(decision.mediaMessage,decision.media);
+            let size=0;const chunks=[];
+            for await (const chunk of stream) {size+=chunk.length;if(size>limit) {stream.destroy();throw new Error('Media too large');}chunks.push(chunk);}
+            return Buffer.concat(chunks);
+          });
+        } else if(releases) releaseReply=await releases.handle(decision);
+        const text = releaseReply ?? (decision.command ? await ownerCommands(decision) : await listenerChat(decision)) ?? await answer(decision.question);
         await sock.sendMessage(decision.jid, { text, linkPreview: null });
+        if(releases && !decision.attachment) {
+          const preview=await releases.previewMedia(decision);
+          if(preview) await sock.sendMessage(decision.jid,preview);
+        }
         console.log('One private test reply sent.');
       } catch { console.error('Private test reply failed; no automatic retry.'); }
     });

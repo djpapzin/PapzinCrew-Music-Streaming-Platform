@@ -23,7 +23,13 @@ export function createPolicy({ tester, started = Date.now(), enabled = false, ma
     if(!allowed.has(sender)) return null;
     const timestamp = Number(message.messageTimestamp) * 1000;
     if (!Number.isFinite(timestamp) || timestamp < Math.max(started - 10_000, now - 120_000) || timestamp > now + 60_000) return null;
-    const text = message.message?.conversation ?? message.message?.extendedTextMessage?.text;
+    const role = sender===ownerJid ? 'owner' : 'listener';
+    const video = message.message?.videoMessage;
+    const image = message.message?.imageMessage;
+    const media = video ?? image;
+    const caption = media?.caption;
+    const attachmentAllowed = role==='owner' && typeof caption==='string' && /^!crew\s+release\s+[a-z0-9-]+\s+(teaser|artwork)\s*$/i.test(caption);
+    const text = message.message?.conversation ?? message.message?.extendedTextMessage?.text ?? (attachmentAllowed ? caption : undefined);
     if(typeof text!=='string') return null;
     const command=/^!crew(?:\s|$)/i.test(text);
     if(!natural && !command) return null;
@@ -35,7 +41,7 @@ export function createPolicy({ tester, started = Date.now(), enabled = false, ma
     seen.set(hash,now);
     replies++;
     last = now;
-    return { jid, question, role: sender===ownerJid ? 'owner' : 'listener', command };
+    return { jid, question, role, command, ...(attachmentAllowed ? {attachment:{mime:media.mimetype,size:Number(media.fileLength)},media:video?'video':'image',mediaMessage:media} : {}) };
   };
 }
 
