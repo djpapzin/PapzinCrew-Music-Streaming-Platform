@@ -55,3 +55,5 @@ A new release can be prepared with `!crew release new ID | title | DJ credit | Y
 Delivery attempts are recorded before transmission. Repeat commands do not duplicate a recorded send. If any delivery is uncertain, the batch stops and automatic retries are blocked across restarts; the owner must inspect WhatsApp before any reconciliation. Do not clear delivery markers to force a resend.
 
 Guest 48 first test: release title Cruize Friday Guest 48, credit Mr Dominate SA, date 2026-10-30 SAST, canonical mix 241. The actual user-supplied teaser was tested in an isolated private VPS folder, with group sending disabled and zero group messages. The running bot and website were not changed by that test. Keep original audio, existing tracklists, public catalog and Backblaze $0 caps unchanged.
+
+Before enabling the private pilot, seed a fresh Guest 48 record and attach the original teaser using the module API or owner commands. Never copy `releases.json` from the simulated test into the running bot: its approval/delivery state is test data, not DJ's approval. Real previews and approvals must happen in the verified owner chat.

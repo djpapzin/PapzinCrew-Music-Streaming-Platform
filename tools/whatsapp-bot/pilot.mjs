@@ -80,7 +80,9 @@ sock.ev.on('messages.upsert', ({ type, messages }) => {
         let releaseReply=null;
         if(releases && decision.attachment) {
           releaseReply=await releases.attach(decision,async limit=>{
-            const stream=await downloadContentFromMessage(decision.mediaMessage,decision.media);
+            const directPath=decision.mediaMessage?.directPath;
+            if(typeof directPath!=='string'||!directPath.startsWith('/')||directPath.startsWith('//')||/[\\\r\n]/.test(directPath)) throw new Error('Invalid WhatsApp media path');
+            const stream=await downloadContentFromMessage({...decision.mediaMessage,url:undefined},decision.media,{host:'mmg.whatsapp.net',options:{signal:AbortSignal.timeout(60000),redirect:'error'}});
             let size=0;const chunks=[];
             for await (const chunk of stream) {size+=chunk.length;if(size>limit) {stream.destroy();throw new Error('Media too large');}chunks.push(chunk);}
             return Buffer.concat(chunks);
