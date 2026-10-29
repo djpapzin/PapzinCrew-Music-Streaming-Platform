@@ -2,8 +2,14 @@
   "name": "papzincrew-whatsapp-pilot",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=20" },
-  "scripts": { "pair": "node pair.mjs" },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "pair": "node pair.mjs",
+    "test": "node --test policy.test.mjs",
+    "pilot": "node pilot.mjs"
+  },
   "dependencies": {
     "@whiskeysockets/baileys": "7.0.0-rc14",
     "pino": "10.4.0"
