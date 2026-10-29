@@ -49,9 +49,18 @@ def test_compact_mix_number_and_website_explanation():
 def test_profile_and_menu_are_public_help_not_owner_access():
     assert answer_question('help',MIXES)['intent']=='help'
     assert 'Crew Helper' in answer_question('Who are you?',MIXES)['answer']
-    assert 'owner commands' in answer_question('help',MIXES)['answer']
+    assert 'normal words' in answer_question('help',MIXES)['answer']
 
 
 @pytest.mark.parametrize('q,intent',[('Can I collapse the full player?','mobile_player'),('Where is the tracklist?','tracklists'),('Who can see analytics?','privacy')])
 def test_reviewed_website_facts(q,intent):
     assert answer_question(q,MIXES)['intent']==intent
+
+
+def test_plain_listener_mix_request():
+    mixes=[{'id':237,'title':'Many More @ It Aagain','availability':'public'}]
+    assert answer_question('Send me the Many More mix',mixes)['links'][0]['url'].endswith('/237')
+
+
+def test_listener_release_question_does_not_get_player_controls():
+    assert answer_question('When is the next mix coming?',MIXES)['intent']=='release_check'

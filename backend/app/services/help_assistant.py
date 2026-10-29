@@ -33,10 +33,14 @@ def answer_question(question, mixes=(), downloads_enabled=False):
         raise ValueError('Add a question with 1–1500 characters.')
     text = normalized(question)
     records = public_mixes(mixes)
+    # Conversational filler should not prevent exact public mix matching.
+    text = re.sub(r'\b(can you|could you|send me|please send|give me|i want|i would like|the mix|a link to|for me)\b', ' ', text)
     if re.fullmatch(r'\s*(help|menu|hello|hi)\s*', text):
-        return reply('help', 'I’m Crew Helper, Papzin & Crew’s beta assistant. Try a mix name, music won’t play, downloads, uploading a mix, or feedback. In WhatsApp, start each question with !crew. Only DJ Papzin has owner commands; website changes need review.', [('Browse mixes', SITE+'/search')])
+        return reply('help', 'I’m Crew Helper, Papzin & Crew’s beta assistant. Try a mix name, music won’t play, downloads, uploading a mix, or feedback. Just tell me what you need in normal words. DJ Papzin handles release and website decisions.', [('Browse mixes', SITE+'/search')])
     if re.search(r'who are you|your name|are you.*bot', text):
         return reply('identity', 'I’m Crew Helper, Papzin & Crew’s automated assistant. I help with public DJ mixes and using the website. DJ Papzin owns the site and handles approvals. I’ll say when I cannot confirm something.')
+    if re.search(r'when.*(next|new).*mix|when.*release|next.*mix.*(coming|out|release)', text):
+        return reply('release_check', 'I don’t have a confirmed date for the next mix. DJ Papzin will confirm new releases; I won’t guess a date. You can enjoy the mixes already available here:', [('Browse mixes', SITE+'/search')], True)
     if re.search(r'full player|minimi[sz]|collapse|swipe|keep.*brows|next mix', text):
         return reply('mobile_player', 'On mobile, tapping Play on a mix opens the full player. Collapse it or swipe down to keep browsing while music plays. Resuming or moving to the next mix should not reopen it. If this behaves differently, tap Feedback → Something broke and include your phone/browser.', [('Browse mixes', SITE+'/search')])
     if re.search(r'track.?list|identify.*(song|track)|what.*(song|track).*mix', text):

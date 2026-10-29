@@ -7,6 +7,7 @@ import pino from 'pino';
 import { createPolicy, renderReply } from './policy.mjs';
 import { createOwnerCommands } from './owner.mjs';
 import { createGitHub } from './github.mjs';
+import { createListenerChat } from './listener.mjs';
 
 process.umask(0o077);
 const authDir = process.env.WA_AUTH_DIR;
@@ -14,8 +15,9 @@ const catalog = process.env.WA_CATALOG_FILE;
 const python = process.env.WA_PYTHON;
 if (![authDir, catalog, python].every(p => p && path.isAbsolute(p))) throw new Error('Absolute auth, catalog and Python paths required.');
 const persistent = process.env.WA_OWNER_SERVICE === '1';
-const decide = createPolicy({ persistent, tester: process.env.WA_TESTER_PHONE, owner: process.env.WA_OWNER_PHONE, enabled: process.env.WA_ENABLE_TEST_REPLIES === '1' });
+const decide = createPolicy({ persistent, natural: process.env.WA_NATURAL_CHAT==='1', listeners: (process.env.WA_LISTENER_PHONES ?? '').split(',').filter(Boolean), tester: process.env.WA_TESTER_PHONE, owner: process.env.WA_OWNER_PHONE, enabled: process.env.WA_ENABLE_TEST_REPLIES === '1' });
 const ownerCommands = createOwnerCommands(process.env.WA_REQUEST_DIR, process.env.WA_ENABLE_GITHUB_ISSUES === '1' ? createGitHub() : null);
+const listenerChat=createListenerChat(process.env.WA_REQUEST_DIR);
 const { state, saveCreds } = await privateAuth(authDir);
 if (!state.creds.registered) throw new Error('Pair the bot number first.');
 const ownPhone = state.creds.me?.id?.split(':')[0]?.split('@')[0];
@@ -57,7 +59,7 @@ sock.ev.on('messages.upsert', ({ type, messages }) => {
     if (!decision) continue;
     queue = queue.then(async () => {
       try {
-        const text = await ownerCommands(decision) ?? await answer(decision.question);
+        const text = (decision.command ? await ownerCommands(decision) : await listenerChat(decision)) ?? await answer(decision.question);
         await sock.sendMessage(decision.jid, { text, linkPreview: null });
         console.log('One private test reply sent.');
       } catch { console.error('Private test reply failed; no automatic retry.'); }
