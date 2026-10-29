@@ -19,6 +19,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onNavigate, playerActive=false }) => 
   ];
 
   const libraryItems = [
+    { id: 'my-uploads', path: '/upload#my-uploads', label: 'My uploads', icon: Upload },
     { id: 'playlists', path: '/playlists', label: 'Playlists', icon: Music },
     { id: 'artists', path: '/artists', label: 'Artists', icon: Users },
     { id: 'albums', path: '/albums', label: 'Albums', icon: Disc3 },

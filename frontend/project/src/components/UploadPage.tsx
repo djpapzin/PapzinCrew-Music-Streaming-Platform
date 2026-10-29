@@ -5,6 +5,8 @@ import { Song } from '../types/music';
 import { API_BASE as API_URL } from '../lib/api';
 import { uploadEndpoint, uploadFailureMessage } from '../lib/uploadTransport';
 import { prepareCover } from '../lib/coverUpload';
+import MyUploads from './MyUploads';
+import { saveUploadReceipt } from '../lib/uploadReceipts';
 import PaperclipInsightCard from './PaperclipInsightCard';
 const MAX_UPLOAD_SIZE_MB = 200;
 const MAX_UPLOAD_SIZE_BYTES = MAX_UPLOAD_SIZE_MB * 1024 * 1024;
@@ -854,7 +856,8 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
         speed: '', timeRemaining: '', phase: 'complete', phaseProgress: 100,
         canCancel: false, extractedMetadata: result.metadata || null,
       });
-      navigate(`/track/${result.id}`);
+      const receiptSaved = saveUploadReceipt(result.id, formData.title);
+      navigate(`/track/${result.id}?uploaded=${receiptSaved ? 'saved' : 'bookmark'}`);
     } catch (error) {
       console.error('Upload error:', error);
 
@@ -924,6 +927,8 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
             </div>
           </section>
         )}
+
+        <MyUploads />
 
         {/* File Upload Section */}
         <div className="bg-white/5 rounded-xl p-6 border border-white/10 space-y-4">

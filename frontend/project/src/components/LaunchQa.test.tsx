@@ -26,3 +26,12 @@ it('closes feedback on navigation and preserves unsent draft with updated page c
  render(<MemoryRouter initialEntries={['/','/account']} initialIndex={1}><Harness/></MemoryRouter>);fireEvent.click(screen.getByRole('button',{name:'Send feedback'}));fireEvent.change(screen.getByLabelText('Your message'),{target:{value:'An unsent test message'}});
  act(()=>navigate(-1));expect(document.querySelector('dialog')?.hasAttribute('open')).toBe(false);fireEvent.click(screen.getByRole('button',{name:'Send feedback'}));expect((screen.getByLabelText('Your message') as HTMLTextAreaElement).value).toBe('An unsent test message');expect(screen.getByText(/Page: \/\./)).toBeTruthy();
 });
+
+it('shows the actual signup field error instead of a generic rejection',async()=>{
+ sessionStorage.clear();
+ vi.stubGlobal('fetch',vi.fn().mockResolvedValue({ok:false,json:async()=>({detail:[{loc:['body','username'],msg:'Value error, username is invalid'}]})}));
+ render(<MemoryRouter><AccountPage/></MemoryRouter>);fireEvent.click(screen.getByText('Create a new account'));
+ fireEvent.change(screen.getByLabelText('Email'),{target:{value:'qa@example.com'}});fireEvent.change(screen.getByLabelText('Username'),{target:{value:'Guest DJ'}});fireEvent.change(screen.getByLabelText('Password'),{target:{value:'test-password-123'}});
+ fireEvent.submit(screen.getByRole('button',{name:'Create account',exact:true}).closest('form')!);
+ expect(await screen.findByRole('alert')).toHaveTextContent('Username: username is invalid');
+});

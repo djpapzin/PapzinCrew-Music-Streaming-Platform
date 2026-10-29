@@ -1,6 +1,7 @@
 import { it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
+import { readUploadReceipts } from '../lib/uploadReceipts';
 import UploadPage from './UploadPage';
 import { prepareCover } from '../lib/coverUpload';
 vi.mock('../lib/coverUpload', () => ({ prepareCover: vi.fn() }));
@@ -23,6 +24,7 @@ it('opens cover picker and submits the chosen image with an unlisted upload', as
  expect(screen.getByAltText('Track cover art')).toHaveAttribute('src','blob:cover-test');
  fireEvent.change(screen.getByPlaceholderText('Enter the main artist name'),{target:{value:'Guest DJ'}});
  fireEvent.click(screen.getByRole('button',{name:/Upload Large File for Review/i}));await screen.findByText('Saved for review');
+ expect(readUploadReceipts().some(item=>item.id==='233')).toBe(true);
  expect(sent?.get('cover_art')).toBe(prepared);expect(sent?.get('availability')).toBe('unlisted');
 });
 it('keeps the previous cover when a replacement is invalid',async()=>{
