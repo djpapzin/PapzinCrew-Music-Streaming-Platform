@@ -55,6 +55,8 @@ def reserve_egress(length):
 
 @router.api_route('/tracks/{mix_id}/cached/{source_version}', methods=['GET', 'HEAD'])
 def cached_audio(mix_id: int, source_version: str, request: Request, db: Session = Depends(get_db)):
+    if request.query_params.get('download') == '1' and os.getenv('AUDIO_DOWNLOADS_ENABLED', '0') != '1':
+        raise HTTPException(503, 'Downloads coming soon')
     if os.getenv('AUDIO_CACHE_SERVE_ENABLED') != '1':
         raise HTTPException(404, 'Cached audio unavailable')
     try:

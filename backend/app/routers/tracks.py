@@ -950,6 +950,8 @@ async def download_track(track_id: int, db: Session = Depends(_get_db_dyn), curr
     """
     Download a track file.
     """
+    if os.getenv('AUDIO_DOWNLOADS_ENABLED', '0') != '1':
+        raise HTTPException(status_code=503, detail='Downloads coming soon')
     db_track = crud.get_mix(db, mix_id=track_id)
     logger.info("track download start", extra={"action": "track_download_start", "track_id": track_id, "allow_downloads": getattr(db_track, 'allow_downloads', None), "availability": getattr(db_track, 'availability', None)})
     if db_track is None:

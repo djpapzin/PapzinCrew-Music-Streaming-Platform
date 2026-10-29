@@ -18,6 +18,7 @@ export default function MixDetails({ songs, loading, error, currentSong, isPlayi
   const { id } = useParams();
   const catalogSong = songs.find(item => item.id === id);
   const [directSong, setDirectSong] = useState<Song | null>(null);
+  const [downloadNotice, setDownloadNotice] = useState(false);
   const [directStatus, setDirectStatus] = useState<{ id?: string; message: string }>({ message: '' });
   useEffect(() => {
     if (!id || catalogSong) return;
@@ -75,9 +76,9 @@ export default function MixDetails({ songs, loading, error, currentSong, isPlayi
         <div className="flex flex-wrap gap-4 items-center pt-2">
           <button disabled={unavailable} onClick={() => active ? onTogglePlay() : onPlaySong(song, queue)} className="inline-flex items-center gap-2 min-h-12 rounded-full bg-purple-600 hover:bg-purple-500 px-6 font-semibold disabled:opacity-40">{playing ? <Pause size={19}/> : <Play size={19}/>} {unavailable ? 'Unavailable' : playing ? 'Pause mix' : active ? 'Resume mix' : 'Play mix'}</button>
           <div className="flex items-center gap-4"><SongActions song={song}/></div>
-          {song.downloadUrl && <a href={song.downloadUrl} className="inline-flex items-center gap-2 min-h-12 rounded-full border border-purple-300/50 hover:bg-purple-500/20 px-5 font-semibold"><Download size={19}/> Download mix</a>}
+          {song.downloadAllowed && <button type="button" aria-disabled="true" title="Coming soon" onClick={() => setDownloadNotice(true)} onMouseEnter={() => setDownloadNotice(true)} onFocus={() => setDownloadNotice(true)} className="inline-flex items-center gap-2 min-h-12 rounded-full border border-gray-500/50 text-gray-400 cursor-not-allowed px-5 font-semibold"><Download size={19}/> Download mix</button>}
         </div>
-        {song.downloadAllowed && <p className="text-sm text-gray-300">{song.downloadUrl ? 'Save the mix for offline listening. No account needed.' : 'Download is being prepared. You can still stream this mix.'}</p>}
+        {song.downloadAllowed && downloadNotice && <p role="status" className="text-sm text-gray-300">Coming soon</p>}
       </div>
     </section>
     <div className="grid md:grid-cols-2 gap-5">
