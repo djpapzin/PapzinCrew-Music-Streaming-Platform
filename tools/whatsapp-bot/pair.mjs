@@ -43,8 +43,9 @@ async function connect() {
     if (connection === 'open') {
       clearTimeout(deadline);
       console.log('Bot number linked. Pairing-only session; no messages sent.');
-      sock.end();
-      setTimeout(() => process.exit(0), 1000);
+      // Allow the phone to finish its linked-device confirmation before disconnecting.
+      setTimeout(() => sock.end(), 30000);
+      setTimeout(() => process.exit(0), 31000);
     }
     if (connection === 'close') {
       const status = lastDisconnect?.error?.output?.statusCode;
