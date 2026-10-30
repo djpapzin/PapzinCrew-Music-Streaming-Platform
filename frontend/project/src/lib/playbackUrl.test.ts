@@ -26,6 +26,6 @@ it('offers only approved public cache downloads, with no origin fallback', () =>
 
 it('marks only QA download links as test activity',()=>{
  localStorage.setItem('papzincrew:test-activity','1');
- try { expect(downloadUrl({id:241,availability:'public',allow_downloads:'yes',cached_audio_url:'https://audio.djpapzin.com/tracks/241/cached/abcdefabcdefabcdefabcdef'})).toContain('&activity=test'); }
+ try { expect(downloadUrl({id:241,file_path,availability:'public',allow_downloads:'yes',cached_audio_url:'https://audio.djpapzin.com/tracks/241/cached/abcdefabcdefabcdefabcdef'})).toContain('&activity=test'); }
  finally {localStorage.removeItem('papzincrew:test-activity');}
 });
