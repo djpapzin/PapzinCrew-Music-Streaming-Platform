@@ -12,6 +12,7 @@ def job(tmp_path,monkeypatch):
     monkeypatch.setenv('AUDIO_CACHE_DIR',str(tmp_path))
     monkeypatch.setenv('AUDIO_CACHE_WARM_ENABLED','1')
     monkeypatch.setenv('AUDIO_CACHE_FILL_BYTES','10')
+    monkeypatch.setenv('ANONYMOUS_STATS_DIR',str(tmp_path/'stats'))
     db=MagicMock()
     source='https://s3.us-east-005.backblazeb2.com/bucket/'
     db.query.return_value.filter.return_value.order_by.return_value.all.return_value=[
@@ -48,6 +49,16 @@ def test_disabled_job_has_no_network_calls(job,monkeypatch):
     monkeypatch.setenv('AUDIO_CACHE_WARM_ENABLED','0')
     warm.main()
     assert not s3.head_object.called and not s3.get_object.called
+
+
+def test_failed_mix_is_prioritized_without_expanding_daily_budget(job,monkeypatch):
+    root,s3,seed,db=job
+    stats=root/'stats';stats.mkdir();(stats/'2026-10-30.json').write_text(json.dumps({'mixes':{'2':{'failures':1}}}))
+    monkeypatch.setenv('ANONYMOUS_STATS_DIR',str(stats))
+    warm.main()
+    assert s3.get_object.call_args.kwargs['Key']=='2'
+    assert s3.get_object.call_count==1
+    assert json.loads(next(root.glob('fill-*.json')).read_text())['reserved_bytes']==6
 
 
 def test_nonpublic_never_downloaded_even_if_selected(job):

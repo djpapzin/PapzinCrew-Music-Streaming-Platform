@@ -18,6 +18,23 @@ from app.services.b2_storage import B2Storage
 from tools.seed_audio_cache import main as seed, source_key
 
 
+def failure_priorities():
+    """Prioritize reported playback failures in the existing daily fill budget."""
+    root=Path(os.getenv('ANONYMOUS_STATS_DIR','/var/lib/papzincrew/anonymous-stats'))
+    counts={}
+    try:
+        paths=sorted(root.glob('????-??-??.json'))[-2:]
+    except OSError:
+        return counts
+    for path in paths:
+        try:
+            for ident, stats in json.loads(path.read_text()).get('mixes',{}).items():
+                counts[int(ident)]=counts.get(int(ident),0)+int(stats.get('failures',0))
+        except (OSError,ValueError,TypeError):
+            continue
+    return counts
+
+
 def main():
     if os.getenv('AUDIO_CACHE_WARM_ENABLED') != '1':
         print('Cache warming disabled'); return
@@ -34,6 +51,8 @@ def main():
             mixes=[(m.id,m.file_path,m.availability) for m in db.query(Mix)
                    .filter((Mix.availability=='public') | (Mix.availability.is_(None)))
                    .order_by(Mix.play_count.desc(),Mix.id).all()]
+        priorities=failure_priorities()
+        mixes.sort(key=lambda item:-priorities.get(item[0],0))
         for ident,source,visibility in mixes:
             if used>=budget: break
             if (visibility or 'public')!='public': continue
