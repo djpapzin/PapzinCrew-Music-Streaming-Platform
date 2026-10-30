@@ -13,6 +13,7 @@ from app.services.audio_cache import version
 
 @pytest.fixture
 def download_client(tmp_path,monkeypatch):
+    monkeypatch.setenv('ANONYMOUS_STATS_DIR',str(tmp_path/'stats'))
     monkeypatch.setenv('ADMIN_API_KEY','owner-test')
     monkeypatch.setenv('AUDIO_CACHE_DIR',str(tmp_path))
     monkeypatch.setenv('AUDIO_CACHE_SERVE_ENABLED','1')
@@ -59,3 +60,16 @@ def test_download_requests_count_get_starts_not_head_resumes_or_redirects(downlo
     assert count()==1
     assert client.get('/admin/downloads',headers={'X-Admin-Api-Key':'owner-test'}).json()['total_requests']==1
     assert client.get('/tracks/242/download',follow_redirects=False).status_code==404
+
+
+def test_test_downloads_are_separate_and_keep_legacy(download_client):
+    client,engine,url,data=download_client
+    with Session(engine) as db:
+        db.get(Mix,241).download_count=7;db.commit()
+    assert client.head(url+'?download=1&activity=test').status_code==200
+    assert client.get(url+'?download=1&activity=test',headers={'Range':'bytes=500-'}).status_code==206
+    assert client.get(url+'?download=1&activity=test').status_code==200
+    assert client.get(url+'?download=1').status_code==200
+    for category,expected in [('listener',1),('test',1),('legacy',7)]:
+        response=client.get('/admin/downloads?activity='+category,headers={'X-Admin-Api-Key':'owner-test'})
+        assert response.json()['total_requests']==expected

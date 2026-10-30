@@ -16,7 +16,7 @@ def test_aggregate_stats_are_private_and_store_no_identifiers(client):
     data=client.get('/admin/usage',headers={'X-Admin-Api-Key':'owner-test'}).json()['days'][0]
     assert data['visits']==1 and data['devices']=={'mobile':1}
     assert data['mixes']['237']=={'attempts':1,'starts':1,'failures':1,'startup_ms':2000,'startup_samples':1,'startup_buckets':[0,1,0,0,0,0],'listen_ms':15000,'resumes':1}
-    raw=next(usage.directory().glob('*.json')).read_text()
+    raw=next((usage.directory()/'listener').glob('*.json')).read_text()
     assert 'not-saved' not in raw and 'recent' not in raw
 
 @pytest.mark.parametrize('payload',[{'kind':'unknown'},{'kind':'listen','mix':0},{'kind':'start','mix':1,'value':-1},{'kind':'visit','device':'raw-agent'}])
@@ -27,3 +27,29 @@ def test_payload_and_listening_caps(client):
     assert client.post('/usage',json={'kind':'listen','mix':237,'value':120000}).status_code==202
     data=client.get('/admin/usage',headers={'X-Admin-Api-Key':'owner-test'}).json()['days'][0]
     assert data['mixes']['237']['listen_ms']==120000
+
+
+def test_listener_test_and_legacy_are_separate(client):
+    legacy=usage.directory();legacy.mkdir(parents=True,exist_ok=True)
+    from datetime import datetime,timezone
+    day=datetime.now(timezone.utc).date().isoformat()
+    (legacy/f'{day}.json').write_text(json.dumps({'day':day,'events':1,'visits':99,'devices':{},'mixes':{}}))
+    for activity in ('listener','test'):
+        assert client.post('/usage',json={'kind':'start','mix':241,'activity':activity}).status_code==202
+    headers={'X-Admin-Api-Key':'owner-test'}
+    for activity in ('listener','test'):
+        data=client.get('/admin/usage',params={'activity':activity},headers=headers).json()['days'][0]
+        assert data['mixes']['241']['starts']==1 and data['visits']==0
+    assert client.get('/admin/usage?activity=legacy',headers=headers).json()['days'][0]['visits']==99
+    assert client.get('/admin/usage?activity=test').status_code==403
+
+
+def test_prunes_inactive_buckets_but_preserves_download_ledger(client):
+    root=usage.directory()
+    for bucket in (root,root/'listener',root/'test'):
+        bucket.mkdir(parents=True,exist_ok=True)
+        (bucket/'2000-01-01.json').write_text('{}')
+    (root/'downloads.json').write_text('{"listener":{},"test":{}}')
+    assert client.post('/usage',json={'kind':'visit'}).status_code==202
+    assert not list(root.rglob('2000-01-01.json'))
+    assert (root/'downloads.json').exists()

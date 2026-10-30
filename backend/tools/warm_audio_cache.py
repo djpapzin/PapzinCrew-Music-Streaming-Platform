@@ -23,7 +23,7 @@ def failure_priorities():
     root=Path(os.getenv('ANONYMOUS_STATS_DIR','/var/lib/papzincrew/anonymous-stats'))
     counts={}
     try:
-        paths=sorted(root.glob('????-??-??.json'))[-2:]
+        paths=[path for bucket in (root,root/'listener') for path in sorted(bucket.glob('????-??-??.json'))[-2:]]
     except OSError:
         return counts
     for path in paths:
