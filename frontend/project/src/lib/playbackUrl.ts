@@ -1,10 +1,11 @@
+import {testActivity} from './anonymousUsage';
 import { API_BASE } from './api';
 
 export function downloadUrl(mix: { id: string | number; file_path?: string; availability?: string; cached_audio_url?: string; allow_downloads?: string }): string | undefined {
   if ((mix.availability || 'public').toLowerCase() !== 'public' || mix.allow_downloads !== 'yes' || !mix.cached_audio_url) return undefined;
   const url = playbackUrl(mix);
   // Downloads never fall back to Backblaze or the legacy download redirect.
-  return url === mix.cached_audio_url ? `${url}?download=1` : undefined;
+  return url === mix.cached_audio_url ? `${url}?download=1${testActivity()?'&activity=test':''}` : undefined;
 }
 
 // Public B2 objects can stream directly, avoiding two application proxies and a

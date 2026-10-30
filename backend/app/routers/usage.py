@@ -16,6 +16,7 @@ router=APIRouter(tags=['usage'])
 def directory(): return Path(os.getenv('ANONYMOUS_STATS_DIR','/var/lib/papzincrew/anonymous-stats'))
 
 class Event(BaseModel):
+    activity: Literal['listener','test'] = 'listener'
     kind: Literal['visit','attempt','start','failed','listen']
     mix: int = Field(default=0,ge=0,le=10000000)
     value: int = Field(default=0,ge=0,le=120000)
@@ -31,7 +32,7 @@ async def collect(request:Request):
     try: event=Event.model_validate_json(bytes(raw))
     except ValidationError: raise HTTPException(422,'Invalid anonymous event')
     if event.kind!='visit' and not event.mix: raise HTTPException(422,'Mix required')
-    root=directory();root.mkdir(parents=True,exist_ok=True,mode=0o700)
+    root=directory()/event.activity;root.mkdir(parents=True,exist_ok=True,mode=0o700)
     now=datetime.now(timezone.utc);day=now.date().isoformat()
     with (root/'stats.lock').open('a') as lock:
         fcntl.flock(lock,fcntl.LOCK_EX)
@@ -57,15 +58,19 @@ async def collect(request:Request):
         with temporary.open('w') as file:
             os.chmod(temporary,0o600);json.dump(data,file);file.flush();os.fsync(file.fileno())
         temporary.replace(path)
-        # Retain daily aggregates for 30 days; no event identifiers are stored.
-        cutoff=(now.date()-timedelta(days=29)).isoformat()
-        for old in root.glob('????-??-??.json'):
-            if old.stem<cutoff: old.unlink()
+    # Lock each bucket separately after releasing the writer lock.
+    cutoff=(now.date()-timedelta(days=29)).isoformat()
+    for bucket in (directory(),directory()/'listener',directory()/'test'):
+        if not bucket.exists(): continue
+        with (bucket/'stats.lock').open('a') as lock:
+            fcntl.flock(lock,fcntl.LOCK_EX)
+            for old in bucket.glob('????-??-??.json'):
+                if old.stem<cutoff: old.unlink()
     return {'accepted':True}
 
 @router.get('/admin/usage')
-def stats(_:None=Depends(require_admin_api_key)):
-    root=directory();days=[]
+def stats(activity: Literal['listener','test','legacy']='listener', _:None=Depends(require_admin_api_key)):
+    root=directory() if activity=='legacy' else directory()/activity;days=[]
     if root.exists():
         with (root/'stats.lock').open('a') as lock:
             fcntl.flock(lock,fcntl.LOCK_SH)
@@ -73,15 +78,37 @@ def stats(_:None=Depends(require_admin_api_key)):
             for path in sorted(root.glob('????-??-??.json')):
                 if path.stem>=cutoff:
                     data=json.loads(path.read_text());data.pop('recent',None);data.pop('events',None);days.append(data)
-    return {'days':days,'retention_days':30}
+    return {'days':days,'retention_days':30,'activity':activity}
 
 
 @router.get('/admin/downloads')
-def download_stats(_:None=Depends(require_admin_api_key), db:Session=Depends(get_db)):
+def download_stats(activity: Literal['listener','test','legacy']='listener', _:None=Depends(require_admin_api_key), db:Session=Depends(get_db)):
     """Owner-only lifetime request totals; no visitor identities or storage URLs."""
     rows=db.query(Mix.id,Mix.title,Mix.download_count).filter(
         (Mix.availability=='public') | Mix.availability.is_(None)
     ).order_by(Mix.id.desc()).all()
-    mixes=[{'id':row.id,'title':row.title,'requests':int(row.download_count or 0)} for row in rows]
+    counts=read_download_activity()
+    mixes=[{'id':row.id,'title':row.title,'requests':max(0,int(row.download_count or 0)-sum(counts[k].get(str(row.id),0) for k in ('listener','test'))) if activity=='legacy' else counts[activity].get(str(row.id),0)} for row in rows]
     return {'mixes':mixes,'total_requests':sum(row['requests'] for row in mixes),
             'definition':'Download starts, not unique people or confirmed completed files.'}
+
+
+def read_download_activity():
+    root=directory();root.mkdir(parents=True,exist_ok=True,mode=0o700)
+    with (root/'downloads.lock').open('a') as lock:
+        fcntl.flock(lock,fcntl.LOCK_SH)
+        path=root/'downloads.json'
+        return json.loads(path.read_text()) if path.exists() else {'listener':{},'test':{}}
+
+
+def record_download_activity(mix_id, activity):
+    root=directory();root.mkdir(parents=True,exist_ok=True,mode=0o700)
+    with (root/'downloads.lock').open('a') as lock:
+        fcntl.flock(lock,fcntl.LOCK_EX)
+        path=root/'downloads.json'
+        data=json.loads(path.read_text()) if path.exists() else {'listener':{},'test':{}}
+        key=str(mix_id);data[activity][key]=data[activity].get(key,0)+1
+        temporary=path.with_suffix('.tmp')
+        with temporary.open('w') as file:
+            os.chmod(temporary,0o600);json.dump(data,file);file.flush();os.fsync(file.fileno())
+        temporary.replace(path)

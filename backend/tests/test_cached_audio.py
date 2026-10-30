@@ -11,6 +11,7 @@ from app.services import audio_cache
 
 @pytest.fixture
 def cache(tmp_path, monkeypatch):
+    monkeypatch.setenv('ANONYMOUS_STATS_DIR',str(tmp_path/'stats'))
     monkeypatch.setenv('AUDIO_CACHE_DIR',str(tmp_path))
     monkeypatch.setenv('AUDIO_CACHE_SERVE_ENABLED','1')
     monkeypatch.setenv('AUDIO_DOWNLOADS_ENABLED','1')
