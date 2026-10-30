@@ -28,7 +28,7 @@ def public_mixes(mixes):
             and m['id'] > 0 and isinstance(m.get('title'), str) and m['title'].strip()]
 
 
-def answer_question(question, mixes=(), downloads_enabled=False):
+def answer_question(question, mixes=(), downloads_enabled=False, uploads_enabled=True):
     if not isinstance(question, str) or not 1 <= len(question.strip()) <= 1500:
         raise ValueError('Add a question with 1–1500 characters.')
     text = normalized(question)
@@ -64,6 +64,8 @@ def answer_question(question, mixes=(), downloads_enabled=False):
     if re.search(r'\b(sign.?up|sign.?in|log.?in|account|register|free|cost|pay)\b', text):
         return reply('access', 'The beta is free to listen to. You do not need an account: open a mix and tap Play. Your own mobile-data charges can still apply.', [('Browse mixes', SITE+'/search')])
     if re.search(r'\b(upload|submit|my mix|my mixes)\b', text):
+        if not uploads_enabled:
+            return reply('uploads', 'Website uploads are temporarily paused while DJ Papzin prepares the DJ upload flow. You can still listen to and download ready public mixes. I cannot upload audio files or publish releases for you. To contact DJ Papzin, say “I have feedback”.', [('Browse mixes', SITE+'/search')])
         return reply('uploads', 'Use Upload Music to submit a DJ mix. Uploads stay unlisted until checked; solo songs and test uploads do not go into the public catalog. DJ Papzin handles release approval.', [('Upload a DJ mix', SITE+'/upload')])
     if re.search(r'\b(spam|rules|moderate|ban|kick|members|group admin)\b', text):
         return reply('group_admin', 'Keep group posts relevant to DJ mixes and site help. Flag suspected spam to a group admin for review. I cannot remove members, change group settings or publish group announcements.', needs_owner=True)

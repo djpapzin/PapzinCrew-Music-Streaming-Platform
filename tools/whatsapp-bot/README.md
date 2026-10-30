@@ -57,3 +57,13 @@ Delivery attempts are recorded before transmission. Repeat commands do not dupli
 Guest 48 first test: release title Cruize Friday Guest 48, credit Mr Dominate SA, date 2026-10-30 SAST, canonical mix 241. The actual user-supplied teaser was tested in an isolated private VPS folder, with group sending disabled and zero group messages. The running bot and website were not changed by that test. Keep original audio, existing tracklists, public catalog and Backblaze $0 caps unchanged.
 
 Before enabling the private pilot, seed a fresh Guest 48 record and attach the original teaser using the module API or owner commands. Never copy `releases.json` from the simulated test into the running bot: its approval/delivery state is test data, not DJ's approval. Real previews and approvals must happen in the verified owner chat.
+
+## Approved community feedback rollout — 30 October 2026
+
+DJ approved private support/feedback for all Papzin & Crew Community members and private owner alerts, with group replies off. `WA_COMMUNITY_ACCESS_FILE` points to a 0600 JSON file containing the pinned community and announcement group JIDs. The helper is a regular community member; it does not join the four mix chats. Membership is refreshed from WhatsApp metadata in memory every minute, including LID addresses. Metadata failures close community access; message text can never grant membership or owner status.
+
+Set `WA_FEEDBACK_ALERTS=1`, `WA_DOWNLOADS_ENABLED=1`, `WA_UPLOADS_ENABLED=0`. Keep `WA_RELEASE_GROUP_SEND=0` and no release-group sending configuration. Public mix answers refresh from the existing local catalog API; private/unlisted mixes and source URLs are excluded. No paid model/API is used. Media gets a clear text explanation and is not downloaded for listener support.
+
+Natural private feedback asks for confirmation before saving. Confirmed reports generate a private alert only to the configured, envelope-verified owner number. Records have pending/sending/sent/failed alert status: pending alerts flush on startup, while uncertain sending/failed alerts need review rather than blind duplicate sends. Forwarded owner messages are feedback drafts, never executable commands. Other members cannot read the inbox, submit owner changes, or approve announcements. Natural replies use per-sender abuse limits instead of the old global five-second silent drop.
+
+Do not merge this bot feature into the stable website branch merely to deploy the separately approved bot service. Website changes and group announcements still require DJ's approval.

@@ -7,7 +7,7 @@
   },
   "scripts": {
     "pair": "node pair.mjs",
-    "test": "node --test policy.test.mjs owner.test.mjs auth.test.mjs github.test.mjs listener.test.mjs release.test.mjs",
+    "test": "node --test policy.test.mjs owner.test.mjs auth.test.mjs github.test.mjs listener.test.mjs release.test.mjs community.test.mjs",
     "pilot": "node pilot.mjs"
   },
   "dependencies": {

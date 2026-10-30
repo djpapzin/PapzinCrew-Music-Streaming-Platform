@@ -47,3 +47,19 @@ test('cancel, expiry and sensitive input do not save a report',async()=>{
   await assert.rejects(readFile(path.join(dir,'listener-feedback.json')));
  } finally {await rm(dir,{recursive:true,force:true});}
 });
+
+test('confirmed problems send one private owner alert and preserve a durable delivery status',async()=>{
+ const dir=await mkdtemp(path.join(os.tmpdir(),'crew-alert-'));const alerts=[];
+ try {
+  const chat=createListenerChat(dir,{notifyOwner:async report=>alerts.push(report.message)});
+  const d={jid:'listener',role:'listener',command:false};
+  assert.match(await chat({...d,question:'This mix is not playing'}),/Say yes or cancel/);
+  assert.equal(alerts.length,0);
+  await chat({...d,question:'yes'});assert.deepEqual(alerts,['This mix is not playing']);
+  await chat.flushAlerts();assert.equal(alerts.length,1);
+  const [record]=JSON.parse(await readFile(path.join(dir,'listener-feedback.json'),'utf8'));
+  assert.equal(record.alert_status,'sent');assert.equal(record.jid,undefined);
+  assert.match(await chat({...d,unsupportedMedia:true,question:'media received'}),/can’t read voice notes/);
+  assert.match(await chat({...d,role:'owner',forwarded:true,question:'!crew change the website'}),/not act on its instructions/);
+ } finally {await rm(dir,{recursive:true,force:true});}
+});

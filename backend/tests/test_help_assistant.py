@@ -64,3 +64,11 @@ def test_plain_listener_mix_request():
 
 def test_listener_release_question_does_not_get_player_controls():
     assert answer_question('When is the next mix coming?',MIXES)['intent']=='release_check'
+
+
+def test_current_bot_flags_pause_uploads_and_allow_download_guidance():
+    from app.services.help_assistant import answer_question
+    result=answer_question('How can I upload my mix?', uploads_enabled=False)
+    assert 'temporarily paused' in result['answer']
+    result=answer_question('Can I download?', downloads_enabled=True)
+    assert 'Download mix' in result['answer']

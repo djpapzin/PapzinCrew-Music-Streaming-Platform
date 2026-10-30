@@ -7,7 +7,8 @@ export function normalizePrivateJid(jid) {
 }
 
 // Direct messages only, one approved tester, fresh commands, bounded in-memory IDs.
-export function createPolicy({ tester, started = Date.now(), enabled = false, maxReplies = 20, owner, persistent = false, natural = false, listeners = [] }) {
+export function createPolicy({ tester, started = Date.now(), enabled = false, maxReplies, owner, persistent = false, natural = false, listeners = [], isCommunityMember=()=>false }) {
+  maxReplies ??= persistent && natural ? 500 : 20;
   if (!/^\d{10,15}$/.test(tester ?? '')) throw new Error('One international tester number is required.');
   if (!Array.isArray(listeners) || listeners.length>100 || listeners.some(n=>!/^\d{10,15}$/.test(n))) throw new Error('Invalid listener allowlist');
   const allowed = new Set([tester,...listeners].map(n=>n+'@s.whatsapp.net'));
@@ -18,6 +19,7 @@ export function createPolicy({ tester, started = Date.now(), enabled = false, ma
   let windowStart = started;
   let replies = 0;
   let last = 0;
+  const senderRates=new Map();
   return (event, message, now = Date.now()) => {
     if (persistent && now-windowStart >= 30*60_000) { windowStart=now; replies=0; }
     if (!enabled || event !== 'notify' || (!persistent && now - started > 30 * 60_000) || replies >= maxReplies) return null;
@@ -26,7 +28,7 @@ export function createPolicy({ tester, started = Date.now(), enabled = false, ma
     if (key?.fromMe || !key?.id || !jid) return null;
     // Alternate PN is provided by WhatsApp's envelope, never by message text.
     const sender=jid.endsWith('@lid') ? normalizePrivateJid(key.remoteJidAlt) : jid;
-    if(!allowed.has(sender)) return null;
+    if(!allowed.has(sender) && !isCommunityMember(sender) && !isCommunityMember(jid)) return null;
     const timestamp = Number(message.messageTimestamp) * 1000;
     if (!Number.isFinite(timestamp) || timestamp < Math.max(started - 10_000, now - 120_000) || timestamp > now + 60_000) return null;
     const role = sender===ownerJid ? 'owner' : 'listener';
@@ -35,19 +37,27 @@ export function createPolicy({ tester, started = Date.now(), enabled = false, ma
     const media = video ?? image;
     const caption = media?.caption;
     const attachmentAllowed = role==='owner' && typeof caption==='string' && /^!crew\s+release\s+[a-z0-9-]+\s+(teaser|artwork)\s*$/i.test(caption);
-    const text = message.message?.conversation ?? message.message?.extendedTextMessage?.text ?? (attachmentAllowed ? caption : undefined);
+    const unsupportedMedia=!attachmentAllowed && Boolean(message.message?.audioMessage||message.message?.documentMessage||video||image);
+    const text = message.message?.conversation ?? message.message?.extendedTextMessage?.text ?? (attachmentAllowed ? caption : unsupportedMedia ? 'media received' : undefined);
     if(typeof text!=='string') return null;
-    const command=/^!crew(?:\s|$)/i.test(text);
+    const forwarded=Boolean(message.message?.extendedTextMessage?.contextInfo?.isForwarded);
+    const command=!forwarded && /^!crew(?:\s|$)/i.test(text);
     if(!natural && !command) return null;
     const question = (command ? text.replace(/^!crew\s*/i, '') : text).trim() || 'What is Papzin & Crew?';
-    if (question.length > 1500 || (last && now - last < 5000)) return null;
+    const rate=senderRates.get(sender??jid);
+    if (question.length > 1500 || (!natural && last && now-last<5000)
+        || (natural && rate && now-rate.start<30*60_000 && (rate.count>=40 || now-rate.last<300))) return null;
     const hash = createHash('sha256').update(jid + ':' + key.id).digest('hex');
     if (seen.has(hash)) return null;
     for (const [id,time] of seen) if (now-time > 120_000) seen.delete(id);
     seen.set(hash,now);
     replies++;
     last = now;
-    return { jid, question, role, command, ...(attachmentAllowed ? {attachment:{mime:media.mimetype,size:Number(media.fileLength)},media:video?'video':'image',mediaMessage:media} : {}) };
+    if(natural) {
+      for(const [key,r] of senderRates)if(now-r.start>=30*60_000)senderRates.delete(key);
+      senderRates.set(sender??jid,{start:rate && now-rate.start<30*60_000?rate.start:now,count:rate && now-rate.start<30*60_000?rate.count+1:1,last:now});
+    }
+    return { jid, question, role, command, unsupportedMedia, forwarded, ...(attachmentAllowed ? {attachment:{mime:media.mimetype,size:Number(media.fileLength)},media:video?'video':'image',mediaMessage:media} : {}) };
   };
 }
 
