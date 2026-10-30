@@ -73,3 +73,17 @@ def test_test_downloads_are_separate_and_keep_legacy(download_client):
     for category,expected in [('listener',1),('test',1),('legacy',7)]:
         response=client.get('/admin/downloads?activity='+category,headers={'X-Admin-Api-Key':'owner-test'})
         assert response.json()['total_requests']==expected
+
+
+def test_public_play_counts_only_include_listeners_for_public_mixes(download_client):
+    client,engine,url,data=download_client
+    assert client.post('/usage',json={'kind':'start','mix':241,'activity':'listener'}).status_code==202
+    assert client.post('/usage',json={'kind':'start','mix':241,'activity':'test'}).status_code==202
+    root=usage.directory()
+    from datetime import datetime,timezone
+    day=datetime.now(timezone.utc).date().isoformat()
+    (root/f'{day}.json').write_text(json.dumps({'mixes':{'241':{'starts':99}}}))
+    result=client.get('/tracks/241/listener-plays')
+    assert result.status_code==200 and result.json()=={'plays':1,'window_days':30}
+    assert client.get('/tracks/242/listener-plays').status_code==404
+    assert client.get('/tracks/999/listener-plays').status_code==404
