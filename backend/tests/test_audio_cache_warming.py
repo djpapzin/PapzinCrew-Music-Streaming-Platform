@@ -12,6 +12,7 @@ def job(tmp_path,monkeypatch):
     monkeypatch.setenv('AUDIO_CACHE_DIR',str(tmp_path))
     monkeypatch.setenv('AUDIO_CACHE_WARM_ENABLED','1')
     monkeypatch.setenv('AUDIO_CACHE_FILL_BYTES','10')
+    monkeypatch.setenv('ANONYMOUS_STATS_DIR',str(tmp_path/'stats'))
     db=MagicMock()
     source='https://s3.us-east-005.backblazeb2.com/bucket/'
     db.query.return_value.filter.return_value.order_by.return_value.all.return_value=[

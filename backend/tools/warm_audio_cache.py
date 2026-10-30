@@ -22,7 +22,11 @@ def failure_priorities():
     """Prioritize reported playback failures in the existing daily fill budget."""
     root=Path(os.getenv('ANONYMOUS_STATS_DIR','/var/lib/papzincrew/anonymous-stats'))
     counts={}
-    for path in sorted(root.glob('????-??-??.json'))[-2:]:
+    try:
+        paths=sorted(root.glob('????-??-??.json'))[-2:]
+    except OSError:
+        return counts
+    for path in paths:
         try:
             for ident, stats in json.loads(path.read_text()).get('mixes',{}).items():
                 counts[int(ident)]=counts.get(int(ident),0)+int(stats.get('failures',0))
