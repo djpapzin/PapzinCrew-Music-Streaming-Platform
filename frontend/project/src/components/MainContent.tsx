@@ -60,7 +60,9 @@ export default function MainContent({searchQuery,songs,tracksLoading,tracksError
       <Route path="/install" element={<InstallAppPage/>}/>
       <Route path="/notifications" element={<NotificationsPage/>}/>
       <Route path="/account" element={<AccountPage/>}/>
-      <Route path="/upload" element={<UploadPage onPlaySong={onPlaySong}/>}/>
+      <Route path="/upload" element={import.meta.env.VITE_UPLOADS_ENABLED === 'true'
+        ? <UploadPage onPlaySong={onPlaySong}/>
+        : <section className="max-w-xl mx-auto p-6 space-y-4"><h1 className="text-2xl font-bold">Uploads are temporarily paused</h1><p>We’re getting uploads ready for DJs. You can still listen to and download our public mixes.</p><Link to="/search" className="text-purple-400 underline">Browse DJ mixes</Link></section>}/>
       <Route path="/admin" element={<AdminAnalyticsPanel/>}/>
       <Route path="*" element={<p>Page not found. <Link className="text-purple-300" to="/">Go home</Link></p>}/>
     </Routes>
