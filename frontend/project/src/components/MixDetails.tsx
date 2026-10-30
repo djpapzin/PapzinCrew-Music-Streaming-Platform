@@ -1,3 +1,4 @@
+import ListenerPlayCount from './ListenerPlayCount';
 import { playbackUrl, downloadUrl } from '../lib/playbackUrl';
 import { useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
@@ -70,7 +71,7 @@ export default function MixDetails({ songs, loading, error, currentSong, isPlayi
         <p className="text-xs uppercase tracking-widest text-purple-200 flex items-center gap-2"><Headphones size={16}/> The mix archive</p>
         <h2 className="text-3xl sm:text-4xl font-bold break-words">{song.title}</h2>
         <Link className="inline-block text-lg text-purple-200 underline underline-offset-4" to={`/artists?artist=${encodeURIComponent(song.artist)}`}>{song.artist}</Link>
-        <p className="text-gray-300">{durationLabel(song.duration)}{song.year > 0 ? ` • ${song.year}` : ''}</p>
+        <ListenerPlayCount mixId={song.id}/><p className="text-gray-300">{durationLabel(song.duration)}{song.year > 0 ? ` • ${song.year}` : ''}</p>
         <div className="flex flex-wrap gap-2">
           <Link className="rounded-full bg-white/10 px-3 py-2 text-sm" to={`/albums?series=${encodeURIComponent(series)}`}>{series}</Link>
           {song.genre.trim() && <Link className="rounded-full bg-white/10 px-3 py-2 text-sm" to={`/search?genre=${encodeURIComponent(song.genre.trim())}`}>{song.genre.trim()}</Link>}
