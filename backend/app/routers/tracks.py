@@ -22,6 +22,7 @@ from ..services.audio_cache import public_url as cached_audio_url
 from ..services.audio_cache import manifest as audio_cache_manifest
 from ..rate_limit import enforce_rate_limit
 from ..security import require_admin
+from .admin import require_admin_api_key
 import inspect
 
 router = APIRouter(prefix="/tracks", tags=["tracks"])
@@ -959,81 +960,22 @@ async def download_track(track_id: int, db: Session = Depends(_get_db_dyn), curr
         logger.warning("track download not found", extra={"action": "track_download_not_found", "track_id": track_id})
         raise HTTPException(status_code=404, detail="Track not found")
     
-    # Enforce private access rules
-    if getattr(db_track, 'availability', 'public') == 'private':
-        artist_id = getattr(getattr(db_track, 'artist', None), 'id', None)
-        user_id = getattr(current_user, 'id', None) if current_user else None
-        if not user_id:
-            raise HTTPException(status_code=401, detail="Authentication required")
-        if artist_id is not None and user_id != artist_id:
-            raise HTTPException(status_code=403, detail="Forbidden")
-    
-    # Check if downloads are allowed
+    # Legacy links must use the same verified cache, counter and egress budget.
+    # Never redirect downloads to Backblaze or expose unlisted review uploads.
+    if getattr(db_track, 'availability', 'public') not in ('public', None):
+        raise HTTPException(status_code=404, detail='Download unavailable')
     if getattr(db_track, 'allow_downloads', 'no') != 'yes':
-        logger.warning("track download not allowed", extra={"action": "track_download_not_allowed", "track_id": track_id})
-        raise HTTPException(status_code=403, detail="Download not allowed for this track")
-    
-    file_path = (db_track.file_path or "").strip()
-    if not file_path:
-        raise HTTPException(status_code=404, detail="Audio file not found")
-    
-    # Handle remote URLs
-    if file_path.startswith("http://") or file_path.startswith("https://"):
-        # Increment download count for remote downloads as well
-        if hasattr(db_track, 'download_count'):
-            try:
-                db_track.download_count = (db_track.download_count or 0) + 1
-                db.commit()
-            except Exception:
-                pass
-        from fastapi.responses import RedirectResponse
-        logger.info("track download redirect", extra={"action": "track_download_redirect", "track_id": track_id, "url": file_path})
-        return RedirectResponse(url=file_path, status_code=307)
-    
-    # Handle local files
-    import mimetypes
-    import re
-    
-    norm_path = file_path.replace("\\", "/")
-    upload_dir = os.getenv("UPLOAD_DIR", "uploads")
-    candidates = [file_path]
-    
-    if norm_path.startswith("/uploads/"):
-        rel = norm_path.split("/uploads/", 1)[1]
-        candidates.append(os.path.join(upload_dir, rel))
-    if norm_path.startswith("uploads/"):
-        rel = norm_path.split("uploads/", 1)[1]
-        candidates.append(os.path.join(upload_dir, rel))
-    candidates.append(os.path.join(upload_dir, os.path.basename(norm_path)))
-    
-    resolved_path = None
-    for p in candidates:
-        try:
-            if p and os.path.exists(p):
-                resolved_path = p
-                break
-        except Exception:
-            pass
-    
-    if not resolved_path:
-        raise HTTPException(status_code=404, detail="Audio file not found")
-    
-    # Increment download count
-    if hasattr(db_track, 'download_count'):
-        db_track.download_count = (db_track.download_count or 0) + 1
-        db.commit()
-    
-    media_type = mimetypes.guess_type(resolved_path)[0] or "audio/mpeg"
-    filename = getattr(db_track, 'original_filename', None) or os.path.basename(resolved_path)
-    headers = {"Content-Disposition": f"attachment; filename={filename}"}
-    empty_iter = iter([b""])
-    logger.info("track download serve local", extra={"action": "track_download_local", "track_id": track_id, "resolved_path": resolved_path, "media_type": media_type, "file_name": filename})
-    return StreamingResponse(empty_iter, media_type=media_type, headers=headers)
+        raise HTTPException(status_code=403, detail='Download not allowed for this track')
+    cached = cached_audio_url(db_track.id, db_track.file_path, db_track.availability)
+    if not cached:
+        raise HTTPException(status_code=404, detail='Download is being prepared. Please stream this mix for now.')
+    # The cache handler counts the actual GET, not this redirect or a HEAD check.
+    return RedirectResponse(url=cached+'?download=1', status_code=307)
 
 
 
 @router.get("/{track_id}/stats")
-def get_track_stats(track_id: int, db: Session = Depends(_get_db_dyn)):
+def get_track_stats(track_id: int, _: None = Depends(require_admin_api_key), db: Session = Depends(_get_db_dyn)):
     """
     Get track statistics including play count and download count.
     """
