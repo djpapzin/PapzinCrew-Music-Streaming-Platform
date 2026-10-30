@@ -112,3 +112,20 @@ def record_download_activity(mix_id, activity):
         with temporary.open('w') as file:
             os.chmod(temporary,0o600);json.dump(data,file);file.flush();os.fsync(file.fileno())
         temporary.replace(path)
+
+
+@router.get('/tracks/{mix_id}/listener-plays')
+def public_listener_plays(mix_id:int,db:Session=Depends(get_db)):
+    """Only a public mix's listener starts; no private analytics or legacy totals."""
+    mix=db.query(Mix.id).filter(Mix.id==mix_id, (Mix.availability=='public') | Mix.availability.is_(None)).first()
+    if not mix: raise HTTPException(404,'Mix not found')
+    root=directory()/'listener';plays=0
+    if root.exists():
+        with (root/'stats.lock').open('a') as lock:
+            fcntl.flock(lock,fcntl.LOCK_SH)
+            cutoff=(datetime.now(timezone.utc).date()-timedelta(days=29)).isoformat()
+            for path in root.glob('????-??-??.json'):
+                if path.stem>=cutoff:
+                    data=json.loads(path.read_text())
+                    plays+=int(data.get('mixes',{}).get(str(mix_id),{}).get('starts',0))
+    return {'plays':plays,'window_days':30}
