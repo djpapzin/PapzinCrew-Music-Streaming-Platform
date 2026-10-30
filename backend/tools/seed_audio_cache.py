@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 import shutil
+import mimetypes
 from urllib.parse import urlparse, unquote
 from pathlib import Path
 from app.db.database import SessionLocal
@@ -39,6 +40,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--mix-id', required=True, type=int)
     parser.add_argument('--file', required=True, type=Path)
+    parser.add_argument('--metadata-source', choices=('head', 'listing'), default='head',
+                        help='Use authorized object-list metadata to verify an existing backup when HEAD is capped; never downloads audio')
     parser.add_argument('--reviewed-unlisted', action='store_true',
                         help='Prepare a checked unlisted mix before release; does not publish or expose it')
     args = parser.parse_args()
@@ -57,7 +60,16 @@ def main():
     with args.file.open('rb') as audio:
         for chunk in iter(lambda: audio.read(1024*1024), b''):
             sha.update(chunk); md5.update(chunk)
-    head = storage.s3.head_object(Bucket=storage.bucket, Key=key)
+    if args.metadata_source == 'listing':
+        listing = storage.s3.list_objects_v2(Bucket=storage.bucket, Prefix=key, MaxKeys=2)
+        matches = [item for item in listing.get('Contents', []) if item.get('Key') == key]
+        if len(matches) != 1:
+            raise SystemExit('Exact source object metadata unavailable; cache unchanged')
+        item = matches[0]
+        head = {'ContentLength': item['Size'], 'ETag': item['ETag'],
+                'ContentType': mimetypes.guess_type(key)[0] or 'application/octet-stream'}
+    else:
+        head = storage.s3.head_object(Bucket=storage.bucket, Key=key)
     if head['ContentLength'] != size or head['ETag'].strip('"') != md5.hexdigest():
         raise SystemExit('Local copy does not match B2 exactly; cache unchanged')
     root = directory(); root.mkdir(parents=True, exist_ok=True, mode=0o700)
