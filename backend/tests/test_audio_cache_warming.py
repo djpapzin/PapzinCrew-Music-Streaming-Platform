@@ -50,6 +50,16 @@ def test_disabled_job_has_no_network_calls(job,monkeypatch):
     assert not s3.head_object.called and not s3.get_object.called
 
 
+def test_failed_mix_is_prioritized_without_expanding_daily_budget(job,monkeypatch):
+    root,s3,seed,db=job
+    stats=root/'stats';stats.mkdir();(stats/'2026-10-30.json').write_text(json.dumps({'mixes':{'2':{'failures':1}}}))
+    monkeypatch.setenv('ANONYMOUS_STATS_DIR',str(stats))
+    warm.main()
+    assert s3.get_object.call_args.kwargs['Key']=='2'
+    assert s3.get_object.call_count==1
+    assert json.loads(next(root.glob('fill-*.json')).read_text())['reserved_bytes']==6
+
+
 def test_nonpublic_never_downloaded_even_if_selected(job):
     root,s3,seed,db=job
     for mix in db.query.return_value.filter.return_value.order_by.return_value.all.return_value:
