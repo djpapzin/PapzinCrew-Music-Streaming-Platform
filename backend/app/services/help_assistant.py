@@ -7,7 +7,7 @@ import re
 import unicodedata
 
 SITE = 'https://crew.djpapzin.com'
-STOP = set('a an and are can could dj do find for from give hello hi how i is it link listen listening me mix mixes music of on play please pls send share song songs stream the there this to want where with you your'.split())
+STOP = set('a an and any are available by can could dj do find for from get give got have hello hey hi how howzit i is it link listen listening me mix mixes music of on play please pls send share song songs stream thanks the there this to want where with you your'.split())
 
 
 def normalized(value):
@@ -49,13 +49,18 @@ def answer_question(question, mixes=(), downloads_enabled=False, uploads_enabled
         return reply('privacy', 'The site uses anonymous visitor and playback statistics to spot problems and understand listening. Stats and feedback are visible only to DJ Papzin in admin. You do not need a listener account. Do not include sensitive information in feedback.')
     if re.search(r'\b(password|owner key|api key|token|private messages|admin key)\b', text):
         return reply('private_access', 'I can help with public mixes and using the website. Never share passwords or owner keys in the group. Ask DJ Papzin privately about owner access.', needs_owner=True)
+    # Route upload questions before generic errors; "uploading" contains "loading".
+    if re.search(r'\b(upload(?:s|ing|ed)?|submit(?:ting|ted)?|my mix|my mixes)\b', text):
+        if not uploads_enabled:
+            return reply('uploads', 'Website uploads are temporarily paused while DJ Papzin prepares the DJ upload flow. You can still listen to and download ready public mixes. I cannot upload audio files or publish releases for you. To contact DJ Papzin, say “I have feedback”.', [('Browse mixes', SITE+'/search')])
+        return reply('uploads', 'Use Upload Music to submit a DJ mix. Uploads stay unlisted until checked; solo songs and test uploads do not go into the public catalog. DJ Papzin handles release approval.', [('Upload a DJ mix', SITE+'/upload')])
     if re.search(r'\b(download|downloads|offline|save.*(music|mix|song))\b', text):
         if not downloads_enabled:
             return reply('downloads', 'Downloads are coming soon. For now, open a mix and tap Play to stream it. No account is needed.', [('Browse mixes', SITE+'/search')])
         return reply('downloads', 'Open the mix page. If its DJ allows downloads and the download is ready, use Download mix. Otherwise you can stream it.', [('Browse mixes', SITE+'/search')])
     if re.search(r"no sound|can.?t hear|cannot hear|silent|muted|volume", text):
         return reply('no_sound', 'Try these steps:\n1. Tap Play, then check the player and phone volume.\n2. Check whether sound is going to Bluetooth headphones or another speaker.\n3. Try a different mix. If it still has no sound, tap Feedback, choose Something broke, and tell DJ Papzin which mix and what phone/browser you used.', [('Browse mixes', SITE+'/search')])
-    if re.search(r"won.?t play|can.?t play|cannot play|not playing|not working|doesn.?t work|stuck|buffer|loading|slow|failed|error|broken", text):
+    if re.search(r"won.?t play|can.?t play|cannot play|not playing|not working|doesn.?t work|\b(stuck|buffer(?:ing)?|loading|slow|failed|error|broken)\b", text):
         return reply('playback', 'Try these steps:\n1. Pause the mix, check your connection, then tap Play once.\n2. Try another mix. If possible, try Wi-Fi instead of mobile data, or the other way around.\n3. Refresh the page once. If it still fails, tap Feedback → Something broke and include the mix name and what happened. Your report goes privately to DJ Papzin.', [('Browse mixes', SITE+'/search')])
     if re.search(r'\b(feedback|suggestion|suggest|improve|idea|remove|complaint|report)\b', text):
         return reply('feedback', 'Tap Feedback at the top of the website. Choose Something broke, An idea, Improve something, Remove something, or Something else, then send one short message. Your name is optional, no account is needed, and only DJ Papzin can read it.', [('Open the website', SITE+'/')])
@@ -63,10 +68,6 @@ def answer_question(question, mixes=(), downloads_enabled=False, uploads_enabled
         return reply('about', 'Papzin & Crew is a beta home for DJ mixes. Browse a mix and tap Play; listening is free and needs no account. Uploads are checked before they go public, and Feedback lets you send problems or ideas privately to DJ Papzin.', [('Open the website', SITE+'/')])
     if re.search(r'\b(sign.?up|sign.?in|log.?in|account|register|free|cost|pay)\b', text):
         return reply('access', 'The beta is free to listen to. You do not need an account: open a mix and tap Play. Your own mobile-data charges can still apply.', [('Browse mixes', SITE+'/search')])
-    if re.search(r'\b(upload|submit|my mix|my mixes)\b', text):
-        if not uploads_enabled:
-            return reply('uploads', 'Website uploads are temporarily paused while DJ Papzin prepares the DJ upload flow. You can still listen to and download ready public mixes. I cannot upload audio files or publish releases for you. To contact DJ Papzin, say “I have feedback”.', [('Browse mixes', SITE+'/search')])
-        return reply('uploads', 'Use Upload Music to submit a DJ mix. Uploads stay unlisted until checked; solo songs and test uploads do not go into the public catalog. DJ Papzin handles release approval.', [('Upload a DJ mix', SITE+'/upload')])
     if re.search(r'\b(spam|rules|moderate|ban|kick|members|group admin)\b', text):
         return reply('group_admin', 'Keep group posts relevant to DJ mixes and site help. Flag suspected spam to a group admin for review. I cannot remove members, change group settings or publish group announcements.', needs_owner=True)
     if re.search(r'\b(install|app|home screen)\b', text):
@@ -86,7 +87,7 @@ def answer_question(question, mixes=(), downloads_enabled=False, uploads_enabled
                 scored.append((len(tokens & title_tokens), m['id'], m))
         found = [item[2] for item in sorted(scored, key=lambda x: (-x[0], x[1]))[:3]]
         if found:
-            return reply('mix_links', 'Here are the matching public mixes. Open a link and tap Play:', [(m['title'], SITE+'/track/'+str(m['id'])) for m in found])
+            return reply('mix_links', 'Here are the matching public mixes. Open a link and tap Play:\n'+'\n'.join(m['title'] for m in found), [(m['title'], SITE+'/track/'+str(m['id'])) for m in found])
     if re.search(r'\b(announce|announcement|release|tomorrow|guest)\b', text):
         return reply('release_check', 'I cannot confirm an unpublished release or its time. Ask DJ Papzin to confirm the mix and share its public mix-page link when it is ready.', needs_owner=True)
     return reply('clarify', 'What would you like help with: finding a mix, playing music, uploading a DJ mix, or sending feedback? For a mix link, send its name, number or DJ. If I cannot answer, DJ Papzin can help.', [('Browse mixes', SITE+'/search')], True)

@@ -72,3 +72,22 @@ def test_current_bot_flags_pause_uploads_and_allow_download_guidance():
     assert 'temporarily paused' in result['answer']
     result=answer_question('Can I download?', downloads_enabled=True)
     assert 'Download mix' in result['answer']
+
+
+@pytest.mark.parametrize('question',['Hi. Can i get Mr Dominate mixes','Can I please get mixes by Mr Dominate?','Any Mr Dominate mixes available?'])
+def test_tvirus_artist_request_ignores_conversational_filler(question):
+    mixes=[{'id':232,'title':'Cruize Friday Guest 47 (Mixed By Mr Dominate SA)','availability':'public'},
+           {'id':241,'title':'Cruize Friday Guest 48 (Mixed By Mr Dominate SA)','availability':'public'},
+           {'id':999,'title':'Mr Dominate private preview','availability':'unlisted'}]
+    result=answer_question(question,mixes)
+    assert result['intent']=='mix_links'
+    assert [link['url'] for link in result['links']]==['https://crew.djpapzin.com/track/232','https://crew.djpapzin.com/track/241']
+    assert 'Guest 47' in result['answer'] and 'Guest 48' in result['answer']
+
+
+@pytest.mark.parametrize('question',['uploading a DJ mix','Uploading my mix is not working','How do I upload?'])
+def test_uploading_is_not_misclassified_as_loading_or_playback(question):
+    result=answer_question(question, uploads_enabled=False)
+    assert result['intent']=='uploads'
+    assert 'temporarily paused' in result['answer']
+    assert 'Pause the mix' not in result['answer']
