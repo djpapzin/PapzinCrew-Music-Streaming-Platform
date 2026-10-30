@@ -145,3 +145,16 @@ it('stops automatic recovery after three attempts instead of polling indefinitel
   await act(async () => { await vi.advanceTimersByTimeAsync(120000); });
   expect(fetch).toHaveBeenCalledTimes(4);
 });
+
+it('swipes up on the mini artwork to expand without restarting muted audio',async()=>{
+ await setup();fireEvent.click(screen.getByRole('button',{name:'Select Mix 1'}));fireEvent.click(screen.getByRole('button',{name:'Minimize player'}));
+ const mini=document.querySelector('.mobile-mini-player')!;const audio=document.querySelector('audio')!;const plays=vi.mocked(HTMLMediaElement.prototype.play).mock.calls.length;
+ swipe(mini.querySelector('[data-mini-expand] img')!,5,-100);expect(dialog()).toBeTruthy();expect(audio.paused).toBe(false);expect(audio.muted).toBe(true);expect(HTMLMediaElement.prototype.play).toHaveBeenCalledTimes(plays);
+});
+it('does not expand from a mini control, seek, short, downward, horizontal or cancelled gesture',async()=>{
+ await setup();fireEvent.click(screen.getByRole('button',{name:'Select Mix 1'}));fireEvent.click(screen.getByRole('button',{name:'Minimize player'}));const mini=document.querySelector('.mobile-mini-player')!;const art=mini.querySelector('[data-mini-expand] img')!;
+ for(const [dx,dy] of [[0,-20],[100,-70],[0,100]]){swipe(art,dx,dy);expect(dialog()).toBeNull();}
+ swipe(art,0,-100,true);expect(dialog()).toBeNull();
+ for(const control of mini.querySelectorAll('button:not([data-mini-expand]),input')){swipe(control,0,-100);expect(dialog()).toBeNull();}
+ fireEvent.click(mini.querySelector('[data-mini-expand]')!);expect(dialog()).toBeTruthy();
+});
