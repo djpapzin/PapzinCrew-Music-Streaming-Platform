@@ -18,7 +18,7 @@ export const usePlayer = () => {
   const stateRef = useRef(playerState);
   const failed = useRef(new Set<string>());
   const generation = useRef(0);
-  const recovery = useRef<{ controller: AbortController; timer: number } | null>(null);
+  const recovery = useRef<{ controller: AbortController; timer: number; position: number } | null>(null);
   const retried = useRef(false);
   const internalReload = useRef(false);
   const failureAction = useRef((_code?: number) => {});
@@ -88,7 +88,7 @@ export const usePlayer = () => {
     const audio = audioRef.current;
     const { queue, currentIndex } = stateRef.current;
     if (!audio || !queue.length) return;
-    if (audio.currentTime > 3 || currentIndex === 0) { audio.currentTime = 0; update({currentTime:0}); return; }
+    if (audio.currentTime > 3 || currentIndex === 0) { if (recovery.current) recovery.current.position = 0; audio.currentTime = 0; update({currentTime:0}); return; }
     playSong(queue[currentIndex - 1], queue);
   };
   const togglePlay = () => {
@@ -107,6 +107,7 @@ export const usePlayer = () => {
     if (!audio || !Number.isFinite(time)) return;
     const duration = Number.isFinite(audio.duration) ? audio.duration : stateRef.current.duration;
     const currentTime = Math.max(0, Math.min(time, duration));
+    if (recovery.current) recovery.current.position = currentTime;
     audio.currentTime = currentTime;
     update({currentTime});
   };
@@ -114,6 +115,7 @@ export const usePlayer = () => {
     const audio = audioRef.current;
     const song = stateRef.current.currentSong;
     if (!audio || !song || recovery.current) return;
+    usage.current.stop(); timing.endBuffer();
     const fail = () => {
       internalReload.current = false;
       usage.current.failed(); timing.endBuffer(); timing.finish('failed');
@@ -124,13 +126,13 @@ export const usePlayer = () => {
     if (retried.current || code === 3 || !canRecoverPlayback(song)) { fail(); return; }
     retried.current = true;
     const token = generation.current;
-    const position = audio.currentTime || 0;
     const attemptId = timing.pending.current?.id;
     const controller = new AbortController();
     const timer = window.setTimeout(() => controller.abort(), 5000);
-    recovery.current = { controller, timer };
+    recovery.current = { controller, timer, position: audio.currentTime || stateRef.current.currentTime || 0 };
     void recoverPlaybackUrl(song, controller.signal).catch(() => null).then(url => {
       if (generation.current !== token) return;
+      const position = recovery.current?.position || 0;
       window.clearTimeout(timer); recovery.current = null;
       if (!url) { fail(); return; }
       const refreshed = { ...song, audioUrl: url };

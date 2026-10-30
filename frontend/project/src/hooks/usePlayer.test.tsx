@@ -57,6 +57,27 @@ describe('recovering cached playback without refreshing',()=>{
   await act(async()=>resolve(fresh()));expect(audio.src).toBe(before);expect(player.playerState.currentSong?.id).toBe(action==='pause'?'1':'2');
   if(action==='pause')expect(audio.paused).toBe(true);
  });
+ it.each(['seek','previous'])('preserves %s during recovery instead of the failed position',async action=>{
+  let resolve!:(v:ReturnType<typeof fresh>)=>void;vi.stubGlobal('fetch',vi.fn(()=>new Promise(r=>{resolve=r;})));setup();
+  await act(async()=>player.playSong(old,[old,queue[1]]));audio.currentTime=60;
+  act(()=>audio.dispatchEvent(new Event('error')));
+  act(()=>action==='seek'?player.seekTo(25):player.handlePrevious());
+  await act(async()=>resolve(fresh()));expect(audio.currentTime).toBe(action==='seek'?25:0);
+ });
+ it('does not count the silent metadata wait as listening time',async()=>{
+  vi.stubGlobal('matchMedia',()=>({matches:true}));
+  const events:Array<{kind:string;value:number}>=[];let resolve!:(v:ReturnType<typeof fresh>)=>void;
+  vi.stubGlobal('location',{hostname:'crew.djpapzin.com',origin:'https://crew.djpapzin.com',pathname:'/'});
+  vi.spyOn(performance,'now').mockReturnValue(1000);
+  vi.stubGlobal('fetch',vi.fn((input,options)=>{
+   if(String(input).endsWith('/usage')){events.push(JSON.parse(options.body));return Promise.resolve({ok:true});}
+   return new Promise(r=>{resolve=r;});
+  }));setup();await act(async()=>player.playSong(old,[old,queue[1]]));
+  Object.defineProperty(audio,'readyState',{configurable:true,value:4});act(()=>audio.dispatchEvent(new Event('playing')));
+  vi.mocked(performance.now).mockReturnValue(2000);act(()=>audio.dispatchEvent(new Event('error')));
+  vi.mocked(performance.now).mockReturnValue(6000);await act(async()=>resolve(fresh()));
+  expect(events.filter(e=>e.kind==='listen')).toEqual([expect.objectContaining({value:1000})]);
+ });
  it('recovers a rejected play promise too',async()=>{
   vi.stubGlobal('fetch',vi.fn().mockResolvedValue(fresh()));vi.mocked(HTMLMediaElement.prototype.play).mockRejectedValueOnce(new DOMException('unavailable','NotSupportedError'));setup();
   await act(async()=>player.playSong(old,[old,queue[1]]));expect(audio.src).toBe(cached);expect(player.playerState.currentSong?.id).toBe('1');
