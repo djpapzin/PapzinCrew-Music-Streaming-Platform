@@ -16,6 +16,7 @@ test('only pinned community metadata admits private members; stale failed checks
   const now=Date.now();const decide=createPolicy({tester:'27730000000',owner:'27730000000',enabled:true,persistent:true,natural:true,started:now,isCommunityMember:access.has});
   const msg={key:{remoteJid:'555@lid',id:'m'},messageTimestamp:Math.floor(now/1000),message:{conversation:'hello'}};
   assert.equal(decide('notify',msg,now).role,'listener');
+  assert.equal(decide('notify',{...msg,key:{remoteJid:'27840000001@s.whatsapp.net',remoteJidAlt:'555@lid',id:'pn-device'}},now+1000).role,'listener');
   assert.equal(decide('notify',{...msg,key:{remoteJid:'3@g.us',remoteJidAlt:'555@lid',id:'g'}},now),null);
   broken=true;await access.refresh(1200);assert.equal(access.has('555@lid'),false);
  } finally {await rm(dir,{recursive:true,force:true});}

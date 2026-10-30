@@ -28,7 +28,8 @@ export function createPolicy({ tester, started = Date.now(), enabled = false, ma
     if (key?.fromMe || !key?.id || !jid) return null;
     // Alternate PN is provided by WhatsApp's envelope, never by message text.
     const sender=jid.endsWith('@lid') ? normalizePrivateJid(key.remoteJidAlt) : jid;
-    if(!allowed.has(sender) && !isCommunityMember(sender) && !isCommunityMember(jid)) return null;
+    const alternate=normalizePrivateJid(key.remoteJidAlt);
+    if(!allowed.has(sender) && !isCommunityMember(sender) && !isCommunityMember(jid) && !isCommunityMember(alternate)) return null;
     const timestamp = Number(message.messageTimestamp) * 1000;
     if (!Number.isFinite(timestamp) || timestamp < Math.max(started - 10_000, now - 120_000) || timestamp > now + 60_000) return null;
     const role = sender===ownerJid ? 'owner' : 'listener';
