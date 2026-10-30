@@ -23,3 +23,9 @@ it('offers only approved public cache downloads, with no origin fallback', () =>
  expect(downloadUrl({...mix,cached_audio_url:undefined})).toBeUndefined();
  expect(downloadUrl({...mix,cached_audio_url:'https://evil.example/file'})).toBeUndefined();
 });
+
+it('marks only QA download links as test activity',()=>{
+ localStorage.setItem('papzincrew:test-activity','1');
+ try { expect(downloadUrl({id:241,availability:'public',allow_downloads:'yes',cached_audio_url:'https://audio.djpapzin.com/tracks/241/cached/abcdefabcdefabcdefabcdef'})).toContain('&activity=test'); }
+ finally {localStorage.removeItem('papzincrew:test-activity');}
+});

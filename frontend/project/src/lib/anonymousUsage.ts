@@ -1,4 +1,6 @@
 import { API_BASE } from './api';
+export const TEST_ACTIVITY='papzincrew:test-activity';
+export function testActivity(){try{return localStorage.getItem(TEST_ACTIVITY)==='1';}catch{return false;}}
 export const USAGE_OPT_OUT='papzincrew:anonymous-stats-off';
 export const LISTEN_FLUSH_INTERVAL_MS=60000;
 export function usageAllowed() {
@@ -9,7 +11,7 @@ export function usageAllowed() {
 export function sendUsage(kind:string,mix=0,value=0,resume=false) {
   if(!usageAllowed())return;
   try {
-    const body=JSON.stringify({kind,mix:Number(mix)||0,value:Math.max(0,Math.min(120000,Math.round(value))),resume,device:window.matchMedia('(max-width: 767px)').matches?'mobile':'desktop'});
+    const body=JSON.stringify({activity:testActivity()?'test':'listener',kind,mix:Number(mix)||0,value:Math.max(0,Math.min(120000,Math.round(value))),resume,device:window.matchMedia('(max-width: 767px)').matches?'mobile':'desktop'});
     // Best effort only: no offline queue, retries or effect on playback.
     void fetch(`${API_BASE}/usage`,{method:'POST',headers:{'Content-Type':'application/json'},body,keepalive:true,credentials:'omit',referrerPolicy:'no-referrer'}).catch(()=>{});
   }catch{/* Analytics must never affect listening. */}

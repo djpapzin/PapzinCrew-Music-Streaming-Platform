@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from ..db.database import get_db
 from ..models.models import Mix
 from ..services.audio_cache import directory, entry
+from .usage import record_download_activity
 
 router = APIRouter(tags=['cached audio'])
 
@@ -100,6 +101,7 @@ def cached_audio(mix_id: int, source_version: str, request: Request, db: Session
         try:
             db.query(Mix).filter(Mix.id == mix_id).update({Mix.download_count: func.coalesce(Mix.download_count, 0) + 1}, synchronize_session=False)
             db.commit()
+            record_download_activity(mix_id, 'test' if request.query_params.get('activity') == 'test' else 'listener')
         finally:
             db.close()
     def chunks():
