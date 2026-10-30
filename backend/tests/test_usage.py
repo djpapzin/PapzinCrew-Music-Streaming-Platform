@@ -42,3 +42,14 @@ def test_listener_test_and_legacy_are_separate(client):
         assert data['mixes']['241']['starts']==1 and data['visits']==0
     assert client.get('/admin/usage?activity=legacy',headers=headers).json()['days'][0]['visits']==99
     assert client.get('/admin/usage?activity=test').status_code==403
+
+
+def test_prunes_inactive_buckets_but_preserves_download_ledger(client):
+    root=usage.directory()
+    for bucket in (root,root/'listener',root/'test'):
+        bucket.mkdir(parents=True,exist_ok=True)
+        (bucket/'2000-01-01.json').write_text('{}')
+    (root/'downloads.json').write_text('{"listener":{},"test":{}}')
+    assert client.post('/usage',json={'kind':'visit'}).status_code==202
+    assert not list(root.rglob('2000-01-01.json'))
+    assert (root/'downloads.json').exists()

@@ -58,10 +58,14 @@ async def collect(request:Request):
         with temporary.open('w') as file:
             os.chmod(temporary,0o600);json.dump(data,file);file.flush();os.fsync(file.fileno())
         temporary.replace(path)
-        # Retain daily aggregates for 30 days; no event identifiers are stored.
-        cutoff=(now.date()-timedelta(days=29)).isoformat()
-        for old in root.glob('????-??-??.json'):
-            if old.stem<cutoff: old.unlink()
+    # Lock each bucket separately after releasing the writer lock.
+    cutoff=(now.date()-timedelta(days=29)).isoformat()
+    for bucket in (directory(),directory()/'listener',directory()/'test'):
+        if not bucket.exists(): continue
+        with (bucket/'stats.lock').open('a') as lock:
+            fcntl.flock(lock,fcntl.LOCK_EX)
+            for old in bucket.glob('????-??-??.json'):
+                if old.stem<cutoff: old.unlink()
     return {'accepted':True}
 
 @router.get('/admin/usage')
