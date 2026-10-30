@@ -49,3 +49,10 @@ The next private feature is documented in tools/whatsapp-bot/README.md. Owner-on
 First stage: prepare and preview privately, accept the owner's MP4/JPEG/PNG attachments, and require an exact preview approval. Enable this private workflow only after DJ approves the bot deployment. Keep group sending disabled, group config absent, community groups unjoined, and main unchanged. Existing listener help/feedback and GitHub owner-request controls retain their permissions.
 
 Later stage: DJ identifies the exact groups; configure only those recipients after explicit approval. Each announcement needs a fresh preview naming those groups, explicit approval of that version, and a separate send instruction. There is no automatic schedule, broadcast, group join or paid AI call. Feedback continues in the existing private listener-feedback flow; this feature does not claim to read community conversations or automatically collect group replies.
+
+
+### Private deployment approved — 30 October 2026
+
+DJ approved enabling the release assistant in the existing private owner chat with Guest 48 and the original teaser. The private VPS service is connected with `WA_RELEASE_ASSISTANT=1`, `WA_RELEASE_GROUP_SEND=0`, and no group configuration. Guest 48 was freshly seeded and its teaser attached; no preview approvals or delivery attempts were copied from the simulated test. All 32 bot tests passed against the deployed files. No groups were added or messaged; main and the public website were unchanged.
+
+DJ can now send “prepare guest48”, “preview guest48 teaser” and “preview guest48 launch” in the existing private chat. Artwork is not seeded; the launch preview is text-only unless DJ attaches artwork. Group sending remains a later, separate explicit approval.
