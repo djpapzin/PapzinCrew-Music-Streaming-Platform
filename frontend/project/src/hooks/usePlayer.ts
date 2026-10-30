@@ -2,6 +2,7 @@ import { createPlaybackUsage, LISTEN_FLUSH_INTERVAL_MS } from '../lib/anonymousU
 import { useState, useRef, useEffect } from 'react';
 import { Song, PlayerState } from '../types/music';
 import { usePlaybackTiming } from './usePlaybackTiming';
+import { canRecoverPlayback, recoverPlaybackUrl } from '../lib/recoverPlayback';
 
 export const VOLUME_KEY = 'papzincrew:volume';
 const initialVolume = () => {
@@ -16,6 +17,15 @@ export const usePlayer = () => {
   const [playerState, setPlayerState] = useState<PlayerState>({ currentSong: null, isPlaying: false, volume: initialVolume(), currentTime: 0, duration: 0, queue: [], currentIndex: -1, shuffle: false, repeat: 'none' });
   const stateRef = useRef(playerState);
   const failed = useRef(new Set<string>());
+  const generation = useRef(0);
+  const recovery = useRef<{ controller: AbortController; timer: number } | null>(null);
+  const retried = useRef(false);
+  const internalReload = useRef(false);
+  const failureAction = useRef((_code?: number) => {});
+  const cancelRecovery = () => {
+    generation.current++; internalReload.current = false;
+    if (recovery.current) { recovery.current.controller.abort(); window.clearTimeout(recovery.current.timer); recovery.current = null; }
+  };
   const actions = useRef({ next: (_ended = false) => {}, previous: () => {}, seek: (_time: number) => {} });
   const update = (change: Partial<PlayerState>) => {
     stateRef.current = { ...stateRef.current, ...change };
@@ -27,15 +37,16 @@ export const usePlayer = () => {
     if (!audio) return;
     if(attemptId===undefined)usage.current.begin(stateRef.current.currentSong?.id||'0',true);
     const id = attemptId ?? timing.begin(stateRef.current.currentSong?.title || 'Mix', 'Resume');
+    const token = generation.current;
     audio.volume = stateRef.current.volume;
     audio.muted = stateRef.current.volume === 0;
     void audio.play().catch((err: Error) => {
-      if (timing.pending.current?.id !== id) return;
-      timing.finish(err.name === 'AbortError' ? 'cancelled' : 'failed', id);
-      if (err.name === 'AbortError') {usage.current.cancel();return;}
-      usage.current.failed();
-      update({ isPlaying: false });
-      if (err.name === 'NotAllowedError') notify('Tap Play to start listening.');
+      if (generation.current !== token || timing.pending.current?.id !== id || recovery.current) return;
+      if (err.name === 'AbortError') { internalReload.current = false; timing.finish('cancelled', id); usage.current.cancel(); return; }
+      if (err.name === 'NotAllowedError') {
+        internalReload.current = false; timing.finish('cancelled', id); usage.current.cancel(); update({ isPlaying: false }); notify('Tap Play to start listening.'); return;
+      }
+      failureAction.current(audio.error?.code);
     });
   };
 
@@ -45,6 +56,7 @@ export const usePlayer = () => {
     const playableQueue = queue.filter(available);
     if (!playableQueue.some(item => item.id === song.id)) playableQueue.unshift(song);
     const kind = stateRef.current.currentSong ? 'Track start' : 'First play';
+    cancelRecovery(); retried.current = false;
     audio.pause();
     usage.current.begin(song.id,false);
     const attemptId = timing.begin(song.title, kind);
@@ -58,6 +70,7 @@ export const usePlayer = () => {
     const audio = audioRef.current;
     const { queue, currentIndex, shuffle, repeat } = stateRef.current;
     if (!audio || !queue.length) return;
+    cancelRecovery();
     if (ended && repeat === 'one' && !failed.current.has(queue[currentIndex]?.id)) {
       audio.currentTime = 0; update({ currentTime: 0 }); requestPlay(); return;
     }
@@ -81,7 +94,7 @@ export const usePlayer = () => {
   const togglePlay = () => {
     const audio = audioRef.current;
     if (!audio || !stateRef.current.currentSong) return;
-    if (!audio.paused) { audio.pause(); update({isPlaying:false}); } else requestPlay();
+    if (recovery.current || internalReload.current || !audio.paused) { cancelRecovery(); usage.current.cancel(); timing.endBuffer(); timing.finish('cancelled'); audio.pause(); update({isPlaying:false}); } else { retried.current = false; requestPlay(); }
   };
   const setVolume = (value: number) => {
     const volume = Math.max(0, Math.min(1, value));
@@ -97,6 +110,38 @@ export const usePlayer = () => {
     audio.currentTime = currentTime;
     update({currentTime});
   };
+  failureAction.current = (code?: number) => {
+    const audio = audioRef.current;
+    const song = stateRef.current.currentSong;
+    if (!audio || !song || recovery.current) return;
+    const fail = () => {
+      internalReload.current = false;
+      usage.current.failed(); timing.endBuffer(); timing.finish('failed');
+      failed.current.add(song.id);
+      notify('This track could not be played. Trying the next track.');
+      actions.current.next();
+    };
+    if (retried.current || code === 3 || !canRecoverPlayback(song)) { fail(); return; }
+    retried.current = true;
+    const token = generation.current;
+    const position = audio.currentTime || 0;
+    const attemptId = timing.pending.current?.id;
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), 5000);
+    recovery.current = { controller, timer };
+    void recoverPlaybackUrl(song, controller.signal).catch(() => null).then(url => {
+      if (generation.current !== token) return;
+      window.clearTimeout(timer); recovery.current = null;
+      if (!url) { fail(); return; }
+      const refreshed = { ...song, audioUrl: url };
+      update({ currentSong: refreshed, queue: stateRef.current.queue.map(item => item.id === song.id ? refreshed : item) });
+      generation.current++; internalReload.current = true;
+      audio.src = url; audio.load();
+      if (position > 0) audio.currentTime = position;
+      requestPlay(attemptId);
+    });
+  };
+  useEffect(() => () => cancelRecovery(), []);
   useEffect(() => {
     const queueTrack = (e: Event) => {
       const song = (e as CustomEvent<Song>).detail;
@@ -127,20 +172,12 @@ export const usePlayer = () => {
       } catch { /* MediaSession is optional. */ }
     };
     const playing = () => update({isPlaying:true});
-    const started = () => { if (!audio.paused && audio.readyState >= 2) { timing.endBuffer(); timing.finish('started'); usage.current.started(); } };
+    const started = () => { if (!audio.paused && audio.readyState >= 2) { internalReload.current = false; timing.endBuffer(); timing.finish('started'); usage.current.started(); if (stateRef.current.currentSong) failed.current.delete(stateRef.current.currentSong.id); } };
     const waiting = () => { usage.current.stop(); if (!audio.paused && !audio.seeking) timing.startBuffer(); };
     const stopBuffer = () => {timing.endBuffer();usage.current.stop();};
-    const paused = () => { if (audio.paused) { usage.current.cancel(); timing.endBuffer(); timing.finish('cancelled'); update({isPlaying:false}); } };
+    const paused = () => { if (audio.paused && !audio.error && !internalReload.current) { usage.current.cancel(); timing.endBuffer(); timing.finish('cancelled'); update({isPlaying:false}); } };
     const ended = () => { usage.current.stop(); timing.endBuffer(); actions.current.next(true); };
-    const error = () => {
-      usage.current.failed();
-      timing.endBuffer();
-      timing.finish('failed');
-      const song = stateRef.current.currentSong;
-      if (song) failed.current.add(song.id);
-      notify('This track could not be played. Trying the next track.');
-      actions.current.next();
-    };
+    const error = () => failureAction.current(audio.error?.code);
     const usageTimer=window.setInterval(()=>{if(!audio.paused&&!audio.seeking&&audio.readyState>=3)usage.current.flush();else usage.current.stop();},LISTEN_FLUSH_INTERVAL_MS);
     const seeked=()=>{if(!audio.paused&&audio.readyState>=3)usage.current.started();};
     const preference=()=>usage.current.cancel();
@@ -172,8 +209,8 @@ export const usePlayer = () => {
     if (!song || !('mediaSession' in navigator)) return;
     try {
       navigator.mediaSession.metadata = new MediaMetadata({ title: song.title, artist: song.artist, album: song.album || 'Papzin & Crew', artwork: song.imageUrl ? [{src:song.imageUrl}] : [] });
-      navigator.mediaSession.setActionHandler('play', () => requestPlay());
-      navigator.mediaSession.setActionHandler('pause', () => audioRef.current?.pause());
+      navigator.mediaSession.setActionHandler('play', () => { retried.current = false; requestPlay(); });
+      navigator.mediaSession.setActionHandler('pause', () => { cancelRecovery(); usage.current.cancel(); timing.endBuffer(); timing.finish('cancelled'); audioRef.current?.pause(); update({isPlaying:false}); });
       navigator.mediaSession.setActionHandler('nexttrack', () => actions.current.next());
       navigator.mediaSession.setActionHandler('previoustrack', () => actions.current.previous());
       navigator.mediaSession.setActionHandler('seekto', details => { if (details.seekTime !== undefined) actions.current.seek(details.seekTime); });
