@@ -53,6 +53,8 @@ const Player: React.FC<PlayerProps> = ({
   onToggleRepeat
 }) => {
   const { library, toggleLike } = useLibrary();
+  const miniSwipe = useRef<{id:number;x:number;y:number;swiped:boolean}|null>(null);
+  const suppressMiniClick = useRef(false);
   const swipeStart = useRef<{ id: number; x: number; y: number } | null>(null);
   const [showMobilePlayer, setShowMobilePlayer] = useState(false);
   const [showNowPlayingPopup, setShowNowPlayingPopup] = useState(false);
@@ -92,6 +94,27 @@ const Player: React.FC<PlayerProps> = ({
     if (down >= 72 && down > across * 1.5) setShowMobilePlayer(false);
   };
 
+  const beginMiniSwipe = (event: React.PointerEvent<HTMLDivElement>) => {
+    const target=event.target as Element;
+    miniSwipe.current=null; suppressMiniClick.current=false;
+    if (!event.isPrimary || event.button!==0 || target.closest('input, [role="slider"], button:not([data-mini-expand])')) return;
+    miniSwipe.current={id:event.pointerId,x:event.clientX,y:event.clientY,swiped:false};
+    (target.closest('[data-mini-expand]') || event.currentTarget).setPointerCapture?.(event.pointerId);
+  };
+  const moveMiniSwipe = (event: React.PointerEvent<HTMLDivElement>) => {
+    const start=miniSwipe.current;
+    if (!start || event.pointerId!==start.id) return;
+    const up=start.y-event.clientY, across=Math.abs(start.x-event.clientX);
+    if (up>=48 && up>across*1.5) start.swiped=true;
+  };
+  const endMiniSwipe = (event: React.PointerEvent<HTMLDivElement>) => {
+    moveMiniSwipe(event);
+    const start=miniSwipe.current; miniSwipe.current=null;
+    if (!start || start.id!==event.pointerId) return;
+    const moved=Math.hypot(start.x-event.clientX,start.y-event.clientY)>12;
+    suppressMiniClick.current=moved;
+    if (start.swiped) setShowMobilePlayer(true);
+  };
   const handleSeekChange = (e: React.ChangeEvent<HTMLInputElement>) => onSeek(Number(e.target.value));
   const totalDuration = duration > 0 ? duration : currentSong.duration;
   const durationLabel = totalDuration > 0 ? formatTime(totalDuration) : '—';
@@ -104,12 +127,20 @@ const Player: React.FC<PlayerProps> = ({
     <>
       {/* Mobile Mini Player */}
       <div
+        onPointerDown={beginMiniSwipe}
+        onPointerMove={moveMiniSwipe}
+        onPointerUp={endMiniSwipe}
+        onPointerCancel={() => { miniSwipe.current=null; suppressMiniClick.current=true; }}
+        onClickCapture={event=>{if(suppressMiniClick.current){suppressMiniClick.current=false;event.preventDefault();event.stopPropagation();}}}
+        style={{touchAction:'pan-x'}}
         className="mobile-mini-player lg:hidden fixed left-0 right-0 bg-black/95 backdrop-blur-xl border-t border-white/20 pt-3 pb-3 z-40"
       >
         <div className="flex items-center gap-1">
           <button
             className="flex flex-1 min-w-0 items-center gap-3 text-left min-h-11"
             aria-label="Open Now Playing"
+            data-mini-expand
+            title="Tap or swipe up to open player"
             onClick={() => setShowMobilePlayer(true)}
           >
             <img
