@@ -166,6 +166,9 @@ class _AllowedOriginsProxy:
 # Keep name used in tests: from app.main import allowed_origins
 allowed_origins = _AllowedOriginsProxy()
 
+from .services.upload_access import upload_access_guard
+app.middleware('http')(upload_access_guard)
+
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
