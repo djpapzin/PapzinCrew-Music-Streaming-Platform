@@ -68,7 +68,10 @@ export function createListenerChat(directory, {notifyOwner}={}) {
   if(/won.?t play|can.?t play|not playing|not working|doesn.?t work|can.?t download|cannot download|broken|buffering|stuck/i.test(question)) {
    if(secret.test(question))return 'Please describe the problem without passwords, codes or private details.';
    sessions.set(jid,{stage:'confirm',message:question,category:'problem',time:now});
-   return `Sorry it’s giving you trouble. Try refreshing once, checking your connection and trying another mix.\n\nI can pass this to DJ Papzin privately:\n“${question}”\n\nShall I save it and alert him? Say yes or cancel.`;
+   const advice=/\bupload(?:s|ing|ed)?\b/i.test(question)
+    ? 'Website uploads are temporarily paused. Listening and ready downloads are still available.'
+    : 'Sorry it’s giving you trouble. Try refreshing once, checking your connection and trying another mix.';
+   return `${advice}\n\nI can pass this to DJ Papzin privately:\n“${question}”\n\nShall I save it and alert him? Say yes or cancel.`;
   }
   if(/^(thanks|thank you|shot|cheers|awesome|great)[.! ]*$/i.test(question)) return 'You’re welcome! Enjoy the mixes 🎧';
   if(/^(hi|hello|hey|howzit|help|menu|start)[!?. ]*$/i.test(question)) return 'Hey! I’m Crew Helper, DJ Papzin’s assistant 🎧\n\nTell me which mix you want, ask for help if music won’t play, or say “I have feedback”. Just chat normally — no commands needed.\n\nhttps://crew.djpapzin.com/search';
