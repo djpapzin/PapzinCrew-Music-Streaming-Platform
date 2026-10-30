@@ -25,3 +25,68 @@ describe('playback startup timing',()=>{
  it('does not let an old rejected play promise fail the next attempt',async()=>{setup();let rejectOld:(error:Error)=>void=()=>{};vi.mocked(HTMLMediaElement.prototype.play).mockImplementationOnce(()=>new Promise((_,reject)=>{rejectOld=reject;}));act(()=>player.playSong(queue[0],queue));await act(async()=>player.playSong(queue[1],queue));await act(async()=>rejectOld(new Error('old stream failed')));expect(player.playbackAttempts[0].title).toBe('Mix 2');expect(player.playbackAttempts[0].status).toBe('waiting');expect(player.playbackAttempts[1].status).toBe('cancelled');});
  it('records errors as failures before advancing to the next mix',async()=>{setup();await act(async()=>player.playSong(queue[0],queue));act(()=>audio.dispatchEvent(new Event('error')));expect(player.playbackAttempts[1].status).toBe('failed');expect(player.playbackAttempts[0].kind).toBe('Track start');});
 });
+
+describe('recovering cached playback without refreshing',()=>{
+ const old={...song('1'),audioUrl:'https://s3.us-east-005.backblazeb2.com/bucket/old.mp3'};
+ const cached='https://audio.djpapzin.com/tracks/1/cached/abcdefabcdefabcdefabcdef';
+ const fresh=()=>({ok:true,json:async()=>({id:1,file_path:old.audioUrl,availability:'public',cached_audio_url:cached})});
+ afterEach(()=>vi.unstubAllGlobals());
+ it('refreshes a stale link once, keeps mute and records success for the same attempt',async()=>{
+  const fetcher=vi.fn().mockResolvedValue(fresh());vi.stubGlobal('fetch',fetcher);setup();
+  await act(async()=>{player.setVolume(0);player.playSong(old,[old,queue[1]]);});
+  vi.mocked(HTMLMediaElement.prototype.load).mockImplementation(function(this:HTMLMediaElement){this.dispatchEvent(new Event('pause'));});
+  paused=true;
+  Object.defineProperty(audio,'error',{configurable:true,value:{code:4}});
+  act(()=>audio.dispatchEvent(new Event('pause')));
+  await act(async()=>audio.dispatchEvent(new Event('error')));
+  expect(fetcher).toHaveBeenCalledTimes(1);expect(fetcher.mock.calls[0][0]).toMatch(/\/tracks\/1$/);
+  expect(audio.src).toBe(cached);expect(audio.muted).toBe(true);expect(player.playerState.currentSong?.id).toBe('1');
+  Object.defineProperty(audio,'readyState',{configurable:true,value:4});act(()=>audio.dispatchEvent(new Event('playing')));
+  expect(player.playbackAttempts).toHaveLength(1);expect(player.playbackAttempts[0].status).toBe('started');
+ });
+ it('retries a failed cached link once, then advances without looping',async()=>{
+  const fetcher=vi.fn().mockResolvedValue(fresh());vi.stubGlobal('fetch',fetcher);setup();
+  await act(async()=>player.playSong({...old,audioUrl:cached},[old,queue[1]]));
+  await act(async()=>audio.dispatchEvent(new Event('error')));await act(async()=>audio.dispatchEvent(new Event('error')));
+  expect(fetcher).toHaveBeenCalledTimes(1);expect(player.playerState.currentSong?.id).toBe('2');
+ });
+ it.each(['pause','next'])('does not restart after %s during recovery',async action=>{
+  let resolve!:(v:ReturnType<typeof fresh>)=>void;vi.stubGlobal('fetch',vi.fn(()=>new Promise(r=>{resolve=r;})));setup();
+  await act(async()=>player.playSong(old,[old,queue[1]]));act(()=>audio.dispatchEvent(new Event('error')));
+  act(()=>action==='pause'?player.togglePlay():player.handleNext());const before=audio.src;
+  await act(async()=>resolve(fresh()));expect(audio.src).toBe(before);expect(player.playerState.currentSong?.id).toBe(action==='pause'?'1':'2');
+  if(action==='pause')expect(audio.paused).toBe(true);
+ });
+ it.each(['seek','previous'])('preserves %s during recovery instead of the failed position',async action=>{
+  let resolve!:(v:ReturnType<typeof fresh>)=>void;vi.stubGlobal('fetch',vi.fn(()=>new Promise(r=>{resolve=r;})));setup();
+  await act(async()=>player.playSong(old,[old,queue[1]]));audio.currentTime=60;
+  act(()=>audio.dispatchEvent(new Event('error')));
+  act(()=>action==='seek'?player.seekTo(25):player.handlePrevious());
+  await act(async()=>resolve(fresh()));expect(audio.currentTime).toBe(action==='seek'?25:0);
+ });
+ it('does not count the silent metadata wait as listening time',async()=>{
+  vi.stubGlobal('matchMedia',()=>({matches:true}));
+  const events:Array<{kind:string;value:number}>=[];let resolve!:(v:ReturnType<typeof fresh>)=>void;
+  vi.stubGlobal('location',{hostname:'crew.djpapzin.com',origin:'https://crew.djpapzin.com',pathname:'/'});
+  vi.spyOn(performance,'now').mockReturnValue(1000);
+  vi.stubGlobal('fetch',vi.fn((input,options)=>{
+   if(String(input).endsWith('/usage')){events.push(JSON.parse(options.body));return Promise.resolve({ok:true});}
+   return new Promise(r=>{resolve=r;});
+  }));setup();await act(async()=>player.playSong(old,[old,queue[1]]));
+  Object.defineProperty(audio,'readyState',{configurable:true,value:4});act(()=>audio.dispatchEvent(new Event('playing')));
+  vi.mocked(performance.now).mockReturnValue(2000);act(()=>audio.dispatchEvent(new Event('error')));
+  vi.mocked(performance.now).mockReturnValue(6000);await act(async()=>resolve(fresh()));
+  expect(events.filter(e=>e.kind==='listen')).toEqual([expect.objectContaining({value:1000})]);
+ });
+ it('recovers a rejected play promise too',async()=>{
+  vi.stubGlobal('fetch',vi.fn().mockResolvedValue(fresh()));vi.mocked(HTMLMediaElement.prototype.play).mockRejectedValueOnce(new DOMException('unavailable','NotSupportedError'));setup();
+  await act(async()=>player.playSong(old,[old,queue[1]]));expect(audio.src).toBe(cached);expect(player.playerState.currentSong?.id).toBe('1');
+ });
+ it('does not retry autoplay denial or expose an unlisted result',async()=>{
+  const fetcher=vi.fn().mockResolvedValue({ok:true,json:async()=>({id:1,file_path:old.audioUrl,availability:'unlisted',cached_audio_url:cached})});vi.stubGlobal('fetch',fetcher);setup();
+  vi.mocked(HTMLMediaElement.prototype.play).mockRejectedValueOnce(new DOMException('gesture required','NotAllowedError'));
+  await act(async()=>player.playSong(old,[old,queue[1]]));expect(fetcher).not.toHaveBeenCalled();
+  await act(async()=>player.playSong(old,[old,queue[1]]));await act(async()=>audio.dispatchEvent(new Event('error')));
+  expect(player.playerState.currentSong?.id).toBe('2');expect(audio.src).not.toBe(cached);
+ });
+});
