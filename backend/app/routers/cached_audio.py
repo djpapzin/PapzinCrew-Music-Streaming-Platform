@@ -7,6 +7,7 @@ from urllib.parse import quote, urlparse
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import StreamingResponse
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from ..db.database import get_db
 from ..models.models import Mix
@@ -97,7 +98,7 @@ def cached_audio(mix_id: int, source_version: str, request: Request, db: Session
     reserve_egress(length)
     if download and start == 0:
         try:
-            db.query(Mix).filter(Mix.id == mix_id).update({Mix.download_count: Mix.download_count + 1}, synchronize_session=False)
+            db.query(Mix).filter(Mix.id == mix_id).update({Mix.download_count: func.coalesce(Mix.download_count, 0) + 1}, synchronize_session=False)
             db.commit()
         finally:
             db.close()

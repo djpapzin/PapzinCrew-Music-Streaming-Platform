@@ -32,16 +32,17 @@ describe('Direct mix links', () => {
 });
 
 
-it('shows coming soon on hover or tap without exposing a download link',async()=>{
+it('offers a real download only from the verified public VPS cache',async()=>{
  const cached_audio_url='https://audio.djpapzin.com/tracks/236/cached/abcdefabcdefabcdefabcdef';
  vi.stubGlobal('fetch',vi.fn().mockResolvedValue({ok:true,json:async()=>({...mix,availability:'public',allow_downloads:'yes',cached_audio_url})}));
- show();
- const button=await screen.findByRole('button',{name:'Download mix'});
- expect(button).toHaveAttribute('aria-disabled','true');
- expect(button).toHaveAttribute('title','Coming soon');
+ show();const link=await screen.findByRole('link',{name:'Download mix'});
+ expect(link).toHaveAttribute('href',cached_audio_url+'?download=1');expect(link).toHaveAttribute('download');
+});
+it('does not fall back to Backblaze when a permitted download is not cached',async()=>{
+ vi.stubGlobal('fetch',vi.fn().mockResolvedValue({ok:true,json:async()=>({...mix,availability:'public',allow_downloads:'yes'})}));
+ show();const button=await screen.findByRole('button',{name:'Download mix'});
  expect(screen.queryByRole('link',{name:'Download mix'})).not.toBeInTheDocument();
- await userEvent.hover(button);expect(screen.getByRole('status')).toHaveTextContent('Coming soon');
- await userEvent.click(button);expect(screen.getByRole('status')).toHaveTextContent('Coming soon');
+ await userEvent.click(button);expect(screen.getByRole('status')).toHaveTextContent('Download is being prepared');
 });
 it('never offers downloads for an unlisted upload even when downloads were allowed',async()=>{
  vi.stubGlobal('fetch',vi.fn().mockResolvedValue({ok:true,json:async()=>({...mix,allow_downloads:'yes',cached_audio_url:'https://audio.djpapzin.com/tracks/236/cached/abcdefabcdefabcdefabcdef'})}));

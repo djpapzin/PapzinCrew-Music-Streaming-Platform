@@ -1,3 +1,4 @@
+import DownloadStats from './DownloadStats';
 import AnonymousStats from './AnonymousStats';
 import FeedbackInbox from './FeedbackInbox';
 import TracklistDraftPanel from './TracklistDraftPanel';
@@ -14,8 +15,8 @@ interface AdminAnalyticsResponse {
 }
 
 const stats = [
-  { key: 'total_plays', label: 'Total plays', icon: PlayCircle },
-  { key: 'total_downloads', label: 'Downloads', icon: Download },
+  { key: 'total_plays', label: 'Legacy stream requests', icon: PlayCircle },
+  { key: 'total_downloads', label: 'Download requests', icon: Download },
   { key: 'total_storage_mb', label: 'Storage (MB)', icon: HardDrive },
 ] as const;
 
@@ -69,7 +70,7 @@ export default function ProtectedAdminAnalyticsPanel() {
             Admin analytics
           </div>
           <h2 className="text-lg font-semibold text-white">Publish + ops snapshot</h2>
-          <p className="mt-1 text-sm text-slate-300">Protected play counts, downloads, and owner operations. Unlock once; optionally remember this private device for 30 days.</p>
+          <p className="mt-1 text-sm text-slate-300">Private listening stats, download requests, and owner operations. Unlock once; optionally remember this private device for 30 days.</p>
         </div>
         <button
           type="button"
@@ -88,6 +89,7 @@ export default function ProtectedAdminAnalyticsPanel() {
       </form>}
       {ownerSession&&<>
         <AnonymousStats adminKey="" ownerSession />
+        <DownloadStats adminKey="" ownerSession />
         <FeedbackInbox adminKey="" ownerSession />
         <TracklistDraftPanel adminKey="" ownerSession />
       </>}
@@ -123,6 +125,7 @@ export default function ProtectedAdminAnalyticsPanel() {
             ))}
           </div>
 
+          <p className="text-xs text-gray-400">Use successful mix starts above for listening counts. Legacy stream requests exclude direct and cached playback; download requests are not confirmed completed files.</p>
           <PaperclipInsightCard
             title="Owner operations brief"
             className="shadow-xl shadow-cyan-950/10"
