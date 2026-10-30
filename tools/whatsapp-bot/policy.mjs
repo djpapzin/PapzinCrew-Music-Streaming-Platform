@@ -1,5 +1,11 @@
 import { createHash } from 'node:crypto';
 
+// Device suffixes identify linked devices of the same account, not new senders.
+export function normalizePrivateJid(jid) {
+  const match=typeof jid==='string' && jid.match(/^(\d+)(?::\d+)?@(s\.whatsapp\.net|lid)$/);
+  return match ? match[1]+'@'+match[2] : null;
+}
+
 // Direct messages only, one approved tester, fresh commands, bounded in-memory IDs.
 export function createPolicy({ tester, started = Date.now(), enabled = false, maxReplies = 20, owner, persistent = false, natural = false, listeners = [] }) {
   if (!/^\d{10,15}$/.test(tester ?? '')) throw new Error('One international tester number is required.');
@@ -16,10 +22,10 @@ export function createPolicy({ tester, started = Date.now(), enabled = false, ma
     if (persistent && now-windowStart >= 30*60_000) { windowStart=now; replies=0; }
     if (!enabled || event !== 'notify' || (!persistent && now - started > 30 * 60_000) || replies >= maxReplies) return null;
     const key = message?.key;
-    const jid = key?.remoteJid ?? '';
-    if (key?.fromMe || !key?.id || !/^\d+@(s\.whatsapp\.net|lid)$/.test(jid)) return null;
+    const jid = normalizePrivateJid(key?.remoteJid) ?? '';
+    if (key?.fromMe || !key?.id || !jid) return null;
     // Alternate PN is provided by WhatsApp's envelope, never by message text.
-    const sender=jid.endsWith('@lid') ? key.remoteJidAlt : jid;
+    const sender=jid.endsWith('@lid') ? normalizePrivateJid(key.remoteJidAlt) : jid;
     if(!allowed.has(sender)) return null;
     const timestamp = Number(message.messageTimestamp) * 1000;
     if (!Number.isFinite(timestamp) || timestamp < Math.max(started - 10_000, now - 120_000) || timestamp > now + 60_000) return null;

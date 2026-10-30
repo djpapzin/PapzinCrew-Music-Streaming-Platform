@@ -55,3 +55,11 @@ test('release media is accepted only from the envelope-verified owner with an ex
  assert.equal(policy({owner:tester})('notify',message({message:{videoMessage:{...media.videoMessage,caption:'hi'}}})),null);
  assert.equal(policy({owner:tester})('notify',message({key:{remoteJid:'123@g.us',id:'a'},message:media})),null);
 });
+
+test('linked-device addresses normalize without expanding owner or listener access',()=>{
+ const decide=policy({owner:tester});
+ const result=decide('notify',message({key:{remoteJid:'123456:9@lid',remoteJidAlt:tester+':4@s.whatsapp.net',id:'device-test'}}));
+ assert.equal(result.role,'owner');assert.equal(result.jid,'123456@lid');
+ assert.equal(policy({owner:tester})('notify',message({key:{remoteJid:'123456:9@lid',remoteJidAlt:'27840000000:4@s.whatsapp.net',id:'other'}})),null);
+ assert.equal(policy({owner:tester})('notify',message({key:{remoteJid:'123456:9@g.us',remoteJidAlt:tester+':4@s.whatsapp.net',id:'group'}})),null);
+});

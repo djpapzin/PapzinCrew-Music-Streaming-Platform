@@ -56,3 +56,10 @@ Later stage: DJ identifies the exact groups; configure only those recipients aft
 DJ approved enabling the release assistant in the existing private owner chat with Guest 48 and the original teaser. The private VPS service is connected with `WA_RELEASE_ASSISTANT=1`, `WA_RELEASE_GROUP_SEND=0`, and no group configuration. Guest 48 was freshly seeded and its teaser attached; no preview approvals or delivery attempts were copied from the simulated test. All 32 bot tests passed against the deployed files. No groups were added or messaged; main and the public website were unchanged.
 
 DJ can now send “prepare guest48”, “preview guest48 teaser” and “preview guest48 launch” in the existing private chat. Artwork is not seeded; the launch preview is text-only unless DJ attaches artwork. Group sending remains a later, separate explicit approval.
+
+
+### Live private commands verified — 30 October 2026
+
+The owner authorised sending the three test commands. Desktop WhatsApp was blocked by a low-storage warning, so the test used the existing signed-in Codex in-app WhatsApp Web session. Initial commands exposed a transport filter rejecting device-suffixed LID addresses. The filter now normalises numeric linked-device suffixes while preserving the same verified owner/listener allowlists and group block; a regression test covers unknown senders and group spoofing.
+
+After the fix, prepare guest48 returned its title, Mr Dominate SA credit and date; preview guest48 teaser returned the draft plus the actual video privately; preview guest48 launch returned the announcement with canonical mix link. No approve/send commands were issued. Group sending remains off, no recipients are configured, and main is unchanged. Temporary diagnostics recorded envelope shape only and were removed after verification. All 33 private bot tests passed.

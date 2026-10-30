@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import makeWASocket, { DisconnectReason, downloadContentFromMessage } from '@whiskeysockets/baileys';
 import pino from 'pino';
-import { createPolicy, renderReply } from './policy.mjs';
+import { createPolicy, renderReply, normalizePrivateJid } from './policy.mjs';
 import { createOwnerCommands } from './owner.mjs';
 import { createGitHub } from './github.mjs';
 import { createListenerChat } from './listener.mjs';
@@ -26,7 +26,7 @@ const ownPhone = state.creds.me?.id?.split(':')[0]?.split('@')[0];
 if (!/^\d{10,15}$/.test(process.env.WA_BOT_PHONE ?? '') || ownPhone !== process.env.WA_BOT_PHONE) throw new Error('Linked account does not match the configured bot number.');
 const sock = makeWASocket({ auth: state, logger: pino({ level: 'silent' }),
   markOnlineOnConnect: false, syncFullHistory: false, shouldSyncHistoryMessage: () => false,
-  shouldIgnoreJid: jid => !/^\d+@(s\.whatsapp\.net|lid)$/.test(jid),
+  shouldIgnoreJid: jid => !normalizePrivateJid(jid),
   generateHighQualityLinkPreview: false });
 const releaseEnabled = process.env.WA_RELEASE_ASSISTANT === '1';
 const groupConfig = releaseEnabled ? process.env.WA_RELEASE_GROUPS_FILE : undefined;
