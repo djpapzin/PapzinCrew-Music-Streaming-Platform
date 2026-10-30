@@ -78,9 +78,9 @@ export default function MixDetails({ songs, loading, error, currentSong, isPlayi
         <div className="flex flex-wrap gap-4 items-center pt-2">
           <button disabled={unavailable} onClick={() => active ? onTogglePlay() : onPlaySong(song, queue)} className="inline-flex items-center gap-2 min-h-12 rounded-full bg-purple-600 hover:bg-purple-500 px-6 font-semibold disabled:opacity-40">{playing ? <Pause size={19}/> : <Play size={19}/>} {unavailable ? 'Unavailable' : playing ? 'Pause mix' : active ? 'Resume mix' : 'Play mix'}</button>
           <div className="flex items-center gap-4"><SongActions song={song}/></div>
-          {song.downloadAllowed && <button type="button" aria-disabled="true" title="Coming soon" onClick={() => setDownloadNotice(true)} onMouseEnter={() => setDownloadNotice(true)} onFocus={() => setDownloadNotice(true)} className="inline-flex items-center gap-2 min-h-12 rounded-full border border-gray-500/50 text-gray-400 cursor-not-allowed px-5 font-semibold"><Download size={19}/> Download mix</button>}
+          {song.downloadAllowed && (song.downloadUrl ? <a href={song.downloadUrl} download className="inline-flex items-center gap-2 min-h-12 rounded-full border border-purple-400/50 px-5 font-semibold hover:bg-purple-900/40"><Download size={19}/> Download mix</a> : <button type="button" aria-disabled="true" title="Download is being prepared" onClick={() => setDownloadNotice(true)} onMouseEnter={() => setDownloadNotice(true)} onFocus={() => setDownloadNotice(true)} className="inline-flex items-center gap-2 min-h-12 rounded-full border border-gray-500/50 text-gray-400 cursor-not-allowed px-5 font-semibold"><Download size={19}/> Download mix</button>)}
         </div>
-        {song.downloadAllowed && downloadNotice && <p role="status" className="text-sm text-gray-300">Coming soon</p>}
+        {song.downloadAllowed && downloadNotice && <p role="status" className="text-sm text-gray-300">Download is being prepared. Please stream this mix for now.</p>}
       </div>
     </section>
     <div className="grid md:grid-cols-2 gap-5">

@@ -313,19 +313,12 @@ class TestTrackDownload:
         """Test successful track download."""
         mock_db_session.query().filter().first.return_value = downloadable_track
         
-        with patch('os.path.exists', return_value=True), \
-             patch('os.path.getsize', return_value=5000000), \
-             patch('builtins.open', create=True) as mock_open:
-            
-            mock_file = MagicMock()
-            mock_file.read.return_value = b'audio_data'
-            mock_open.return_value.__enter__.return_value = mock_file
-            
-            response = client.get("/tracks/1/download")
-            
-            assert response.status_code == 200
-            assert "attachment" in response.headers.get("content-disposition", "")
-    
+        with patch('app.routers.tracks.cached_audio_url', return_value='https://audio.djpapzin.com/tracks/1/cached/abcdefabcdefabcdefabcdef'):
+            response = client.get('/tracks/1/download', follow_redirects=False)
+        assert response.status_code == 307
+        assert response.headers['location'] == 'https://audio.djpapzin.com/tracks/1/cached/abcdefabcdefabcdefabcdef?download=1'
+        assert not mock_db_session.commit.called
+
     def test_download_track_not_allowed(self, mock_db_session, downloadable_track):
         """Test download when downloads are disabled."""
         downloadable_track.allow_downloads = "no"
@@ -374,7 +367,7 @@ class TestPlayCountStatistics:
             assert track.play_count == 6
             mock_db_session.commit.assert_called()
     
-    def test_track_statistics_endpoint(self, mock_db_session):
+    def test_track_statistics_endpoint(self, mock_db_session, monkeypatch):
         """Test track statistics retrieval."""
         track = MagicMock()
         track.id = 1
@@ -382,7 +375,9 @@ class TestPlayCountStatistics:
         track.download_count = 25
         mock_db_session.query().filter().first.return_value = track
         
-        response = client.get("/tracks/1/stats")
+        monkeypatch.setenv("ADMIN_API_KEY", "owner-test")
+        assert client.get("/tracks/1/stats").status_code == 403
+        response = client.get("/tracks/1/stats", headers={"X-Admin-Api-Key":"owner-test"})
         
         assert response.status_code == 200
         stats = response.json()
@@ -443,15 +438,12 @@ class TestPlayCountStatistics:
         track.availability = "public"
         mock_db_session.query().filter().first.return_value = track
         
-        with patch('os.path.exists', return_value=True), \
-             patch('os.path.getsize', return_value=5000000), \
-             patch('builtins.open', create=True):
-            
-            client.get("/tracks/1/download")
-            
-            # Download count should be incremented
-            assert track.download_count == 11
-            mock_db_session.commit.assert_called()
+        with patch('app.routers.tracks.cached_audio_url', return_value=None):
+            response = client.get('/tracks/1/download', follow_redirects=False)
+        assert response.status_code == 404
+        assert 'location' not in response.headers
+        assert track.download_count == 10
+        assert not mock_db_session.commit.called
 
 class TestTrackSearch:
     """Test track search functionality."""

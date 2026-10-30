@@ -8,6 +8,9 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field, ValidationError
 from .admin import require_admin_api_key
+from ..db.database import get_db
+from ..models.models import Mix
+from sqlalchemy.orm import Session
 
 router=APIRouter(tags=['usage'])
 def directory(): return Path(os.getenv('ANONYMOUS_STATS_DIR','/var/lib/papzincrew/anonymous-stats'))
@@ -71,3 +74,14 @@ def stats(_:None=Depends(require_admin_api_key)):
                 if path.stem>=cutoff:
                     data=json.loads(path.read_text());data.pop('recent',None);data.pop('events',None);days.append(data)
     return {'days':days,'retention_days':30}
+
+
+@router.get('/admin/downloads')
+def download_stats(_:None=Depends(require_admin_api_key), db:Session=Depends(get_db)):
+    """Owner-only lifetime request totals; no visitor identities or storage URLs."""
+    rows=db.query(Mix.id,Mix.title,Mix.download_count).filter(
+        (Mix.availability=='public') | Mix.availability.is_(None)
+    ).order_by(Mix.id.desc()).all()
+    mixes=[{'id':row.id,'title':row.title,'requests':int(row.download_count or 0)} for row in rows]
+    return {'mixes':mixes,'total_requests':sum(row['requests'] for row in mixes),
+            'definition':'Download starts, not unique people or confirmed completed files.'}
