@@ -334,7 +334,10 @@ async def catch_exceptions_middleware(request: Request, call_next):
         # Let FastAPI handle HTTPException with its original detail/status
         if isinstance(e, HTTPException):
             raise e
-        logger.exception("Unhandled exception")
+        logger.exception("Unhandled exception", extra={
+            "http_method": request.method,
+            "route_template": getattr(request.scope.get("route"), "path", "unmatched"),
+        })
         # Ensure CORS headers are present even on error responses so the
         # frontend can read the error details instead of a CORS block.
         error_payload = {
