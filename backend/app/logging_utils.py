@@ -55,6 +55,18 @@ class JSONFormatter(logging.Formatter):
             "msg": record.getMessage(),
             "request_id": getattr(record, "request_id", None) or get_request_id(),
         }
+        # Preserve useful exception locations without logging exception messages,
+        # source lines, locals or arguments, which can contain credentials.
+        if record.exc_info and record.exc_info[1] is not None:
+            error = record.exc_info[1]
+            frames = []
+            tb = record.exc_info[2]
+            while tb is not None:
+                frames.append({"file": os.path.basename(tb.tb_frame.f_code.co_filename),
+                               "function": tb.tb_frame.f_code.co_name, "line": tb.tb_lineno})
+                tb = tb.tb_next
+            base["exception_type"] = type(error).__name__
+            base["exception_frames"] = frames[-12:]
         # Attach standard metadata
         base.update({
             "module": record.module,
