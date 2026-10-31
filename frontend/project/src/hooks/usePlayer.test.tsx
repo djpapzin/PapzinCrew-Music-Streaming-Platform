@@ -31,6 +31,16 @@ describe('recovering cached playback without refreshing',()=>{
  const cached='https://audio.djpapzin.com/tracks/1/cached/abcdefabcdefabcdefabcdef';
  const fresh=()=>({ok:true,json:async()=>({id:1,file_path:old.audioUrl,availability:'public',cached_audio_url:cached})});
  afterEach(()=>vi.unstubAllGlobals());
+ it('retries a network failure on the current cache route even when metadata is offline',async()=>{
+  const fetcher=vi.fn().mockRejectedValue(new TypeError('network unavailable'));vi.stubGlobal('fetch',fetcher);setup();
+  await act(async()=>{player.setVolume(0);player.playSong({...old,audioUrl:cached},[{...old,audioUrl:cached},queue[1]]);});
+  audio.currentTime=25;Object.defineProperty(audio,'error',{configurable:true,value:{code:2}});
+  await act(async()=>audio.dispatchEvent(new Event('error')));
+  expect(fetcher).not.toHaveBeenCalled();expect(audio.src).toBe(cached);expect(audio.currentTime).toBe(25);expect(audio.muted).toBe(true);
+  expect(player.playerState.currentSong?.id).toBe('1');expect(HTMLMediaElement.prototype.play).toHaveBeenCalledTimes(2);
+  await act(async()=>audio.dispatchEvent(new Event('error')));
+  expect(player.playerState.currentSong?.id).toBe('2');expect(HTMLMediaElement.prototype.play).toHaveBeenCalledTimes(3);
+ });
  it('refreshes a stale link once, keeps mute and records success for the same attempt',async()=>{
   const fetcher=vi.fn().mockResolvedValue(fresh());vi.stubGlobal('fetch',fetcher);setup();
   await act(async()=>{player.setVolume(0);player.playSong(old,[old,queue[1]]);});

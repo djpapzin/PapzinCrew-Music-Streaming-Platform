@@ -130,7 +130,7 @@ export const usePlayer = () => {
     const controller = new AbortController();
     const timer = window.setTimeout(() => controller.abort(), 5000);
     recovery.current = { controller, timer, position: audio.currentTime || stateRef.current.currentTime || 0 };
-    void recoverPlaybackUrl(song, controller.signal).catch(() => null).then(url => {
+    void recoverPlaybackUrl(song, controller.signal, code).catch(() => null).then(url => {
       if (generation.current !== token) return;
       const position = recovery.current?.position || 0;
       window.clearTimeout(timer); recovery.current = null;
