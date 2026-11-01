@@ -108,3 +108,23 @@ jobs:
           # In CI we don't call the live backend; build should not require it.
           VITE_API_URL: http://127.0.0.1:8000
         run: npm run build
+
+  whatsapp-tests:
+    name: WhatsApp Private Tests (Node 22)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tools/whatsapp-bot
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: tools/whatsapp-bot/package-lock.json
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Test private workflows with simulated sends only
+        run: npm test

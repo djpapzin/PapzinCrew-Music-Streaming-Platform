@@ -1,0 +1,27 @@
+[Unit]
+Description=Crew Helper owner-only WhatsApp GitHub requests
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=600
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/papzincrew-whatsapp-pilot
+EnvironmentFile=/home/ubuntu/.config/papzincrew-whatsapp-owner.env
+ExecStart=/usr/bin/node /home/ubuntu/papzincrew-whatsapp-pilot/pilot.mjs
+Restart=on-failure
+RestartSec=30
+RestartPreventExitStatus=78
+TimeoutStopSec=15
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/home/ubuntu/.local/share/papzincrew-whatsapp-crew-helper /home/ubuntu/.local/share/papzincrew-whatsapp-owner-requests
+MemoryMax=256M
+TasksMax=64
+
+[Install]
+WantedBy=multi-user.target
