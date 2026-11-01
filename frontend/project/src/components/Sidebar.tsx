@@ -50,9 +50,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onNavigate, playerActive=false }) => 
       {/* Logo */}
       <div className="p-6 border-b border-white/10 flex-shrink-0">
         <Link to="/" onClick={onNavigate} aria-label="Go to Home" className="flex items-center space-x-2 group">
-          <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg flex items-center justify-center group-hover:shadow group-hover:scale-105 transition-transform">
-            <Music className="w-5 h-5 text-white" />
-          </div>
+          <img src="/brand/papzin-crew-official.jpg" alt="" width="48" height="48" className="w-12 h-12 rounded-full object-contain shrink-0"/>
           <span className="text-lg lg:text-xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
             Papzin & Crew
           </span>
