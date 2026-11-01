@@ -61,14 +61,15 @@ describe('Sidebar Logo Navigation', () => {
     expect(mockNavigate).toHaveBeenCalledTimes(1);
   });
 
-  it('logo contains music icon and gradient text', () => {
+  it('logo contains the official artwork and brand name', () => {
     renderSidebar();
     
     const logo = screen.getByLabelText('Go to Home');
     
-    // Check for music icon (svg element)
-    const musicIcon = logo.querySelector('svg');
-    expect(musicIcon).toBeInTheDocument();
+    // The official image replaces the generic music-note mark.
+    const image = logo.querySelector('img');
+    expect(image).toHaveAttribute('src', '/brand/papzin-crew-official.jpg');
+    expect(image).toHaveAttribute('alt', '');
     
     // Check for gradient text span
     const gradientText = logo.querySelector('span');
