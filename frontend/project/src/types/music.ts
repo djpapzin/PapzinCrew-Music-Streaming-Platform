@@ -54,4 +54,5 @@ export interface PlayerState {
   currentIndex: number;
   shuffle: boolean;
   repeat: 'none' | 'one' | 'all';
+  transitioning?: boolean;
 }

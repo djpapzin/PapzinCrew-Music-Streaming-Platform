@@ -29,7 +29,7 @@ export function createPlaybackUsage() {
   const flush=()=>{if(since!==null){const now=performance.now();sendUsage('listen',mix,Math.min(120000,now-since));since=now;}};
   const stop=()=>{flush();since=null;};
   return {
-    begin(id:string,isResume:boolean){stop();mix=Number(id)||0;resume=isResume;requested=performance.now();pending=true;failure=false;sendUsage('attempt',mix,0,resume);},
+    begin(id:string,isResume:boolean,requestedAt=performance.now()){stop();mix=Number(id)||0;resume=isResume;requested=requestedAt;pending=true;failure=false;sendUsage('attempt',mix,0,resume);},
     started(){if(pending){sendUsage('start',mix,performance.now()-requested,resume);pending=false;}if(since===null)since=performance.now();},
     stop,
     cancel(){stop();pending=false;},
