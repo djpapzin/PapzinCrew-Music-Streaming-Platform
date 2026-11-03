@@ -10,7 +10,9 @@ const initialVolume = () => {
 };
 const available = (song: Song) => !!song.audioUrl && song.playable !== false;
 
-export const usePlayer = () => {
+export const usePlayer = (catalog: Song[] = []) => {
+  const catalogRef = useRef(catalog);
+  catalogRef.current = catalog;
   const timing = usePlaybackTiming();
   const usage = useRef(createPlaybackUsage());
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -79,9 +81,22 @@ export const usePlayer = () => {
     if (shuffle && candidates.length) nextIndex = candidates[Math.floor(Math.random() * candidates.length)].i;
     else {
       while (nextIndex < queue.length && failed.current.has(queue[nextIndex].id)) nextIndex++;
-      if (nextIndex >= queue.length && repeat === 'all') nextIndex = queue.findIndex(song => !failed.current.has(song.id));
+      if (nextIndex >= queue.length && (repeat === 'all' || !ended)) {
+        nextIndex = candidates[0]?.i ?? -1;
+        if (nextIndex < 0 && ended && repeat === 'all' && !failed.current.has(queue[currentIndex]?.id)) nextIndex = currentIndex;
+      }
     }
-    if (nextIndex < 0 || nextIndex >= queue.length || failed.current.has(queue[nextIndex].id)) { audio.pause(); update({isPlaying:false}); return; }
+    if (nextIndex < 0 || nextIndex >= queue.length || failed.current.has(queue[nextIndex].id)) {
+      if (!ended) {
+        const fallback = catalogRef.current.filter(song => available(song) && !failed.current.has(song.id))
+          .sort((a, b) => Number(b.id) - Number(a.id));
+        const index = fallback.findIndex(song => song.id === stateRef.current.currentSong?.id);
+        const next = fallback.slice(index + 1).find(song => song.id !== stateRef.current.currentSong?.id)
+          ?? fallback.find(song => song.id !== stateRef.current.currentSong?.id);
+        if (next) { playSong(next, fallback); return; }
+      }
+      audio.pause(); update({isPlaying:false}); return;
+    }
     playSong(queue[nextIndex], queue);
   };
   const handlePrevious = () => {
