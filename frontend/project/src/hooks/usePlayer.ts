@@ -131,18 +131,25 @@ export const usePlayer = (catalog: Song[] = []) => {
     if (!outgoing || !mixDecks().includes(outgoing) || outgoing.paused || outgoing.seeking || recovery.current || overlap.current || fadeSkipped.current
       || stateRef.current.repeat === 'one' || !mixer.current.running) return;
     const remaining = outgoing.duration - outgoing.currentTime;
-    if (!Number.isFinite(remaining) || remaining <= 0 || remaining > CROSSFADE_SECONDS) return;
+    const shouldFade = remaining <= CROSSFADE_SECONDS;
+    const preloadWindow = 45;
+    if (!Number.isFinite(remaining) || remaining <= 0 || remaining > preloadWindow) return;
+    // Shuffle chooses a fresh candidate at transition time.
+    if (!shouldFade && stateRef.current.shuffle) return;
     const next = nextSelection();
     const incoming = mixDecks().find(audio => audio !== outgoing);
     if (!next || next.song.id === stateRef.current.currentSong?.id || !incoming) return;
     const nextUrl = mixPlaybackUrl(next.song);
     if (!nextUrl) return;
+    if (incoming.getAttribute('src') !== nextUrl || (shouldFade && incoming.error)) {
+      incoming.preload = 'auto';
+      mixer.current.level(incoming, 0);
+      incoming.src = nextUrl;
+      incoming.load();
+    }
+    if (!shouldFade) return;
     const transition: MixTransition = { incoming, outgoing, song: next.song, queue: next.queue, queueAtRequest: stateRef.current.queue, started: false, requestedAt: performance.now() };
     overlap.current = transition;
-    incoming.preload = 'auto';
-    mixer.current.level(incoming, 0);
-    incoming.src = nextUrl;
-    incoming.load();
     applyVolume();
     // Don't fade the outgoing mix until the new deck emits `playing`.
     void incoming.play().catch(() => {
