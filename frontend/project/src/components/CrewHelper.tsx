@@ -59,7 +59,7 @@ export default function CrewHelper() {
     </form>
     <div className="flex flex-wrap gap-4 text-purple-200">
       <Link to="/about">Beta help</Link>
-      <a href="https://www.facebook.com/groups/PapzinCrew/">Facebook community</a>
+      <a href="https://www.facebook.com/groups/PapzinCrew/" target="_blank" rel="noopener noreferrer">Facebook community</a>
     </div>
   </section>;
 }
