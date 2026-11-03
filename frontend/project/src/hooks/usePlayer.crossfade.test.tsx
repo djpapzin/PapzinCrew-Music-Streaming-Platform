@@ -51,8 +51,17 @@ afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.use
 
 describe('automatic ten-second transitions',() => {
   it('waits for decoded incoming playback, then fades on the audio clock without reloading either mix',async () => {
-    await setup(); outgoing().currentTime = 89; await emit(outgoing(),'timeupdate'); expect(incoming().getAttribute('src')).toBeNull();
+    await setup();
+    outgoing().currentTime = 54; await emit(outgoing(),'timeupdate');
+    expect(incoming().getAttribute('src')).toBeNull();
+    outgoing().currentTime = 55; await emit(outgoing(),'timeupdate');
+    const preloadedSource = incoming().getAttribute('src');
+    expect(preloadedSource).toBeTruthy();
+    expect(incoming().paused).toBe(true);
+    const loads = vi.mocked(HTMLMediaElement.prototype.load).mock.calls.length;
     outgoing().currentTime = 90; await emit(outgoing(),'timeupdate');
+    expect(incoming().getAttribute('src')).toBe(preloadedSource);
+    expect(vi.mocked(HTMLMediaElement.prototype.load).mock.calls).toHaveLength(loads);
     expect(player.playerState.currentSong?.id).toBe('3'); expect(outgoing().paused).toBe(false);
     const from = Context.latest.sources.get(outgoing())!.gain;
     const to = Context.latest.sources.get(incoming())!.gain;

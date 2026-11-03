@@ -6,6 +6,9 @@ import { canRecoverPlayback, recoverPlaybackUrl } from '../lib/recoverPlayback';
 import { MixAudio } from '../lib/mixAudio';
 import { mixPlaybackUrl } from '../lib/mixPlaybackUrl';
 export const CROSSFADE_SECONDS = 10;
+const CROSSFADE_PRELOAD_SECONDS = 45;
+// Allow for timeupdate cadence and the buffered deck's play startup.
+const CROSSFADE_START_LEAD_SECONDS = 0.5;
 interface MixTransition { incoming: HTMLAudioElement; outgoing: HTMLAudioElement; song: Song; queue: Song[]; queueAtRequest: Song[]; started: boolean; requestedAt: number; timer?: number }
 
 export const VOLUME_KEY = 'papzincrew:volume';
@@ -131,18 +134,27 @@ export const usePlayer = (catalog: Song[] = []) => {
     if (!outgoing || !mixDecks().includes(outgoing) || outgoing.paused || outgoing.seeking || recovery.current || overlap.current || fadeSkipped.current
       || stateRef.current.repeat === 'one' || !mixer.current.running) return;
     const remaining = outgoing.duration - outgoing.currentTime;
-    if (!Number.isFinite(remaining) || remaining <= 0 || remaining > CROSSFADE_SECONDS) return;
+    const shouldFade = remaining <= CROSSFADE_SECONDS;
+    if (!Number.isFinite(remaining) || remaining <= 0 || remaining > CROSSFADE_PRELOAD_SECONDS) return;
+    // Shuffle chooses a fresh candidate at transition time.
+    if (!shouldFade && stateRef.current.shuffle) return;
     const next = nextSelection();
     const incoming = mixDecks().find(audio => audio !== outgoing);
     if (!next || next.song.id === stateRef.current.currentSong?.id || !incoming) return;
     const nextUrl = mixPlaybackUrl(next.song);
     if (!nextUrl) return;
+    const isPreloaded = incoming.getAttribute('src') === nextUrl && !incoming.error;
+    const canStartEarly = isPreloaded && incoming.readyState >= 3
+      && remaining <= CROSSFADE_SECONDS + CROSSFADE_START_LEAD_SECONDS;
+    if (!isPreloaded && (incoming.getAttribute('src') !== nextUrl || shouldFade)) {
+      incoming.preload = 'auto';
+      mixer.current.level(incoming, 0);
+      incoming.src = nextUrl;
+      incoming.load();
+    }
+    if (!shouldFade && !canStartEarly) return;
     const transition: MixTransition = { incoming, outgoing, song: next.song, queue: next.queue, queueAtRequest: stateRef.current.queue, started: false, requestedAt: performance.now() };
     overlap.current = transition;
-    incoming.preload = 'auto';
-    mixer.current.level(incoming, 0);
-    incoming.src = nextUrl;
-    incoming.load();
     applyVolume();
     // Don't fade the outgoing mix until the new deck emits `playing`.
     void incoming.play().catch(() => {
