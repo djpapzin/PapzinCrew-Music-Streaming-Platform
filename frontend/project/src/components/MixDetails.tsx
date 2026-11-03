@@ -5,7 +5,7 @@ import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { Play, Pause, Headphones, ListMusic, Download } from 'lucide-react';
 import { Song } from '../types/music';
 import { getMixSeries, sortCollectionTracks } from '../lib/catalog';
-import { relatedMixes, durationLabel } from '../lib/discovery';
+import { relatedMixes, durationLabel, similarMixReason } from '../lib/discovery';
 import { safeArtworkUrl, DEFAULT_ARTWORK_URL } from '../lib/artwork';
 import { TrackList } from './LibraryPages';
 import SongActions from './SongActions';
@@ -88,6 +88,6 @@ export default function MixDetails({ songs, loading, error, currentSong, isPlayi
       <section className="rounded-2xl bg-white/5 p-5 sm:p-6 space-y-3"><h3 className="text-xl font-semibold">About this mix</h3><p className="text-gray-300 whitespace-pre-wrap break-words leading-relaxed">{song.description?.trim() || `${song.title} by ${song.artist}, from ${series}. Explore the collection for more mixes.`}</p></section>
       <section className="rounded-2xl bg-white/5 p-5 sm:p-6 space-y-3"><h3 className="text-xl font-semibold flex items-center gap-2"><ListMusic size={20}/> Tracklist</h3>{song.tracklist?.trim() ? <p className="text-gray-300 whitespace-pre-wrap break-words leading-relaxed">{song.tracklist}</p> : <p className="text-gray-400">A tracklist hasn’t been added for this mix yet.</p>}</section>
     </div>
-    {related.length > 0 && <section className="space-y-4"><div className="flex flex-wrap justify-between gap-3 items-center"><h3 className="text-xl font-semibold">Keep listening</h3><Link className="text-purple-300 min-h-11 inline-flex items-center" to={`/albums?series=${encodeURIComponent(series)}`}>Explore the series →</Link></div><p className="text-gray-400 text-sm">More from this series, artist, or genre.</p><TrackList songs={related} currentSong={currentSong} isPlaying={isPlaying} onPlaySong={onPlaySong}/></section>}
+    {related.length > 0 && <section className="space-y-4"><div className="flex flex-wrap justify-between gap-3 items-center"><h3 className="text-xl font-semibold">More like this</h3><Link className="text-purple-300 min-h-11 inline-flex items-center" to={`/albums?series=${encodeURIComponent(series)}`}>Explore the series →</Link></div><p className="text-gray-400 text-sm">Find another mix from the same series, DJ, or genre.</p><TrackList descriptionFor={other => similarMixReason(song, other)} songs={related} currentSong={currentSong} isPlaying={isPlaying} onPlaySong={onPlaySong}/></section>}
   </article>;
 }
