@@ -3,10 +3,11 @@ import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { usePlayer, VOLUME_KEY } from './usePlayer';
 import { Song } from '../types/music';
 let player:ReturnType<typeof usePlayer>;let audio:HTMLAudioElement;let paused=true;
-function Harness(){player=usePlayer();return <audio ref={player.audioRef}/>;}
+let catalog:Song[]=[];
+function Harness(){player=usePlayer(catalog);return <audio ref={player.audioRef}/>;}
 const song=(id:string):Song=>({id,title:`Mix ${id}`,artist:'DJ Papzin',album:'',duration:100,imageUrl:'',audioUrl:`https://example.com/tracks/${id}/stream`,genre:'House',year:2020});
 const queue=[song('1'),song('2'),song('3')];
-beforeEach(()=>{localStorage.clear();paused=true;vi.spyOn(HTMLMediaElement.prototype,'load').mockImplementation(()=>{});vi.spyOn(HTMLMediaElement.prototype,'play').mockImplementation(function(this:HTMLMediaElement){paused=false;this.dispatchEvent(new Event('play'));return Promise.resolve();});vi.spyOn(HTMLMediaElement.prototype,'pause').mockImplementation(function(this:HTMLMediaElement){paused=true;this.dispatchEvent(new Event('pause'));});vi.spyOn(HTMLMediaElement.prototype,'paused','get').mockImplementation(()=>paused);});
+beforeEach(()=>{localStorage.clear();catalog=[];paused=true;vi.spyOn(HTMLMediaElement.prototype,'load').mockImplementation(()=>{});vi.spyOn(HTMLMediaElement.prototype,'play').mockImplementation(function(this:HTMLMediaElement){paused=false;this.dispatchEvent(new Event('play'));return Promise.resolve();});vi.spyOn(HTMLMediaElement.prototype,'pause').mockImplementation(function(this:HTMLMediaElement){paused=true;this.dispatchEvent(new Event('pause'));});vi.spyOn(HTMLMediaElement.prototype,'paused','get').mockImplementation(()=>paused);});
 afterEach(()=>{cleanup();vi.restoreAllMocks();});
 function setup(){render(<Harness/>);audio=player.audioRef.current!;Object.defineProperty(audio,'duration',{configurable:true,value:100});}
 describe('playback regressions',()=>{
@@ -98,5 +99,25 @@ describe('recovering cached playback without refreshing',()=>{
   await act(async()=>player.playSong(old,[old,queue[1]]));expect(fetcher).not.toHaveBeenCalled();
   await act(async()=>player.playSong(old,[old,queue[1]]));await act(async()=>audio.dispatchEvent(new Event('error')));
   expect(player.playerState.currentSong?.id).toBe('2');expect(audio.src).not.toBe(cached);
+ });
+});
+
+describe('manual Next continuation',()=>{
+ it('advances newest to older and wraps even with repeat off',async()=>{
+  setup();const recent=[song('245'),song('241'),song('47')];
+  await act(async()=>{player.setVolume(0);player.playSong(recent[0],recent);});
+  for(const id of ['241','47','245']){await act(async()=>player.handleNext());expect(player.playerState.currentSong?.id).toBe(id);expect(audio.paused).toBe(false);expect(audio.muted).toBe(true);}
+ });
+ it.each([0,1,2])('continues a one-track selection using the latest catalog (repeat toggles: %s)',async toggles=>{
+  catalog=[song('47'),song('245'),song('241')];setup();
+  await act(async()=>{player.playSong(song('245'));for(let i=0;i<toggles;i++)player.toggleRepeat();});
+  await act(async()=>player.handleNext());expect(player.playerState.currentSong?.id).toBe('241');
+ });
+ it('skips failed tracks when wrapping and stops when all alternatives failed',async()=>{
+  setup();await act(async()=>player.playSong(queue[0],queue));
+  await act(async()=>audio.dispatchEvent(new Event('error')));
+  await act(async()=>player.playSong(queue[2],queue));
+  await act(async()=>player.handleNext());expect(player.playerState.currentSong?.id).toBe('2');
+  await act(async()=>{audio.dispatchEvent(new Event('error'));audio.dispatchEvent(new Event('error'));});expect(audio.paused).toBe(true);
  });
 });
