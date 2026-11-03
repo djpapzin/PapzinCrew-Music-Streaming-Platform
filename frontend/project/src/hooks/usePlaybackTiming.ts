@@ -63,13 +63,13 @@ export function usePlaybackTiming() {
     const result = { ...attempt, status, ...(status === 'started' ? { milliseconds: Math.max(0, performance.now() - attempt.startedAt) } : {}) };
     save(items.current.map(item => item.id === id ? result : item));
   };
-  const begin = (title: string, kind: StartKind) => {
+  const begin = (title: string, kind: StartKind, requestedAt = performance.now()) => {
     endBuffer();
     finish('cancelled');
     active.current = null;
     const connection = (navigator as Navigator & {connection?: {type?:string;effectiveType?:string}}).connection;
     const attempt: PlaybackAttempt = {
-      id: ++sequence.current, title, kind, startedAt: performance.now(), status: 'waiting',
+      id: ++sequence.current, title, kind, startedAt: requestedAt, status: 'waiting',
       timestamp:new Date().toISOString(), browser:navigator.userAgent,
       connection:connection?.type || (connection?.effectiveType ? `estimated ${connection.effectiveType}` : 'Unknown'),
       version:import.meta.env.VITE_APP_VERSION || 'development', bufferCount:0, bufferMs:0,

@@ -223,7 +223,7 @@ const Player: React.FC<PlayerProps> = ({
               {/* Minimize to mini-player */}
               <Minimize2 className="w-6 h-6" />
             </button>
-            <div className="text-center"><h2 className="text-white font-medium">Now Playing</h2><p className="text-xs text-gray-400">{isLoading?'Loading mix… you can pause to cancel':'Swipe down to browse'}</p></div>
+            <div className="text-center"><h2 className="text-white font-medium">Now Playing</h2><p className="text-xs text-gray-400">{playerState.transitioning?'Mixing into the next mix…':isLoading?'Loading mix… you can pause to cancel':'Swipe down to browse'}</p></div>
             <div className="flex gap-3"><SongActions song={currentSong} /></div>
           </div>
 
@@ -370,6 +370,7 @@ const Player: React.FC<PlayerProps> = ({
               />
               <div className="min-w-0">
                 <p title={currentSong.title} className="text-white font-medium truncate">{currentSong.title}</p>
+                {playerState.transitioning&&<p role="status" className="text-xs text-purple-300">Mixing into the next mix…</p>}
                 <p title={currentSong.artist} className="text-gray-400 text-sm truncate">{currentSong.artist}</p>
                 {currentSong.album && <p className="text-gray-500 text-xs truncate">{currentSong.album}</p>}
               </div>
