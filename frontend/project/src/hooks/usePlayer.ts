@@ -6,7 +6,7 @@ import { canRecoverPlayback, recoverPlaybackUrl } from '../lib/recoverPlayback';
 import { MixAudio } from '../lib/mixAudio';
 import { mixPlaybackUrl } from '../lib/mixPlaybackUrl';
 export const CROSSFADE_SECONDS = 10;
-interface MixTransition { incoming: HTMLAudioElement; outgoing: HTMLAudioElement; song: Song; queue: Song[]; started: boolean; requestedAt: number; timer?: number }
+interface MixTransition { incoming: HTMLAudioElement; outgoing: HTMLAudioElement; song: Song; queue: Song[]; queueAtRequest: Song[]; started: boolean; requestedAt: number; timer?: number }
 
 export const VOLUME_KEY = 'papzincrew:volume';
 const initialVolume = () => {
@@ -137,7 +137,7 @@ export const usePlayer = (catalog: Song[] = []) => {
     if (!next || next.song.id === stateRef.current.currentSong?.id || !incoming) return;
     const nextUrl = mixPlaybackUrl(next.song);
     if (!nextUrl) return;
-    const transition: MixTransition = { incoming, outgoing, song: next.song, queue: next.queue, started: false, requestedAt: performance.now() };
+    const transition: MixTransition = { incoming, outgoing, song: next.song, queue: next.queue, queueAtRequest: stateRef.current.queue, started: false, requestedAt: performance.now() };
     overlap.current = transition;
     incoming.preload = 'auto';
     mixer.current.level(incoming, 0);
@@ -158,7 +158,12 @@ export const usePlayer = (catalog: Song[] = []) => {
     usage.current.begin(transition.song.id, false, transition.requestedAt);
     timing.begin(transition.song.title, 'Track start', transition.requestedAt); timing.finish('started'); usage.current.started();
     audioRef.current = incoming;
-    update({ currentSong: transition.song, queue: transition.queue, currentIndex: transition.queue.findIndex(song => song.id === transition.song.id),
+    // Queue additions are immutable appends; retain anything added while this
+    // deck was loading, including when the next selection used the catalog.
+    const additions = stateRef.current.queue.filter(song => !transition.queueAtRequest.some(item => item.id === song.id)
+      && !transition.queue.some(item => item.id === song.id));
+    const queue = [...transition.queue, ...additions];
+    update({ currentSong: transition.song, queue, currentIndex: queue.findIndex(song => song.id === transition.song.id),
       currentTime: incoming.currentTime, duration: Number.isFinite(incoming.duration) ? incoming.duration : transition.song.duration, isPlaying: true });
     window.dispatchEvent(new CustomEvent('library:played', { detail: transition.song.id }));
     const seconds = Math.max(0, Math.min(CROSSFADE_SECONDS, transition.outgoing.duration - transition.outgoing.currentTime));
@@ -171,7 +176,7 @@ export const usePlayer = (catalog: Song[] = []) => {
     const audio = audioRef.current;
     const { queue, currentIndex } = stateRef.current;
     if (!audio || !queue.length) return;
-    cancelOverlap(); update({transitioning:false}); fadeSkipped.current = true;
+    cancelOverlap(); update({transitioning:false}); fadeSkipped.current = false;
     if (audio.currentTime > 3 || currentIndex === 0) { if (recovery.current) recovery.current.position = 0; audio.currentTime = 0; update({currentTime:0}); return; }
     playSong(queue[currentIndex - 1], queue);
   };

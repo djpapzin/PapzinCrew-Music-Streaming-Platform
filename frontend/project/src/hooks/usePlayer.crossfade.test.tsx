@@ -127,6 +127,19 @@ describe('automatic ten-second transitions',() => {
     await act(async () => { player.playSong(recent[2],recent); });
     await emit(outgoing(),'ended'); expect(player.playerState.currentSong?.id).toBe('3');
   });
+  it.each([false,true])('preserves queue additions while the incoming mix loads (catalog fallback: %s)',async fallback => {
+    await setup(); if(fallback)await act(async()=>player.playSong(recent[0]));
+    outgoing().currentTime=90;await emit(outgoing(),'timeupdate');
+    await act(async()=>{window.dispatchEvent(new CustomEvent('player:queue',{detail:mix('4')}));});
+    expect(player.playerState.queue.some(song=>song.id==='4')).toBe(true);
+    await emit(incoming(),'playing');expect(player.playerState.queue.map(song=>song.id)).toEqual(['3','2','1','4']);
+    expect(player.playerState.currentIndex).toBe(1);
+  });
+  it('crossfades later when Previous restarts the current mix',async()=>{
+    await setup();outgoing().currentTime=50;await act(async()=>player.handlePrevious());
+    expect(outgoing().currentTime).toBe(0);
+    await startFade();expect(player.playerState.currentSong?.id).toBe('2');expect(player.playerState.transitioning).toBe(true);
+  });
   it('keeps legacy and access-checked streams on the native deck without CORS or a Web Audio source',async () => {
     await setup(); await startFade();
     const legacy={...mix('99'),audioUrl:'https://bucket.backblazeb2.com/legacy.mp3'};

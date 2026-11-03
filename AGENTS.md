@@ -8,3 +8,7 @@
 - Netlify previews currently share the production API. A frontend preview is not an isolated development database or backend. Use local/isolated backend tests for writes; do not create public test mixes or change real listener data from previews.
 - Before promotion, verify CI, catalog loading, muted playback, mobile player behavior, feedback privacy and owner access, and the currently disabled downloads. Keep test uploads unlisted, generated tracklists private, existing tracklists and audio quality unchanged, and Backblaze $0 caps unchanged.
 - Use only the local Codex in-app browser for browser checks; leave Safari alone. Do not send WhatsApp/social messages without explicit user authorization.
+
+## Approved playback release scope — 3 November 2026
+
+DJ requested automatic continuation and an approximately ten-second mix-in transition as a follow-up to the Next-playback fix, after approving merge/deployment once checks pass and live verification. This requested playback work is the specific exception to the stabilization feature freeze for this release. Promote through dev and a reviewed main PR only after CI and muted browser playback checks pass; verify the published version live. Other new features remain off production. Physical iPhone audible/background/lock-screen validation must be reported separately from browser emulation.
