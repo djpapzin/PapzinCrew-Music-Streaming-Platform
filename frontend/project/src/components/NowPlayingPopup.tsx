@@ -79,7 +79,10 @@ export function NowPlayingPopup({
   // Minimized compact player (dock)
   if (isMinimized) {
     return (
-      <div className="fixed bottom-4 right-4 bg-black/90 backdrop-blur-xl border border-white/20 rounded-xl shadow-2xl p-3 z-50 flex items-center space-x-3 w-80">
+      <div aria-label="Minimized desktop player" onDoubleClick={event => {
+        if ((event.target as Element).closest('button, input, a, [role="button"], [role="slider"]')) return;
+        setIsMinimized(false);
+      }} className="fixed bottom-4 right-4 bg-black/90 backdrop-blur-xl border border-white/20 rounded-xl shadow-2xl p-3 z-50 flex items-center space-x-3 w-80">
         <div className="w-10 h-10 rounded overflow-hidden flex-shrink-0">
           {track.coverArt ? (
             <img
