@@ -22,6 +22,7 @@ interface Track {
   id: string;
   title: string;
   artist: string;
+  year?: number;
   coverArt?: string;
   audioUrl?: string;
 }
@@ -168,7 +169,7 @@ export function NowPlayingPopup({
                 Now Playing
               </p>
               <p className="mt-2.5 text-sm text-gray-300 leading-tight break-words sm:hidden">
-                {track.artist}
+                {track.artist}{track.year && track.year > 0 ? ` · ${track.year}` : ''}
               </p>
             </div>
 
@@ -219,7 +220,7 @@ export function NowPlayingPopup({
               {track.title}
             </h2>
             <p className="mt-2 text-base sm:text-lg text-gray-400 leading-relaxed break-words hidden sm:block">
-              {track.artist}
+              {track.artist}{track.year && track.year > 0 ? ` · ${track.year}` : ''}
             </p>
           </div>
 
