@@ -76,13 +76,15 @@ export function NowPlayingPopup({
 
   if (!isVisible || !track) return null;
 
+  const toggleOnDoubleClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    if ((event.target as Element).closest('button, input, a, [role="button"], [role="slider"]')) return;
+    setIsMinimized(!isMinimized);
+  };
+
   // Minimized compact player (dock)
   if (isMinimized) {
     return (
-      <div aria-label="Minimized desktop player" onDoubleClick={event => {
-        if ((event.target as Element).closest('button, input, a, [role="button"], [role="slider"]')) return;
-        setIsMinimized(false);
-      }} className="fixed bottom-4 right-4 bg-black/90 backdrop-blur-xl border border-white/20 rounded-xl shadow-2xl p-3 z-50 flex items-center space-x-3 w-80">
+      <div aria-label="Minimized desktop player" onDoubleClick={toggleOnDoubleClick} className="fixed bottom-4 right-4 bg-black/90 backdrop-blur-xl border border-white/20 rounded-xl shadow-2xl p-3 z-50 flex items-center space-x-3 w-80">
         <div className="w-10 h-10 rounded overflow-hidden flex-shrink-0">
           {track.coverArt ? (
             <img
@@ -142,7 +144,7 @@ export function NowPlayingPopup({
         paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))'
       }}
     >
-      <div className="relative bg-black/95 backdrop-blur-xl border border-white/20 rounded-[1.75rem] shadow-2xl max-w-md w-full mx-auto my-3 sm:my-4 overflow-y-auto max-h-[calc(100vh-2.5rem-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px))]">
+      <div onDoubleClick={toggleOnDoubleClick} className="relative bg-black/95 backdrop-blur-xl border border-white/20 rounded-[1.75rem] shadow-2xl max-w-md w-full mx-auto my-3 sm:my-4 overflow-y-auto max-h-[calc(100vh-2.5rem-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px))]">
         <div
           className="px-4 sm:px-8"
           style={{
