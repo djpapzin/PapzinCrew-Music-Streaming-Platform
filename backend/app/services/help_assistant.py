@@ -50,7 +50,7 @@ def answer_question(question, mixes=(), downloads_enabled=False, uploads_enabled
     if re.search(r'\b(password|owner key|api key|token|private messages|admin key)\b', text):
         return reply('private_access', 'I can help with public mixes and using the website. Never share passwords or owner keys in the group. Ask DJ Papzin privately about owner access.', needs_owner=True)
     # Route upload questions before generic errors; "uploading" contains "loading".
-    if re.search(r'\b(upload(?:s|ing|ed)?|submit(?:ting|ted)?|my mix|my mixes)\b', text):
+    if re.search(r'\b(upload(?:s|ing|ed)?|submit(?:ting|ted)?)\b', text):
         if not uploads_enabled:
             return reply('uploads', 'Website uploads are temporarily paused while DJ Papzin prepares the DJ upload flow. You can still listen to and download ready public mixes. I cannot upload audio files or publish releases for you. To contact DJ Papzin, say “I have feedback”.', [('Browse mixes', SITE+'/search')])
         return reply('uploads', 'Use Upload Music to submit a DJ mix. Uploads stay unlisted until checked; solo songs and test uploads do not go into the public catalog. DJ Papzin handles release approval.', [('Upload a DJ mix', SITE+'/upload')])
