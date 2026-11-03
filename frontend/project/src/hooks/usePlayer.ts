@@ -4,6 +4,7 @@ import { Song, PlayerState } from '../types/music';
 import { usePlaybackTiming } from './usePlaybackTiming';
 import { canRecoverPlayback, recoverPlaybackUrl } from '../lib/recoverPlayback';
 import { MixAudio } from '../lib/mixAudio';
+import { mixPlaybackUrl } from '../lib/mixPlaybackUrl';
 export const CROSSFADE_SECONDS = 10;
 interface MixTransition { incoming: HTMLAudioElement; outgoing: HTMLAudioElement; song: Song; queue: Song[]; started: boolean; requestedAt: number; timer?: number }
 
@@ -18,6 +19,7 @@ export const usePlayer = (catalog: Song[] = []) => {
   catalogRef.current = catalog;
   const timing = usePlaybackTiming();
   const usage = useRef(createPlaybackUsage());
+  const nativeAudioRef = useRef<HTMLAudioElement>(null);
   const firstAudioRef = useRef<HTMLAudioElement>(null);
   const secondAudioRef = useRef<HTMLAudioElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -42,11 +44,12 @@ export const usePlayer = (catalog: Song[] = []) => {
     setPlayerState(stateRef.current);
   };
   const notify = (message: string) => window.dispatchEvent(new CustomEvent('app:toast', { detail: { message } }));
-  const decks = () => [firstAudioRef.current, secondAudioRef.current].filter((audio): audio is HTMLAudioElement => !!audio);
+  const mixDecks = () => [firstAudioRef.current, secondAudioRef.current].filter((audio): audio is HTMLAudioElement => !!audio);
+  const decks = () => [nativeAudioRef.current, ...mixDecks()].filter((audio): audio is HTMLAudioElement => !!audio);
   const applyVolume = () => {
     const volume = stateRef.current.volume;
     mixer.current.volume(volume);
-    for (const audio of decks()) { audio.volume = mixer.current.enabled ? 1 : volume; audio.muted = volume === 0; }
+    for (const audio of decks()) { audio.volume = mixer.current.enabled && audio !== nativeAudioRef.current ? 1 : volume; audio.muted = volume === 0; }
   };
   const cancelOverlap = () => {
     const transition = overlap.current;
@@ -63,11 +66,11 @@ export const usePlayer = (catalog: Song[] = []) => {
     if(attemptId===undefined)usage.current.begin(stateRef.current.currentSong?.id||'0',true);
     const id = attemptId ?? timing.begin(stateRef.current.currentSong?.title || 'Mix', 'Resume');
     const token = generation.current;
-    mixer.current.enable(decks(), audio, stateRef.current.volume);
+    if (audio !== nativeAudioRef.current) { mixer.current.enable(mixDecks(), audio, stateRef.current.volume); mixer.current.level(audio, 1); }
     applyVolume();
     // Start both in the same user gesture; awaiting resume first loses the
     // media-element activation on some mobile browsers.
-    const resumed = mixer.current.resume();
+    const resumed = audio !== nativeAudioRef.current ? mixer.current.resume() : undefined;
     void Promise.all([resumed, audio.play()]).catch((err: Error) => {
       if (generation.current !== token || timing.pending.current?.id !== id || recovery.current) return;
       if (err.name === 'AbortError') { internalReload.current = false; timing.finish('cancelled', id); usage.current.cancel(); return; }
@@ -79,17 +82,20 @@ export const usePlayer = (catalog: Song[] = []) => {
   };
 
   const playSong = (song: Song, queue: Song[] = [song]) => {
-    const audio = audioRef.current;
+    const previous = audioRef.current;
+    const mixedUrl = mixPlaybackUrl(song);
+    const audio = mixedUrl ? (mixDecks().includes(previous!) ? previous : firstAudioRef.current) : nativeAudioRef.current;
     if (!audio || !available(song)) { notify('This track is unavailable.'); return; }
     const playableQueue = queue.filter(available);
     if (!playableQueue.some(item => item.id === song.id)) playableQueue.unshift(song);
     const kind = stateRef.current.currentSong ? 'Track start' : 'First play';
     cancelRecovery(); cancelOverlap(); fadeSkipped.current = false; retried.current = false;
-    audio.pause();
+    previous?.pause();
+    audioRef.current = audio;
     usage.current.begin(song.id,false);
     const attemptId = timing.begin(song.title, kind);
     update({ currentSong: song, currentIndex: playableQueue.findIndex(item => item.id === song.id), queue: playableQueue, currentTime: 0, duration: song.duration || 0, isPlaying: false, transitioning:false });
-    audio.src = song.audioUrl;
+    audio.src = mixedUrl || song.audioUrl;
     audio.load();
     requestPlay(attemptId);
     window.dispatchEvent(new CustomEvent('library:played', { detail: song.id }));
@@ -122,18 +128,20 @@ export const usePlayer = (catalog: Song[] = []) => {
   };
   const crossfade = () => {
     const outgoing = audioRef.current;
-    if (!outgoing || outgoing.paused || outgoing.seeking || recovery.current || overlap.current || fadeSkipped.current
+    if (!outgoing || !mixDecks().includes(outgoing) || outgoing.paused || outgoing.seeking || recovery.current || overlap.current || fadeSkipped.current
       || stateRef.current.repeat === 'one' || !mixer.current.running) return;
     const remaining = outgoing.duration - outgoing.currentTime;
     if (!Number.isFinite(remaining) || remaining <= 0 || remaining > CROSSFADE_SECONDS) return;
     const next = nextSelection();
-    const incoming = decks().find(audio => audio !== outgoing);
+    const incoming = mixDecks().find(audio => audio !== outgoing);
     if (!next || next.song.id === stateRef.current.currentSong?.id || !incoming) return;
+    const nextUrl = mixPlaybackUrl(next.song);
+    if (!nextUrl) return;
     const transition: MixTransition = { incoming, outgoing, song: next.song, queue: next.queue, started: false, requestedAt: performance.now() };
     overlap.current = transition;
     incoming.preload = 'auto';
     mixer.current.level(incoming, 0);
-    incoming.src = next.song.audioUrl;
+    incoming.src = nextUrl;
     incoming.load();
     applyVolume();
     // Don't fade the outgoing mix until the new deck emits `playing`.
@@ -215,7 +223,7 @@ export const usePlayer = (catalog: Song[] = []) => {
       const refreshed = { ...song, audioUrl: url };
       update({ currentSong: refreshed, queue: stateRef.current.queue.map(item => item.id === song.id ? refreshed : item) });
       generation.current++; internalReload.current = true;
-      audio.src = url; audio.load();
+      audio.src = audio === nativeAudioRef.current ? url : (mixPlaybackUrl(refreshed) || url); audio.load();
       if (position > 0) audio.currentTime = position;
       requestPlay(attemptId);
     });
@@ -239,7 +247,7 @@ export const usePlayer = (catalog: Song[] = []) => {
   actions.current = { next: handleNext, previous: handlePrevious, seek: seekTo, crossfade };
 
   useEffect(() => {
-    audioRef.current = firstAudioRef.current;
+    audioRef.current = nativeAudioRef.current;
     const cleanups = decks().map(audio => {
       audio.volume = stateRef.current.volume;
       audio.muted = stateRef.current.volume === 0;
@@ -300,5 +308,5 @@ export const usePlayer = (catalog: Song[] = []) => {
       navigator.mediaSession.setActionHandler('seekto', details => { if (details.seekTime !== undefined) actions.current.seek(details.seekTime); });
     } catch { /* Unsupported MediaSession handlers must not interrupt playback. */ }
   }, [playerState.currentSong?.id]);
-  return { audioRef, firstAudioRef, secondAudioRef, playbackAttempts: timing.attempts, timingStorageError: timing.storageError, playerState, playSong, togglePlay, handleNext: () => handleNext(), handlePrevious, setVolume, seekTo, toggleShuffle, toggleRepeat };
+  return { audioRef, nativeAudioRef, firstAudioRef, secondAudioRef, playbackAttempts: timing.attempts, timingStorageError: timing.storageError, playerState, playSong, togglePlay, handleNext: () => handleNext(), handlePrevious, setVolume, seekTo, toggleShuffle, toggleRepeat };
 };

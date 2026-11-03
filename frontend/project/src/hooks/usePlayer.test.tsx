@@ -4,12 +4,12 @@ import { usePlayer, VOLUME_KEY } from './usePlayer';
 import { Song } from '../types/music';
 let player:ReturnType<typeof usePlayer>;let audio:HTMLAudioElement;let paused=true;
 let catalog:Song[]=[];
-function Harness(){player=usePlayer(catalog);return <><audio ref={player.firstAudioRef}/><audio ref={player.secondAudioRef}/></>;}
+function Harness(){player=usePlayer(catalog);if(player.audioRef.current)audio=player.audioRef.current;return <><audio ref={player.nativeAudioRef}/><audio ref={player.firstAudioRef}/><audio ref={player.secondAudioRef}/></>;}
 const song=(id:string):Song=>({id,title:`Mix ${id}`,artist:'DJ Papzin',album:'',duration:100,imageUrl:'',audioUrl:`https://example.com/tracks/${id}/stream`,genre:'House',year:2020});
 const queue=[song('1'),song('2'),song('3')];
 beforeEach(()=>{localStorage.clear();catalog=[];paused=true;vi.spyOn(HTMLMediaElement.prototype,'load').mockImplementation(()=>{});vi.spyOn(HTMLMediaElement.prototype,'play').mockImplementation(function(this:HTMLMediaElement){paused=false;this.dispatchEvent(new Event('play'));return Promise.resolve();});vi.spyOn(HTMLMediaElement.prototype,'pause').mockImplementation(function(this:HTMLMediaElement){paused=true;this.dispatchEvent(new Event('pause'));});vi.spyOn(HTMLMediaElement.prototype,'paused','get').mockImplementation(()=>paused);});
 afterEach(()=>{cleanup();vi.restoreAllMocks();});
-function setup(){render(<Harness/>);audio=player.audioRef.current!;Object.defineProperty(audio,'duration',{configurable:true,value:100});}
+function setup(){render(<Harness/>);audio=player.audioRef.current!;for(const deck of [player.nativeAudioRef.current!,player.firstAudioRef.current!,player.secondAudioRef.current!])Object.defineProperty(deck,'duration',{configurable:true,value:100});}
 describe('playback regressions',()=>{
   it('uses the supplied stream without rewriting it to the proxy',async()=>{setup();await act(async()=>player.playSong(queue[0]));expect(audio.src).toBe(queue[0].audioUrl);});
   it('preserves mute across automatic track changes using current queue state',async()=>{setup();await act(async()=>{player.setVolume(0);player.playSong(queue[0],queue);});expect(audio.volume).toBe(0);expect(audio.muted).toBe(true);await act(async()=>audio.dispatchEvent(new Event('ended')));expect(player.playerState.currentSong?.id).toBe('2');expect(audio.muted).toBe(true);await act(async()=>audio.dispatchEvent(new Event('ended')));expect(player.playerState.currentSong?.id).toBe('3');expect(localStorage.getItem(VOLUME_KEY)).toBe('0');});

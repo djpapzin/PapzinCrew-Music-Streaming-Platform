@@ -47,6 +47,7 @@ function App() {
   const [tracksError, setTracksError] = useState<string | null>(null);
   
   const {
+    nativeAudioRef,
     firstAudioRef,
     secondAudioRef,
     playbackAttempts,
@@ -153,6 +154,7 @@ function App() {
       {/* Global toast notifications */}
       <Toast />
       {/* Hidden audio element */}
+      <audio ref={nativeAudioRef} preload="none" playsInline />
       <audio ref={firstAudioRef} crossOrigin="anonymous" preload="none" playsInline />
       <audio ref={secondAudioRef} crossOrigin="anonymous" preload="none" playsInline />
       
