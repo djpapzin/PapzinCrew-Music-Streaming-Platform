@@ -16,7 +16,7 @@ import { getMixSeries as series, sortCollectionTracks, TPW_SERIES } from '../lib
 import { genreOf } from '../lib/discovery';
 import InstallAppPage from './InstallAppPage';
 // Ordered selection from the public catalog. Replace IDs to update the lineup.
-const PAPZIN_PICK_IDS = ['182', '237', '241'];
+const PAPZIN_PICK_IDS = ['218', '207', '64', '68'];
 
 function HomeDiscovery({ songs, onPlaySong }: { songs: Song[]; onPlaySong: Props['onPlaySong'] }) {
   const playable = songs.filter(song => song.playable !== false && song.audioUrl);
