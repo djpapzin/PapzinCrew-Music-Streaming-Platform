@@ -363,7 +363,10 @@ const Player: React.FC<PlayerProps> = ({
       )}
 
       {/* Desktop Player */}
-      <div aria-label="Desktop player" className="hidden lg:block fixed bottom-0 left-0 right-0 bg-black/95 backdrop-blur-xl border-t border-white/20 p-4 z-50">
+      <div aria-label="Desktop player" onDoubleClick={event => {
+        if ((event.target as Element).closest('button, input, a, [role="button"], [role="slider"]')) return;
+        setShowNowPlayingPopup(true);
+      }} className="hidden lg:block fixed bottom-0 left-0 right-0 bg-black/95 backdrop-blur-xl border-t border-white/20 p-4 z-50">
         <div className="max-w-screen-xl mx-auto">
           <div className="grid grid-cols-3 items-center gap-4">
             {/* Left: Current song info */}

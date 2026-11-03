@@ -12,7 +12,7 @@ vi.mock('./components/Header', () => ({ default: () => null }));
 vi.mock('./components/Sidebar', () => ({ default: () => null }));
 vi.mock('./components/MobileNav', () => ({ default: () => null }));
 vi.mock('./components/PlaybackTiming', () => ({ default: () => null }));
-vi.mock('./components/NowPlayingPopup', () => ({ NowPlayingPopup: () => null }));
+vi.mock('./components/NowPlayingPopup', () => ({ NowPlayingPopup: ({isVisible,onClose}:any) => isVisible ? <div role="dialog" aria-label="Desktop Now Playing"><button onClick={onClose}>Close desktop player</button></div> : null }));
 let paused = true;
 let mobile = true;
 beforeEach(() => {
@@ -170,4 +170,14 @@ it('restores the desktop time preference when the player remounts', async () => 
   localStorage.setItem('papzincrew:desktop-time-display','remaining');
   await setup(); fireEvent.click(screen.getByRole('button',{name:'Select Mix 1'}));
   expect(screen.getByRole('button',{name:'Show total duration'})).toHaveTextContent('−0:10');
+});
+
+it('expands the desktop mini-player on double-click without restarting playback or capturing control double-clicks',async()=>{
+  mobile=false;await setup();fireEvent.click(screen.getByRole('button',{name:'Select Mix 1'}));
+  const bar=screen.getByLabelText('Desktop player');const plays=vi.mocked(HTMLMediaElement.prototype.play).mock.calls.length;
+  fireEvent.doubleClick(bar.querySelector('p')!);expect(screen.getByRole('dialog',{name:'Desktop Now Playing'})).toBeTruthy();
+  expect(vi.mocked(HTMLMediaElement.prototype.play).mock.calls.length).toBe(plays);
+  fireEvent.click(screen.getByRole('button',{name:'Close desktop player'}));
+  for(const control of bar.querySelectorAll('button,input'))fireEvent.doubleClick(control);
+  expect(screen.queryByRole('dialog',{name:'Desktop Now Playing'})).toBeNull();
 });
