@@ -59,7 +59,7 @@ function App() {
     seekTo,
     toggleShuffle,
     toggleRepeat
-  } = usePlayer();
+  } = usePlayer(songs);
 
   const fetchTracks = useCallback(async (): Promise<void> => {
     window.clearTimeout(catalogRetry.current);
