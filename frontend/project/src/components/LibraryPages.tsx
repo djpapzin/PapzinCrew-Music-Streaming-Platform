@@ -3,8 +3,8 @@ import { Link, useParams, useNavigate } from 'react-router-dom';
 import { Song } from '../types/music';
 import { useLibrary } from '../state/LibraryContext';
 import SongRow from './SongRow';
-export function TrackList({songs,currentSong,isPlaying,onPlaySong}:{songs:Song[];currentSong:Song|null;isPlaying:boolean;onPlaySong:(song:Song,queue?:Song[])=>void}) {
-  return songs.length ? <div className="rounded-xl bg-white/5">{songs.map((song,index)=><SongRow key={song.id} song={song} index={index} isPlaying={song.id===currentSong?.id&&isPlaying} onPlay={()=>onPlaySong(song,songs)}/>)}</div> : <p className="p-6 bg-white/5 rounded-xl text-gray-300">No tracks here yet.</p>;
+export function TrackList({songs,currentSong,isPlaying,onPlaySong,descriptionFor}:{descriptionFor?:(song:Song)=>string;songs:Song[];currentSong:Song|null;isPlaying:boolean;onPlaySong:(song:Song,queue?:Song[])=>void}) {
+  return songs.length ? <div className="rounded-xl bg-white/5">{songs.map((song,index)=><SongRow key={song.id} song={song} index={index} description={descriptionFor?.(song)} isPlaying={song.id===currentSong?.id&&isPlaying} onPlay={()=>onPlaySong(song,songs)}/>)}</div> : <p className="p-6 bg-white/5 rounded-xl text-gray-300">No tracks here yet.</p>;
 }
 export function PlaylistsPage() {
   const {library,createPlaylist} = useLibrary();
