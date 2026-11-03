@@ -113,7 +113,14 @@ it('shows long mix timing in both compact players and keeps mini controls collap
   act(() => audio.dispatchEvent(new Event('timeupdate')));
   expect(screen.getAllByLabelText('Elapsed time').map(e => e.textContent)).toEqual(['1:01:01', '1:01:01']);
   expect(screen.getAllByLabelText('Total duration').map(e => e.textContent)).toEqual(['2:00:00', '2:00:00']);
-  expect(screen.getAllByLabelText('Time remaining').map(e => e.textContent)).toEqual(['58:59 left', '58:59 left']);
+  expect(screen.getAllByLabelText('Time remaining').map(e => e.textContent)).toEqual(['58:59 left']);
+  fireEvent.click(screen.getByRole('button', {name:'Show time remaining'}));
+  expect(screen.getAllByLabelText('Time remaining').map(e => e.textContent)).toEqual(['58:59 left', '−58:59']);
+  expect(screen.getAllByLabelText('Total duration')).toHaveLength(1);
+  expect(localStorage.getItem('papzincrew:desktop-time-display')).toBe('remaining');
+  fireEvent.click(screen.getByRole('button', {name:'Show total duration'}));
+  expect(screen.getAllByLabelText('Total duration').map(e => e.textContent)).toEqual(['2:00:00', '2:00:00']);
+  expect(localStorage.getItem('papzincrew:desktop-time-display')).toBe('total');
   expect(screen.getByText('Mix 1 of 3')).toBeTruthy();
   fireEvent.click(document.querySelector('.mobile-mini-player button[aria-label="Next track"]')!);
   expect(audio.src).toContain('mix-2.mp3');
@@ -157,4 +164,10 @@ it('does not expand from a mini control, seek, short, downward, horizontal or ca
  swipe(art,0,-100,true);expect(dialog()).toBeNull();
  for(const control of mini.querySelectorAll('button:not([data-mini-expand]),input')){swipe(control,0,-100);expect(dialog()).toBeNull();}
  fireEvent.click(mini.querySelector('[data-mini-expand]')!);expect(dialog()).toBeTruthy();
+});
+
+it('restores the desktop time preference when the player remounts', async () => {
+  localStorage.setItem('papzincrew:desktop-time-display','remaining');
+  await setup(); fireEvent.click(screen.getByRole('button',{name:'Select Mix 1'}));
+  expect(screen.getByRole('button',{name:'Show total duration'})).toHaveTextContent('−0:10');
 });

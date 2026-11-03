@@ -58,6 +58,15 @@ const Player: React.FC<PlayerProps> = ({
   const swipeStart = useRef<{ id: number; x: number; y: number } | null>(null);
   const [showMobilePlayer, setShowMobilePlayer] = useState(false);
   const [showNowPlayingPopup, setShowNowPlayingPopup] = useState(false);
+  const [desktopTimeMode, setDesktopTimeMode] = useState<'total' | 'remaining'>(() => {
+    try { return localStorage.getItem('papzincrew:desktop-time-display') === 'remaining' ? 'remaining' : 'total'; }
+    catch { return 'total'; }
+  });
+  const toggleDesktopTime = () => {
+    const next = desktopTimeMode === 'total' ? 'remaining' : 'total';
+    setDesktopTimeMode(next);
+    try { localStorage.setItem('papzincrew:desktop-time-display', next); } catch { /* Keep the in-session choice. */ }
+  };
 
   const { currentSong, isPlaying, volume, currentTime, duration, shuffle, repeat } = playerState;
 
@@ -454,12 +463,17 @@ const Player: React.FC<PlayerProps> = ({
                     }}
                   />
                 </div>
-                <span aria-label="Total duration" className="text-xs text-gray-400 min-w-12 tabular-nums whitespace-nowrap">
-                  {durationLabel}
-                </span>
+                <button type="button" onClick={toggleDesktopTime}
+                  aria-label={desktopTimeMode === 'total' ? 'Show time remaining' : 'Show total duration'}
+                  title={desktopTimeMode === 'total' ? 'Total duration · click for time remaining' : 'Time remaining · click for total duration'}
+                  className="min-h-8 min-w-14 rounded text-xs text-gray-400 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-purple-400 tabular-nums whitespace-nowrap">
+                  <span aria-label={desktopTimeMode === 'total' ? 'Total duration' : 'Time remaining'}>
+                    {desktopTimeMode === 'total' ? durationLabel : totalDuration > 0 ? `−${formatTime(Math.max(0, totalDuration - currentTime))}` : '—'}
+                  </span>
+                </button>
               </div>
-              <div className="flex justify-between gap-4 w-full max-w-md text-[11px] text-gray-400 tabular-nums">
-                <span>{queueLabel}</span><span aria-label="Time remaining">{remainingLabel}</span>
+              <div className="w-full max-w-md text-[11px] text-gray-400 tabular-nums">
+                <span>{queueLabel}</span>
               </div>
             </div>
 
