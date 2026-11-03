@@ -47,7 +47,9 @@ function App() {
   const [tracksError, setTracksError] = useState<string | null>(null);
   
   const {
-    audioRef,
+    nativeAudioRef,
+    firstAudioRef,
+    secondAudioRef,
     playbackAttempts,
     timingStorageError,
     playerState,
@@ -152,7 +154,9 @@ function App() {
       {/* Global toast notifications */}
       <Toast />
       {/* Hidden audio element */}
-      <audio ref={audioRef} preload="none" playsInline />
+      <audio ref={nativeAudioRef} preload="none" playsInline />
+      <audio ref={firstAudioRef} crossOrigin="anonymous" preload="none" playsInline />
+      <audio ref={secondAudioRef} crossOrigin="anonymous" preload="none" playsInline />
       
       <div className="flex flex-1 overflow-hidden">
         {/* Desktop Sidebar */}

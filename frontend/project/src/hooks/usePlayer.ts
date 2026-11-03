@@ -3,6 +3,10 @@ import { useState, useRef, useEffect } from 'react';
 import { Song, PlayerState } from '../types/music';
 import { usePlaybackTiming } from './usePlaybackTiming';
 import { canRecoverPlayback, recoverPlaybackUrl } from '../lib/recoverPlayback';
+import { MixAudio } from '../lib/mixAudio';
+import { mixPlaybackUrl } from '../lib/mixPlaybackUrl';
+export const CROSSFADE_SECONDS = 10;
+interface MixTransition { incoming: HTMLAudioElement; outgoing: HTMLAudioElement; song: Song; queue: Song[]; queueAtRequest: Song[]; started: boolean; requestedAt: number; timer?: number }
 
 export const VOLUME_KEY = 'papzincrew:volume';
 const initialVolume = () => {
@@ -15,7 +19,13 @@ export const usePlayer = (catalog: Song[] = []) => {
   catalogRef.current = catalog;
   const timing = usePlaybackTiming();
   const usage = useRef(createPlaybackUsage());
-  const audioRef = useRef<HTMLAudioElement>(null);
+  const nativeAudioRef = useRef<HTMLAudioElement>(null);
+  const firstAudioRef = useRef<HTMLAudioElement>(null);
+  const secondAudioRef = useRef<HTMLAudioElement>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const mixer = useRef(new MixAudio());
+  const overlap = useRef<MixTransition | null>(null);
+  const fadeSkipped = useRef(false);
   const [playerState, setPlayerState] = useState<PlayerState>({ currentSong: null, isPlaying: false, volume: initialVolume(), currentTime: 0, duration: 0, queue: [], currentIndex: -1, shuffle: false, repeat: 'none' });
   const stateRef = useRef(playerState);
   const failed = useRef(new Set<string>());
@@ -28,21 +38,40 @@ export const usePlayer = (catalog: Song[] = []) => {
     generation.current++; internalReload.current = false;
     if (recovery.current) { recovery.current.controller.abort(); window.clearTimeout(recovery.current.timer); recovery.current = null; }
   };
-  const actions = useRef({ next: (_ended = false) => {}, previous: () => {}, seek: (_time: number) => {} });
+  const actions = useRef({ next: (_ended = false) => {}, previous: () => {}, seek: (_time: number) => {}, crossfade: () => {} });
   const update = (change: Partial<PlayerState>) => {
     stateRef.current = { ...stateRef.current, ...change };
     setPlayerState(stateRef.current);
   };
   const notify = (message: string) => window.dispatchEvent(new CustomEvent('app:toast', { detail: { message } }));
+  const mixDecks = () => [firstAudioRef.current, secondAudioRef.current].filter((audio): audio is HTMLAudioElement => !!audio);
+  const decks = () => [nativeAudioRef.current, ...mixDecks()].filter((audio): audio is HTMLAudioElement => !!audio);
+  const applyVolume = () => {
+    const volume = stateRef.current.volume;
+    mixer.current.volume(volume);
+    for (const audio of decks()) { audio.volume = mixer.current.enabled && audio !== nativeAudioRef.current ? 1 : volume; audio.muted = volume === 0; }
+  };
+  const cancelOverlap = () => {
+    const transition = overlap.current;
+    overlap.current = null;
+    if (transition?.timer) window.clearTimeout(transition.timer);
+    for (const audio of decks()) {
+      if (audio !== audioRef.current) { mixer.current.level(audio, 0); if (audio.getAttribute('src')) { audio.pause(); audio.removeAttribute('src'); audio.load(); } }
+      else mixer.current.level(audio, 1);
+    }
+  };
   const requestPlay = (attemptId?: number) => {
     const audio = audioRef.current;
     if (!audio) return;
     if(attemptId===undefined)usage.current.begin(stateRef.current.currentSong?.id||'0',true);
     const id = attemptId ?? timing.begin(stateRef.current.currentSong?.title || 'Mix', 'Resume');
     const token = generation.current;
-    audio.volume = stateRef.current.volume;
-    audio.muted = stateRef.current.volume === 0;
-    void audio.play().catch((err: Error) => {
+    if (audio !== nativeAudioRef.current) { mixer.current.enable(mixDecks(), audio, stateRef.current.volume); mixer.current.level(audio, 1); }
+    applyVolume();
+    // Start both in the same user gesture; awaiting resume first loses the
+    // media-element activation on some mobile browsers.
+    const resumed = audio !== nativeAudioRef.current ? mixer.current.resume() : undefined;
+    void Promise.all([resumed, audio.play()]).catch((err: Error) => {
       if (generation.current !== token || timing.pending.current?.id !== id || recovery.current) return;
       if (err.name === 'AbortError') { internalReload.current = false; timing.finish('cancelled', id); usage.current.cancel(); return; }
       if (err.name === 'NotAllowedError') {
@@ -53,73 +82,118 @@ export const usePlayer = (catalog: Song[] = []) => {
   };
 
   const playSong = (song: Song, queue: Song[] = [song]) => {
-    const audio = audioRef.current;
+    const previous = audioRef.current;
+    const mixedUrl = mixPlaybackUrl(song);
+    const audio = mixedUrl ? (mixDecks().includes(previous!) ? previous : firstAudioRef.current) : nativeAudioRef.current;
     if (!audio || !available(song)) { notify('This track is unavailable.'); return; }
     const playableQueue = queue.filter(available);
     if (!playableQueue.some(item => item.id === song.id)) playableQueue.unshift(song);
     const kind = stateRef.current.currentSong ? 'Track start' : 'First play';
-    cancelRecovery(); retried.current = false;
-    audio.pause();
+    cancelRecovery(); cancelOverlap(); fadeSkipped.current = false; retried.current = false;
+    previous?.pause();
+    audioRef.current = audio;
     usage.current.begin(song.id,false);
     const attemptId = timing.begin(song.title, kind);
-    update({ currentSong: song, currentIndex: playableQueue.findIndex(item => item.id === song.id), queue: playableQueue, currentTime: 0, duration: song.duration || 0, isPlaying: false });
-    audio.src = song.audioUrl;
+    update({ currentSong: song, currentIndex: playableQueue.findIndex(item => item.id === song.id), queue: playableQueue, currentTime: 0, duration: song.duration || 0, isPlaying: false, transitioning:false });
+    audio.src = mixedUrl || song.audioUrl;
     audio.load();
     requestPlay(attemptId);
     window.dispatchEvent(new CustomEvent('library:played', { detail: song.id }));
   };
+  const nextSelection = (ended = false): { song: Song; queue: Song[] } | null => {
+    const { queue, currentIndex, shuffle, repeat, currentSong } = stateRef.current;
+    if (ended && repeat === 'one' && currentSong && !failed.current.has(currentSong.id)) return { song: currentSong, queue };
+    const candidates = queue.filter(song => available(song) && !failed.current.has(song.id) && song.id !== currentSong?.id);
+    if (shuffle && candidates.length) return { song: candidates[Math.floor(Math.random() * candidates.length)], queue };
+    const next = queue.slice(currentIndex + 1).find(song => candidates.includes(song)) ?? candidates[0];
+    if (next) return { song: next, queue };
+    const fallback = catalogRef.current.filter(song => available(song) && !failed.current.has(song.id))
+      .sort((a, b) => Number(b.id) - Number(a.id));
+    const index = fallback.findIndex(song => song.id === currentSong?.id);
+    const extra = fallback.slice(index + 1).find(song => song.id !== currentSong?.id)
+      ?? fallback.find(song => song.id !== currentSong?.id);
+    if (extra) return { song: extra, queue: fallback };
+    return ended && repeat === 'all' && currentSong && !failed.current.has(currentSong.id) ? { song: currentSong, queue } : null;
+  };
   const handleNext = (ended = false) => {
     const audio = audioRef.current;
-    const { queue, currentIndex, shuffle, repeat } = stateRef.current;
-    if (!audio || !queue.length) return;
-    cancelRecovery();
-    if (ended && repeat === 'one' && !failed.current.has(queue[currentIndex]?.id)) {
-      audio.currentTime = 0; update({ currentTime: 0 }); requestPlay(); return;
+    if (!audio) return;
+    cancelRecovery(); cancelOverlap(); update({transitioning:false});
+    const next = nextSelection(ended);
+    if (!next) { audio.pause(); update({isPlaying:false}); return; }
+    if (ended && next.song.id === stateRef.current.currentSong?.id) {
+      audio.currentTime = 0; update({currentTime:0}); requestPlay(); return;
     }
-    const candidates = queue.map((song, i) => ({ song, i })).filter(({song, i}) => available(song) && !failed.current.has(song.id) && i !== currentIndex);
-    let nextIndex = currentIndex + 1;
-    if (shuffle && candidates.length) nextIndex = candidates[Math.floor(Math.random() * candidates.length)].i;
-    else {
-      while (nextIndex < queue.length && failed.current.has(queue[nextIndex].id)) nextIndex++;
-      if (nextIndex >= queue.length && (repeat === 'all' || !ended)) {
-        nextIndex = candidates[0]?.i ?? -1;
-        if (nextIndex < 0 && ended && repeat === 'all' && !failed.current.has(queue[currentIndex]?.id)) nextIndex = currentIndex;
-      }
-    }
-    if (nextIndex < 0 || nextIndex >= queue.length || failed.current.has(queue[nextIndex].id)) {
-      if (!ended) {
-        const fallback = catalogRef.current.filter(song => available(song) && !failed.current.has(song.id))
-          .sort((a, b) => Number(b.id) - Number(a.id));
-        const index = fallback.findIndex(song => song.id === stateRef.current.currentSong?.id);
-        const next = fallback.slice(index + 1).find(song => song.id !== stateRef.current.currentSong?.id)
-          ?? fallback.find(song => song.id !== stateRef.current.currentSong?.id);
-        if (next) { playSong(next, fallback); return; }
-      }
-      audio.pause(); update({isPlaying:false}); return;
-    }
-    playSong(queue[nextIndex], queue);
+    playSong(next.song, next.queue);
+  };
+  const crossfade = () => {
+    const outgoing = audioRef.current;
+    if (!outgoing || !mixDecks().includes(outgoing) || outgoing.paused || outgoing.seeking || recovery.current || overlap.current || fadeSkipped.current
+      || stateRef.current.repeat === 'one' || !mixer.current.running) return;
+    const remaining = outgoing.duration - outgoing.currentTime;
+    if (!Number.isFinite(remaining) || remaining <= 0 || remaining > CROSSFADE_SECONDS) return;
+    const next = nextSelection();
+    const incoming = mixDecks().find(audio => audio !== outgoing);
+    if (!next || next.song.id === stateRef.current.currentSong?.id || !incoming) return;
+    const nextUrl = mixPlaybackUrl(next.song);
+    if (!nextUrl) return;
+    const transition: MixTransition = { incoming, outgoing, song: next.song, queue: next.queue, queueAtRequest: stateRef.current.queue, started: false, requestedAt: performance.now() };
+    overlap.current = transition;
+    incoming.preload = 'auto';
+    mixer.current.level(incoming, 0);
+    incoming.src = nextUrl;
+    incoming.load();
+    applyVolume();
+    // Don't fade the outgoing mix until the new deck emits `playing`.
+    void incoming.play().catch(() => {
+      if (overlap.current !== transition) return;
+      fadeSkipped.current = true; cancelOverlap();
+    });
+  };
+  const acceptIncoming = (incoming: HTMLAudioElement) => {
+    const transition = overlap.current;
+    if (!transition || transition.incoming !== incoming || transition.started || incoming.paused || incoming.readyState < 2) return;
+    transition.started = true;
+    cancelRecovery(); retried.current = false; fadeSkipped.current = false;
+    usage.current.begin(transition.song.id, false, transition.requestedAt);
+    timing.begin(transition.song.title, 'Track start', transition.requestedAt); timing.finish('started'); usage.current.started();
+    audioRef.current = incoming;
+    // Queue additions are immutable appends; retain anything added while this
+    // deck was loading, including when the next selection used the catalog.
+    const additions = stateRef.current.queue.filter(song => !transition.queueAtRequest.some(item => item.id === song.id)
+      && !transition.queue.some(item => item.id === song.id));
+    const queue = [...transition.queue, ...additions];
+    update({ currentSong: transition.song, queue, currentIndex: queue.findIndex(song => song.id === transition.song.id),
+      currentTime: incoming.currentTime, duration: Number.isFinite(incoming.duration) ? incoming.duration : transition.song.duration, isPlaying: true });
+    window.dispatchEvent(new CustomEvent('library:played', { detail: transition.song.id }));
+    const seconds = Math.max(0, Math.min(CROSSFADE_SECONDS, transition.outgoing.duration - transition.outgoing.currentTime));
+    mixer.current.level(transition.outgoing, 0, seconds);
+    mixer.current.level(incoming, 1, seconds);
+    update({ transitioning: seconds > 0 });
+    transition.timer = window.setTimeout(() => { if (overlap.current === transition) { cancelOverlap(); update({transitioning:false}); } }, seconds * 1000);
   };
   const handlePrevious = () => {
     const audio = audioRef.current;
     const { queue, currentIndex } = stateRef.current;
     if (!audio || !queue.length) return;
+    cancelOverlap(); update({transitioning:false}); fadeSkipped.current = false;
     if (audio.currentTime > 3 || currentIndex === 0) { if (recovery.current) recovery.current.position = 0; audio.currentTime = 0; update({currentTime:0}); return; }
     playSong(queue[currentIndex - 1], queue);
   };
   const togglePlay = () => {
     const audio = audioRef.current;
     if (!audio || !stateRef.current.currentSong) return;
-    if (recovery.current || internalReload.current || !audio.paused) { cancelRecovery(); usage.current.cancel(); timing.endBuffer(); timing.finish('cancelled'); audio.pause(); update({isPlaying:false}); } else { retried.current = false; requestPlay(); }
+    if (recovery.current || internalReload.current || !audio.paused) { cancelRecovery(); cancelOverlap(); update({transitioning:false}); usage.current.cancel(); timing.endBuffer(); timing.finish('cancelled'); audio.pause(); update({isPlaying:false}); } else { retried.current = false; requestPlay(); }
   };
   const setVolume = (value: number) => {
     const volume = Math.max(0, Math.min(1, value));
-    if (audioRef.current) { audioRef.current.volume = volume; audioRef.current.muted = volume === 0; }
+    update({volume}); applyVolume();
     try { localStorage.setItem(VOLUME_KEY, String(volume)); } catch {}
-    update({volume});
   };
   const seekTo = (time: number) => {
     const audio = audioRef.current;
     if (!audio || !Number.isFinite(time)) return;
+    cancelOverlap(); update({transitioning:false}); fadeSkipped.current = false;
     const duration = Number.isFinite(audio.duration) ? audio.duration : stateRef.current.duration;
     const currentTime = Math.max(0, Math.min(time, duration));
     if (recovery.current) recovery.current.position = currentTime;
@@ -130,6 +204,7 @@ export const usePlayer = (catalog: Song[] = []) => {
     const audio = audioRef.current;
     const song = stateRef.current.currentSong;
     if (!audio || !song || recovery.current) return;
+    cancelOverlap(); update({transitioning:false});
     usage.current.stop(); timing.endBuffer();
     const fail = () => {
       internalReload.current = false;
@@ -153,12 +228,12 @@ export const usePlayer = (catalog: Song[] = []) => {
       const refreshed = { ...song, audioUrl: url };
       update({ currentSong: refreshed, queue: stateRef.current.queue.map(item => item.id === song.id ? refreshed : item) });
       generation.current++; internalReload.current = true;
-      audio.src = url; audio.load();
+      audio.src = audio === nativeAudioRef.current ? url : (mixPlaybackUrl(refreshed) || url); audio.load();
       if (position > 0) audio.currentTime = position;
       requestPlay(attemptId);
     });
   };
-  useEffect(() => () => cancelRecovery(), []);
+  useEffect(() => () => { cancelRecovery(); cancelOverlap(); mixer.current.close(); }, []);
   useEffect(() => {
     const queueTrack = (e: Event) => {
       const song = (e as CustomEvent<Song>).detail;
@@ -172,54 +247,59 @@ export const usePlayer = (catalog: Song[] = []) => {
     window.addEventListener('player:queue', queueTrack);
     return () => window.removeEventListener('player:queue', queueTrack);
   }, []);
-  const toggleShuffle = () => update({shuffle: !stateRef.current.shuffle});
-  const toggleRepeat = () => update({repeat: stateRef.current.repeat === 'none' ? 'all' : stateRef.current.repeat === 'all' ? 'one' : 'none'});
-  actions.current = { next: handleNext, previous: handlePrevious, seek: seekTo };
+  const toggleShuffle = () => { cancelOverlap(); update({shuffle: !stateRef.current.shuffle, transitioning:false}); };
+  const toggleRepeat = () => { cancelOverlap(); update({repeat: stateRef.current.repeat === 'none' ? 'all' : stateRef.current.repeat === 'all' ? 'one' : 'none', transitioning:false}); };
+  actions.current = { next: handleNext, previous: handlePrevious, seek: seekTo, crossfade };
 
   useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    audio.volume = stateRef.current.volume;
-    audio.muted = stateRef.current.volume === 0;
-    const sync = () => {
-      const duration = Number.isFinite(audio.duration) ? audio.duration : stateRef.current.duration;
-      update({currentTime: audio.currentTime || 0, duration});
-      try {
-        if (duration > 0 && navigator.mediaSession?.setPositionState) navigator.mediaSession.setPositionState({ duration, position: Math.min(audio.currentTime || 0, duration), playbackRate: audio.playbackRate || 1 });
-      } catch { /* MediaSession is optional. */ }
-    };
-    const playing = () => update({isPlaying:true});
-    const started = () => { if (!audio.paused && audio.readyState >= 2) { internalReload.current = false; timing.endBuffer(); timing.finish('started'); usage.current.started(); if (stateRef.current.currentSong) failed.current.delete(stateRef.current.currentSong.id); } };
-    const waiting = () => { usage.current.stop(); if (!audio.paused && !audio.seeking) timing.startBuffer(); };
-    const stopBuffer = () => {timing.endBuffer();usage.current.stop();};
-    const paused = () => { if (audio.paused && !audio.error && !internalReload.current) { usage.current.cancel(); timing.endBuffer(); timing.finish('cancelled'); update({isPlaying:false}); } };
-    const ended = () => { usage.current.stop(); timing.endBuffer(); actions.current.next(true); };
-    const error = () => failureAction.current(audio.error?.code);
-    const usageTimer=window.setInterval(()=>{if(!audio.paused&&!audio.seeking&&audio.readyState>=3)usage.current.flush();else usage.current.stop();},LISTEN_FLUSH_INTERVAL_MS);
-    const seeked=()=>{if(!audio.paused&&audio.readyState>=3)usage.current.started();};
-    const preference=()=>usage.current.cancel();
-    window.addEventListener('usage:preference',preference);
-    audio.addEventListener('seeked',seeked);
-    audio.addEventListener('timeupdate', sync);
-    audio.addEventListener('loadedmetadata', sync);
-    audio.addEventListener('play', playing);
-    audio.addEventListener('playing', started);
-    audio.addEventListener('waiting', waiting);
-    audio.addEventListener('seeking', stopBuffer);
-    window.addEventListener('pagehide', stopBuffer);
-    audio.addEventListener('pause', paused);
-    audio.addEventListener('ended', ended);
-    audio.addEventListener('error', error);
-    return () => {
-      window.removeEventListener('usage:preference',preference);window.clearInterval(usageTimer);usage.current.stop();audio.removeEventListener('seeked',seeked);
-      audio.removeEventListener('timeupdate', sync); audio.removeEventListener('loadedmetadata', sync);
-      audio.removeEventListener('playing', started);
-      audio.removeEventListener('waiting', waiting);
-      audio.removeEventListener('seeking', stopBuffer);
-      window.removeEventListener('pagehide', stopBuffer);
-      audio.removeEventListener('play', playing); audio.removeEventListener('pause', paused);
-      audio.removeEventListener('ended', ended); audio.removeEventListener('error', error);
-    };
+    audioRef.current = nativeAudioRef.current;
+    const cleanups = decks().map(audio => {
+      audio.volume = stateRef.current.volume;
+      audio.muted = stateRef.current.volume === 0;
+      const active = () => audio === audioRef.current;
+      const sync = () => {
+        if (!active()) return;
+        const duration = Number.isFinite(audio.duration) ? audio.duration : stateRef.current.duration;
+        update({currentTime: audio.currentTime || 0, duration});
+        actions.current.crossfade();
+        try {
+          if (duration > 0 && navigator.mediaSession?.setPositionState) navigator.mediaSession.setPositionState({ duration, position: Math.min(audio.currentTime || 0, duration), playbackRate: audio.playbackRate || 1 });
+        } catch { /* MediaSession is optional. */ }
+      };
+      const playing = () => { if (active()) update({isPlaying:true}); };
+      const started = () => { acceptIncoming(audio); if (active() && !audio.paused && audio.readyState >= 2) { internalReload.current = false; timing.endBuffer(); timing.finish('started'); usage.current.started(); if (stateRef.current.currentSong) failed.current.delete(stateRef.current.currentSong.id); } };
+      const waiting = () => { if (!active()) return; usage.current.stop(); if (!audio.paused && !audio.seeking) timing.startBuffer(); };
+      const stopBuffer = () => {if (active()) {timing.endBuffer();usage.current.stop();}};
+      const paused = () => { if (active() && audio.paused && !audio.error && !internalReload.current) { cancelOverlap(); usage.current.cancel(); timing.endBuffer(); timing.finish('cancelled'); update({isPlaying:false, transitioning:false}); } };
+      const ended = () => { if (!active()) { if (overlap.current?.outgoing === audio) { cancelOverlap(); update({transitioning:false}); } return; } usage.current.stop(); timing.endBuffer(); actions.current.next(true); };
+      const error = () => { if (active()) failureAction.current(audio.error?.code); else if (overlap.current?.incoming === audio) { fadeSkipped.current = true; cancelOverlap(); } else if (overlap.current?.outgoing === audio) { cancelOverlap(); update({transitioning:false}); } };
+      const usageTimer=window.setInterval(()=>{if(active()){if(!audio.paused&&!audio.seeking&&audio.readyState>=3)usage.current.flush();else usage.current.stop();}},LISTEN_FLUSH_INTERVAL_MS);
+      const seeked=()=>{if(active()&&!audio.paused&&audio.readyState>=3)usage.current.started();};
+      const preference=()=>usage.current.cancel();
+      window.addEventListener('usage:preference',preference);
+      audio.addEventListener('seeked',seeked);
+      audio.addEventListener('timeupdate', sync);
+      audio.addEventListener('loadedmetadata', sync);
+      audio.addEventListener('play', playing);
+      audio.addEventListener('playing', started);
+      audio.addEventListener('waiting', waiting);
+      audio.addEventListener('seeking', stopBuffer);
+      window.addEventListener('pagehide', stopBuffer);
+      audio.addEventListener('pause', paused);
+      audio.addEventListener('ended', ended);
+      audio.addEventListener('error', error);
+      return () => {
+        window.removeEventListener('usage:preference',preference);window.clearInterval(usageTimer);usage.current.stop();audio.removeEventListener('seeked',seeked);
+        audio.removeEventListener('timeupdate', sync); audio.removeEventListener('loadedmetadata', sync);
+        audio.removeEventListener('playing', started);
+        audio.removeEventListener('waiting', waiting);
+        audio.removeEventListener('seeking', stopBuffer);
+        window.removeEventListener('pagehide', stopBuffer);
+        audio.removeEventListener('play', playing); audio.removeEventListener('pause', paused);
+        audio.removeEventListener('ended', ended); audio.removeEventListener('error', error);
+      };
+    });
+    return () => cleanups.forEach(cleanup => cleanup());
   }, []);
   useEffect(() => {
     const song = playerState.currentSong;
@@ -227,11 +307,11 @@ export const usePlayer = (catalog: Song[] = []) => {
     try {
       navigator.mediaSession.metadata = new MediaMetadata({ title: song.title, artist: song.artist, album: song.album || 'Papzin & Crew', artwork: song.imageUrl ? [{src:song.imageUrl}] : [] });
       navigator.mediaSession.setActionHandler('play', () => { retried.current = false; requestPlay(); });
-      navigator.mediaSession.setActionHandler('pause', () => { cancelRecovery(); usage.current.cancel(); timing.endBuffer(); timing.finish('cancelled'); audioRef.current?.pause(); update({isPlaying:false}); });
+      navigator.mediaSession.setActionHandler('pause', () => { cancelRecovery(); cancelOverlap(); usage.current.cancel(); timing.endBuffer(); timing.finish('cancelled'); audioRef.current?.pause(); update({isPlaying:false, transitioning:false}); });
       navigator.mediaSession.setActionHandler('nexttrack', () => actions.current.next());
       navigator.mediaSession.setActionHandler('previoustrack', () => actions.current.previous());
       navigator.mediaSession.setActionHandler('seekto', details => { if (details.seekTime !== undefined) actions.current.seek(details.seekTime); });
     } catch { /* Unsupported MediaSession handlers must not interrupt playback. */ }
   }, [playerState.currentSong?.id]);
-  return { audioRef, playbackAttempts: timing.attempts, timingStorageError: timing.storageError, playerState, playSong, togglePlay, handleNext: () => handleNext(), handlePrevious, setVolume, seekTo, toggleShuffle, toggleRepeat };
+  return { audioRef, nativeAudioRef, firstAudioRef, secondAudioRef, playbackAttempts: timing.attempts, timingStorageError: timing.storageError, playerState, playSong, togglePlay, handleNext: () => handleNext(), handlePrevious, setVolume, seekTo, toggleShuffle, toggleRepeat };
 };
