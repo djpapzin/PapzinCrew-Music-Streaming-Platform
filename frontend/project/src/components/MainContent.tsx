@@ -13,7 +13,32 @@ import AdminAnalyticsPanel from './AdminAnalyticsPanel';
 import MixDetails from './MixDetails';
 import BrowseMixes from './BrowseMixes';
 import { getMixSeries as series, sortCollectionTracks, TPW_SERIES } from '../lib/catalog';
+import { genreOf } from '../lib/discovery';
 import InstallAppPage from './InstallAppPage';
+// Ordered selection from the public catalog. Replace IDs to update the lineup.
+const PAPZIN_PICK_IDS = ['182', '237', '241'];
+
+function HomeDiscovery({ songs, onPlaySong }: { songs: Song[]; onPlaySong: Props['onPlaySong'] }) {
+  const playable = songs.filter(song => song.playable !== false && song.audioUrl);
+  const genres = [...new Set(playable.filter(song => song.genre.trim()).map(genreOf))].sort();
+  const picks = PAPZIN_PICK_IDS.flatMap(id => playable.filter(song => song.id === id));
+  return <>
+    {genres.length > 0 && <section aria-labelledby="home-genres">
+      <h2 id="home-genres" className="mb-4 text-2xl font-bold">Browse by Genre</h2>
+      <div className="flex flex-wrap gap-3">
+        {genres.map(genre => <Link key={genre} to={`/search?genre=${encodeURIComponent(genre)}`}
+          className="inline-flex min-h-11 items-center rounded-full bg-white/10 px-4 hover:bg-white/20">{genre}</Link>)}
+      </div>
+    </section>}
+    {picks.length > 0 && <section aria-labelledby="home-picks">
+      <h2 id="home-picks" className="mb-4 text-2xl font-bold">DJ Papzin Picks</h2>
+      <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {picks.map(song => <QuickPlayCard key={song.id} item={song} type="song" onPlay={() => onPlaySong(song, picks)}/>)}
+      </div>
+    </section>}
+  </>;
+}
+
 interface Props {
   searchQuery:string; songs:Song[]; playlists:Playlist[]; albums:Album[]; artists:Artist[];
   tracksLoading:boolean; tracksError:string|null; playbackPending?:boolean; currentSong:Song|null; isPlaying:boolean;
@@ -44,7 +69,7 @@ export default function MainContent({searchQuery,songs,tracksLoading,tracksError
       <Route path="/about" element={<BetaInfo kind="about"/>}/>
       <Route path="/privacy" element={<BetaInfo kind="privacy"/>}/>
       <Route path="/terms" element={<BetaInfo kind="terms"/>}/>
-      <Route path="/" element={<div className="space-y-7"><LatestMix songs={songs} onPlaySong={onPlaySong}/><section className="bg-gradient-to-br from-purple-900/60 to-pink-900/60 rounded-xl p-6 border border-purple-500/30"><h2 className="text-2xl lg:text-4xl font-bold mb-3">Welcome to Papzin & Crew</h2><p className="text-purple-200 font-medium">Free DJ mixes · Beta</p><p className="text-gray-300 mt-2">Listen without an account. Choose a mix below and press Play.</p><div className="mt-2"><BetaLinks/></div><div className="flex flex-wrap gap-3 mt-5"><Link className="bg-white/10 rounded-full px-4 py-2" to="/independent">Discover artists</Link><Link className="bg-white/10 rounded-full px-4 py-2" to="/search">Browse DJ mixes</Link><Link className="bg-white/10 rounded-full px-4 py-2" to="/install">Get the app</Link><a className="bg-white/10 rounded-full px-4 py-2 min-h-11 inline-flex items-center" href="https://www.facebook.com/groups/PapzinCrew/" target="_blank" rel="noopener noreferrer">Facebook community ↗</a></div></section>{quick()}<section><h2 className="text-2xl font-bold mb-4">Featured mixes</h2><div className="grid grid-cols-1 sm:grid-cols-2 min-w-0 gap-3">{songs.slice(0,6).map(song=><QuickPlayCard key={song.id} item={song} type="song" onPlay={()=>onPlaySong(song,songs)}/>)}</div></section>{recent.length>0&&<section><h2 className="text-2xl font-bold mb-4">Recently played</h2>{list(recent)}</section>}<div className="flex gap-4"><Link to="/albums" className="text-purple-300">Albums & mix series →</Link><Link to="/playlists" className="text-purple-300">Your playlists →</Link></div></div>}/>
+      <Route path="/" element={<div className="space-y-7"><LatestMix songs={songs} onPlaySong={onPlaySong}/><section className="bg-gradient-to-br from-purple-900/60 to-pink-900/60 rounded-xl p-6 border border-purple-500/30"><h2 className="text-2xl lg:text-4xl font-bold mb-3">Welcome to Papzin & Crew</h2><p className="text-purple-200 font-medium">Free DJ mixes · Beta</p><p className="text-gray-300 mt-2">Listen without an account. Choose a mix below and press Play.</p><div className="mt-2"><BetaLinks/></div><div className="flex flex-wrap gap-3 mt-5"><Link className="bg-white/10 rounded-full px-4 py-2" to="/independent">Discover artists</Link><Link className="bg-white/10 rounded-full px-4 py-2" to="/search">Browse DJ mixes</Link><Link className="bg-white/10 rounded-full px-4 py-2" to="/install">Get the app</Link><a className="bg-white/10 rounded-full px-4 py-2 min-h-11 inline-flex items-center" href="https://www.facebook.com/groups/PapzinCrew/" target="_blank" rel="noopener noreferrer">Facebook community ↗</a></div></section>{quick()}<HomeDiscovery songs={songs} onPlaySong={onPlaySong}/><section><h2 className="text-2xl font-bold mb-4">Featured mixes</h2><div className="grid grid-cols-1 sm:grid-cols-2 min-w-0 gap-3">{songs.slice(0,6).map(song=><QuickPlayCard key={song.id} item={song} type="song" onPlay={()=>onPlaySong(song,songs)}/>)}</div></section>{recent.length>0&&<section><h2 className="text-2xl font-bold mb-4">Recently played</h2>{list(recent)}</section>}<div className="flex gap-4"><Link to="/albums" className="text-purple-300">Albums & mix series →</Link><Link to="/playlists" className="text-purple-300">Your playlists →</Link></div></div>}/>
       <Route path="/search" element={<BrowseMixes songs={songs} query={searchQuery} loading={tracksLoading} error={tracksError} currentSong={currentSong} isPlaying={isPlaying} onPlaySong={onPlaySong}/>}/>
       <Route path="/library" element={<section className="space-y-5"><h2 className="text-2xl font-bold">Your Library</h2><div className="flex flex-wrap gap-4"><Link to="/playlists" className="text-purple-300">Playlists ({library.playlists.length})</Link><Link to="/liked" className="text-purple-300">Liked Songs ({library.liked.length})</Link><Link to="/albums" className="text-purple-300">Albums & Mix Series</Link></div><h3 className="text-xl">{recent.length?'Recently played':'All tracks'}</h3>{list(recent.length?recent:songs)}</section>}/>
       <Route path="/playlists" element={<PlaylistsPage/>}/>
