@@ -25,7 +25,7 @@ const catalog = [mix('1'),mix('3'),mix('2')];
 const recent = [catalog[1],catalog[2],catalog[0]];
 let player: ReturnType<typeof usePlayer>;
 let paused: WeakMap<HTMLMediaElement, boolean>;
-function Harness() { player = usePlayer(catalog); return <><audio ref={player.firstAudioRef}/><audio ref={player.secondAudioRef}/></>; }
+function Harness() { player = usePlayer(catalog); return <><audio ref={player.nativeAudioRef}/><audio ref={player.firstAudioRef}/><audio ref={player.secondAudioRef}/></>; }
 const outgoing = () => player.firstAudioRef.current!;
 const incoming = () => player.secondAudioRef.current!;
 const emit = async (audio: HTMLMediaElement, name: string) => { await act(async () => { audio.dispatchEvent(new Event(name)); }); };
@@ -126,6 +126,15 @@ describe('automatic ten-second transitions',() => {
     await emit(outgoing(),'ended'); expect(player.playerState.currentSong?.id).toBe('2');
     await act(async () => { player.playSong(recent[2],recent); });
     await emit(outgoing(),'ended'); expect(player.playerState.currentSong?.id).toBe('3');
+  });
+  it('keeps legacy and access-checked streams on the native deck without CORS or a Web Audio source',async () => {
+    await setup(); await startFade();
+    const legacy={...mix('99'),audioUrl:'https://bucket.backblazeb2.com/legacy.mp3'};
+    await act(async()=>player.playSong(legacy,[legacy,...recent]));
+    const native=player.nativeAudioRef.current!;
+    expect(player.audioRef.current).toBe(native);expect(native.src).toBe(legacy.audioUrl);
+    expect(Context.latest.sources.has(native)).toBe(false);expect(outgoing().paused).toBe(true);expect(incoming().paused).toBe(true);
+    await emit(native,'ended');expect(player.playerState.currentSong?.id).toBe('3');expect(player.audioRef.current).toBe(outgoing());
   });
   it('stops cleanly when there is no other playable mix',async () => {
     // An exhausted catalog remains bounded rather than retrying failed streams forever.
