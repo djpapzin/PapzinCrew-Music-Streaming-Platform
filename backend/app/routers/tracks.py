@@ -24,6 +24,9 @@ from ..rate_limit import enforce_rate_limit
 from ..security import require_admin
 from .admin import require_admin_api_key
 import inspect
+from pydantic import BaseModel, Field
+from ..rate_limit import get_client_subject, rate_limiter
+from ..services.help_assistant import answer_question
 
 router = APIRouter(prefix="/tracks", tags=["tracks"])
 logger = logging.getLogger(__name__)
@@ -48,6 +51,25 @@ def _get_current_user_dyn():
         return get_current_user()
     except Exception:
         return None
+
+class CrewQuestion(BaseModel):
+    question: str = Field(min_length=1, max_length=1500)
+
+
+@router.post("/crew-helper")
+def crew_helper(payload: CrewQuestion, request: Request, db: Session = Depends(get_db)):
+    rate_limiter.hit("crew-helper", get_client_subject(request), 20, 60)
+    question = payload.question.strip()
+    if not question:
+        raise HTTPException(status_code=422, detail="Enter a question.")
+    rows = (
+        db.query(Mix.id, Mix.title, Mix.genre, Artist.name.label("artist_name"))
+        .join(Artist, Mix.artist_id == Artist.id)
+        .filter(Mix.availability == "public", Mix.file_path != "")
+        .all()
+    )
+    return answer_question(question, [dict(row._mapping) for row in rows], downloads_enabled=True)
+
 
 @router.get("/catalog-summary")
 def catalog_summary(db: Session = Depends(get_db)):
