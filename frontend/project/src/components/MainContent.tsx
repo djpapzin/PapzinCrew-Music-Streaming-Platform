@@ -14,6 +14,7 @@ import MixDetails from './MixDetails';
 import BrowseMixes from './BrowseMixes';
 import { getMixSeries as series, sortCollectionTracks, TPW_SERIES } from '../lib/catalog';
 import { genreOf } from '../lib/discovery';
+import CrewHelper from './CrewHelper';
 import InstallAppPage from './InstallAppPage';
 // Ordered selection from the public catalog. Replace IDs to update the lineup.
 const PAPZIN_PICK_IDS = ['218', '207', '64', '68'];
@@ -66,20 +67,7 @@ export default function MainContent({searchQuery,songs,tracksLoading,tracksError
   return <main className="flex-1 bg-gradient-to-b from-gray-900/50 to-black p-4 lg:p-6 overflow-y-auto pb-48 lg:pb-36">
     {pathname!=='/install'&&catalogStatus}
     <Routes>
-      <Route path="/crew-helper" element={<section className="mx-auto max-w-2xl space-y-5">
-        <h2 className="text-3xl font-bold">Crew Helper</h2>
-        <p className="text-gray-300">Find a mix, get playback help, or connect with Papzin &amp; Crew.</p>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Link className="rounded-xl bg-white/10 p-4 hover:bg-white/20" to="/search">Find a mix</Link>
-          <Link className="rounded-xl bg-white/10 p-4 hover:bg-white/20" to="/albums">Explore mix series</Link>
-          <Link className="rounded-xl bg-white/10 p-4 hover:bg-white/20" to="/about">Beta help</Link>
-          <a className="rounded-xl bg-white/10 p-4 hover:bg-white/20" href="https://www.facebook.com/groups/PapzinCrew/">Facebook community</a>
-        </div>
-        <details className="rounded-xl bg-white/5 p-4">
-          <summary className="cursor-pointer font-semibold">What if a mix won’t play?</summary>
-          <p className="mt-3 text-gray-300">Try another mix to see if the issue affects one track. If it keeps happening, use Feedback and include the mix title and what you saw.</p>
-        </details>
-      </section>}/>
+      <Route path="/crew-helper" element={<CrewHelper/>}/>
       <Route path="/about" element={<BetaInfo kind="about"/>}/>
       <Route path="/privacy" element={<BetaInfo kind="privacy"/>}/>
       <Route path="/terms" element={<BetaInfo kind="terms"/>}/>
