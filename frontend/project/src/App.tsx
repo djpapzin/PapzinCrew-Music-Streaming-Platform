@@ -1,3 +1,4 @@
+import { usesNativeMusicPlayback } from './lib/mixPlaybackUrl';
 import { useLocation } from 'react-router-dom';
 import { recordVisit } from './lib/anonymousUsage';
 import { fetchCatalog } from './lib/fetchCatalog';
@@ -155,8 +156,10 @@ function App() {
       <Toast />
       {/* Hidden audio element */}
       <audio ref={nativeAudioRef} preload="none" playsInline />
-      <audio ref={firstAudioRef} crossOrigin="anonymous" preload="none" playsInline />
-      <audio ref={secondAudioRef} crossOrigin="anonymous" preload="none" playsInline />
+      {!usesNativeMusicPlayback() && <>
+        <audio ref={firstAudioRef} crossOrigin="anonymous" preload="none" playsInline />
+        <audio ref={secondAudioRef} crossOrigin="anonymous" preload="none" playsInline />
+      </>}
       
       <div className="flex flex-1 overflow-hidden">
         {/* Desktop Sidebar */}
