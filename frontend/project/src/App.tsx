@@ -1,3 +1,4 @@
+import { usesNativeMusicPlayback } from './lib/mixPlaybackUrl';
 import { useLocation } from 'react-router-dom';
 import { recordVisit } from './lib/anonymousUsage';
 import { fetchCatalog } from './lib/fetchCatalog';
@@ -153,10 +154,19 @@ function App() {
     <LibraryProvider songs={songs}><div className="app-shell bg-black text-white flex flex-col">
       {/* Global toast notifications */}
       <Toast />
+      <div className={location.hostname === 'crew.djpapzin.com'
+        ? 'shrink-0 bg-gray-900 px-3 py-1 text-center text-xs text-gray-300'
+        : 'shrink-0 bg-amber-300 px-3 py-2 text-center text-sm font-bold text-black'}>
+        {location.hostname === 'crew.djpapzin.com'
+          ? 'PRODUCTION · crew.djpapzin.com'
+          : <>DEV TEST SITE · Changes here are being tested. <a className="underline" href="https://crew.djpapzin.com/">Open production site</a></>}
+      </div>
       {/* Hidden audio element */}
       <audio ref={nativeAudioRef} preload="none" playsInline />
-      <audio ref={firstAudioRef} crossOrigin="anonymous" preload="none" playsInline />
-      <audio ref={secondAudioRef} crossOrigin="anonymous" preload="none" playsInline />
+      {!usesNativeMusicPlayback() && <>
+        <audio ref={firstAudioRef} crossOrigin="anonymous" preload="none" playsInline />
+        <audio ref={secondAudioRef} crossOrigin="anonymous" preload="none" playsInline />
+      </>}
       
       <div className="flex flex-1 overflow-hidden">
         {/* Desktop Sidebar */}
