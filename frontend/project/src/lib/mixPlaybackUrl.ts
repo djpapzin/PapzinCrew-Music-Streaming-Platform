@@ -2,12 +2,12 @@ import type { Song } from '../types/music';
 
 // Only route trusted, public cache audio through Web Audio. Legacy/direct and
 // access-checked streams retain the native player and its existing CORS behavior.
+export const usesNativeMusicPlayback = () => /iPhone|iPad|iPod/.test(navigator.userAgent)
+  || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
 export function mixPlaybackUrl(song: Song): string | null {
-  // iOS can suspend Web Audio output when Safari is backgrounded even while
-  // its media element keeps advancing. Keep music on the native media path.
-  const ios = /iPhone|iPad|iPod/.test(navigator.userAgent)
-    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-  if (ios) return null;
+  // Retain the single native media path on iOS.
+  if (usesNativeMusicPlayback()) return null;
   try {
     const url = new URL(song.audioUrl, location.origin);
     if (/^\d+$/.test(song.id) && url.protocol === 'https:' && url.host === 'audio.djpapzin.com'
