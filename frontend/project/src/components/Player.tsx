@@ -253,7 +253,7 @@ const Player: React.FC<PlayerProps> = ({
           {/* Song Info */}
           <div className="px-6 pb-3 flex-shrink-0">
             <h1 className="text-white text-xl sm:text-2xl font-bold mb-1 break-words line-clamp-2">{currentSong.title}</h1>
-            <p className="text-gray-400 text-base sm:text-lg truncate">{currentSong.artist}</p>
+            <p className="text-gray-400 text-base sm:text-lg truncate">{currentSong.artist}{currentSong.year > 0 ? ` · ${currentSong.year}` : ''}</p>
           </div>
 
           {/* Progress */}
@@ -523,6 +523,7 @@ const Player: React.FC<PlayerProps> = ({
           id: currentSong.id,
           title: currentSong.title,
           artist: currentSong.artist,
+          year: currentSong.year,
           coverArt: isLoading ? DEFAULT_ARTWORK_URL : safeArtworkUrl(currentSong.imageUrl),
           audioUrl: currentSong.audioUrl
         }}
