@@ -69,6 +69,12 @@ export const usePlayer = (catalog: Song[] = []) => {
     if(attemptId===undefined)usage.current.begin(stateRef.current.currentSong?.id||'0',true);
     const id = attemptId ?? timing.begin(stateRef.current.currentSong?.title || 'Mix', 'Resume');
     const token = generation.current;
+    // Declare long-form music playback before starting the media element.
+    // iOS uses this session category when the browser is backgrounded or locked.
+    try {
+      const session = (navigator as Navigator & { audioSession?: { type: string } }).audioSession;
+      if (session) session.type = 'playback';
+    } catch { /* AudioSession is optional on older browsers. */ }
     if (audio !== nativeAudioRef.current) { mixer.current.enable(mixDecks(), audio, stateRef.current.volume); mixer.current.level(audio, 1); }
     applyVolume();
     // Start both in the same user gesture; awaiting resume first loses the
