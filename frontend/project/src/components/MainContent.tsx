@@ -1,6 +1,7 @@
+import { useState } from 'react';
 import DeferredImage from './DeferredImage';
 import BetaInfo, { BetaLinks } from './BetaInfo';
-import { Routes, Route, Link, useSearchParams, useLocation } from 'react-router-dom';
+import { Routes, Route, Link, Navigate, useSearchParams, useLocation } from 'react-router-dom';
 import { Song, Playlist, Album, Artist } from '../types/music';
 import { useLibrary } from '../state/LibraryContext';
 import { PlaylistsPage, PlaylistEditor, TrackList } from './LibraryPages';
@@ -50,6 +51,7 @@ interface Props {
 export default function MainContent({searchQuery,songs,tracksLoading,tracksError,currentSong,isPlaying,onPlaySong,onTogglePlay,volume,setVolume,onRetry,playbackPending=false}:Props) {
   const {library}=useLibrary();
   const {pathname}=useLocation();
+  const [helperOpen, setHelperOpen] = useState(pathname === '/crew-helper');
   const [searchParams,setSearchParams]=useSearchParams();
   const list=(items:Song[])=> <TrackList songs={items} currentSong={currentSong} isPlaying={isPlaying} onPlaySong={onPlaySong}/>;
   const quick=(items=songs)=> <QuickPlay songs={items} playlists={[]} onPlaySong={onPlaySong} onPlayPlaylist={()=>{}} currentSong={currentSong} isPlaying={isPlaying} onTogglePlay={onTogglePlay} isLoading={playbackPending}/>;
@@ -67,11 +69,11 @@ export default function MainContent({searchQuery,songs,tracksLoading,tracksError
   return <main className="flex-1 bg-gradient-to-b from-gray-900/50 to-black p-4 lg:p-6 overflow-y-auto pb-48 lg:pb-36">
     {pathname!=='/install'&&catalogStatus}
     <Routes>
-      <Route path="/crew-helper" element={<CrewHelper/>}/>
+      <Route path="/crew-helper" element={<Navigate to="/" replace/>}/>
       <Route path="/about" element={<BetaInfo kind="about"/>}/>
       <Route path="/privacy" element={<BetaInfo kind="privacy"/>}/>
       <Route path="/terms" element={<BetaInfo kind="terms"/>}/>
-      <Route path="/" element={<div className="space-y-7"><LatestMix songs={songs} onPlaySong={onPlaySong}/><section className="bg-gradient-to-br from-purple-900/60 to-pink-900/60 rounded-xl p-6 border border-purple-500/30"><h2 className="text-2xl lg:text-4xl font-bold mb-3">Welcome to Papzin & Crew</h2><p className="text-purple-200 font-medium">Free DJ mixes · Beta</p><p className="text-gray-300 mt-2">Listen without an account. Choose a mix below and press Play.</p><div className="mt-2"><BetaLinks/></div><div className="flex flex-wrap gap-3 mt-5"><Link className="bg-white/10 rounded-full px-4 py-2" to="/independent">Discover artists</Link><Link className="bg-white/10 rounded-full px-4 py-2" to="/search">Browse DJ mixes</Link><Link className="bg-white/10 rounded-full px-4 py-2" to="/crew-helper">Crew Helper</Link><Link className="bg-white/10 rounded-full px-4 py-2" to="/install">Get the app</Link><a className="bg-white/10 rounded-full px-4 py-2 min-h-11 inline-flex items-center" href="https://www.facebook.com/groups/PapzinCrew/" target="_blank" rel="noopener noreferrer">Facebook community ↗</a></div></section>{quick()}<HomeDiscovery songs={songs} onPlaySong={onPlaySong}/><section><h2 className="text-2xl font-bold mb-4">Featured mixes</h2><div className="grid grid-cols-1 sm:grid-cols-2 min-w-0 gap-3">{songs.slice(0,6).map(song=><QuickPlayCard key={song.id} item={song} type="song" onPlay={()=>onPlaySong(song,songs)}/>)}</div></section>{recent.length>0&&<section><h2 className="text-2xl font-bold mb-4">Recently played</h2>{list(recent)}</section>}<div className="flex gap-4"><Link to="/albums" className="text-purple-300">Albums & mix series →</Link><Link to="/playlists" className="text-purple-300">Your playlists →</Link></div></div>}/>
+      <Route path="/" element={<div className="space-y-7"><LatestMix songs={songs} onPlaySong={onPlaySong}/><section className="bg-gradient-to-br from-purple-900/60 to-pink-900/60 rounded-xl p-6 border border-purple-500/30"><h2 className="text-2xl lg:text-4xl font-bold mb-3">Welcome to Papzin & Crew</h2><p className="text-purple-200 font-medium">Free DJ mixes · Beta</p><p className="text-gray-300 mt-2">Listen without an account. Choose a mix below and press Play.</p><div className="mt-2"><BetaLinks/></div><div className="flex flex-wrap gap-3 mt-5"><Link className="bg-white/10 rounded-full px-4 py-2" to="/independent">Discover artists</Link><Link className="bg-white/10 rounded-full px-4 py-2" to="/search">Browse DJ mixes</Link><button className="bg-white/10 rounded-full px-4 py-2" aria-expanded={helperOpen} onClick={() => setHelperOpen(open => !open)}>Crew Helper</button><Link className="bg-white/10 rounded-full px-4 py-2" to="/install">Get the app</Link><a className="bg-white/10 rounded-full px-4 py-2 min-h-11 inline-flex items-center" href="https://www.facebook.com/groups/PapzinCrew/" target="_blank" rel="noopener noreferrer">Facebook community ↗</a></div></section>{quick()}<HomeDiscovery songs={songs} onPlaySong={onPlaySong}/><section><h2 className="text-2xl font-bold mb-4">Featured mixes</h2><div className="grid grid-cols-1 sm:grid-cols-2 min-w-0 gap-3">{songs.slice(0,6).map(song=><QuickPlayCard key={song.id} item={song} type="song" onPlay={()=>onPlaySong(song,songs)}/>)}</div></section>{recent.length>0&&<section><h2 className="text-2xl font-bold mb-4">Recently played</h2>{list(recent)}</section>}<div className="flex gap-4"><Link to="/albums" className="text-purple-300">Albums & mix series →</Link><Link to="/playlists" className="text-purple-300">Your playlists →</Link></div></div>}/>
       <Route path="/search" element={<BrowseMixes songs={songs} query={searchQuery} loading={tracksLoading} error={tracksError} currentSong={currentSong} isPlaying={isPlaying} onPlaySong={onPlaySong}/>}/>
       <Route path="/library" element={<section className="space-y-5"><h2 className="text-2xl font-bold">Your Library</h2><div className="flex flex-wrap gap-4"><Link to="/playlists" className="text-purple-300">Playlists ({library.playlists.length})</Link><Link to="/liked" className="text-purple-300">Liked Songs ({library.liked.length})</Link><Link to="/albums" className="text-purple-300">Albums & Mix Series</Link></div><h3 className="text-xl">{recent.length?'Recently played':'All tracks'}</h3>{list(recent.length?recent:songs)}</section>}/>
       <Route path="/playlists" element={<PlaylistsPage/>}/>
@@ -93,6 +95,7 @@ export default function MainContent({searchQuery,songs,tracksLoading,tracksError
       <Route path="/admin" element={<AdminAnalyticsPanel/>}/>
       <Route path="*" element={<p>Page not found. <Link className="text-purple-300" to="/">Go home</Link></p>}/>
     </Routes>
+    <CrewHelper open={helperOpen} onClose={() => setHelperOpen(false)}/>
     <footer className="mt-8 border-t border-white/10 pt-4"><BetaLinks/></footer>
   </main>;
 }
