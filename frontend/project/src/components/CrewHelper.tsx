@@ -46,7 +46,7 @@ export default function CrewHelper({ open, onClose }: { open: boolean; onClose: 
 
   return <section hidden={!open} role="dialog" aria-labelledby="crew-helper-title"
     onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); onClose(); } }}
-    className="fixed inset-x-3 bottom-40 z-[60] max-h-[min(65dvh,36rem)] space-y-4 overflow-y-auto rounded-2xl border border-white/20 bg-gray-950 p-4 shadow-2xl sm:left-auto sm:right-6 sm:w-96 lg:bottom-28">
+    className="fixed inset-x-3 bottom-40 z-[45] max-h-[min(65dvh,36rem,calc(100dvh-11rem))] space-y-4 overflow-y-auto rounded-2xl border border-white/20 bg-gray-950 p-4 shadow-2xl sm:left-auto sm:right-6 sm:w-96 lg:bottom-28 lg:max-h-[min(65dvh,36rem,calc(100dvh-8rem))]">
     <div className="flex items-center justify-between gap-3">
       <h2 id="crew-helper-title" className="text-xl font-bold">Crew Helper</h2>
       <button ref={closeButton} type="button" className="min-h-11 rounded-lg px-3 hover:bg-white/10" onClick={onClose}>Close chat</button>
