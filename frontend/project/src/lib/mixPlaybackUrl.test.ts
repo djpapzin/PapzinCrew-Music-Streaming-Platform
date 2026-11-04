@@ -13,3 +13,10 @@ it('keeps production cache delivery direct and uses the existing same-origin pro
 it.each([cached.replace('/241/','/237/'),cached+'?download=1',cached.replace('https:','http:'),cached.replace('audio.djpapzin.com','audio.djpapzin.com.evil.test'),'/api/tracks/241/stream','https://bucket.backblazeb2.com/mix.mp3'])('keeps non-cache/access-checked sources native: %s',audioUrl=>{
  expect(mixPlaybackUrl({...song,audioUrl})).toBeNull();
 });
+it.each([
+ {userAgent:'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)',platform:'iPhone',maxTouchPoints:5},
+ {userAgent:'Mozilla/5.0 (Macintosh)',platform:'MacIntel',maxTouchPoints:5},
+])('keeps iOS music outside the Web Audio graph',device=>{
+ vi.stubGlobal('navigator',device);
+ expect(mixPlaybackUrl(song)).toBeNull();
+});
