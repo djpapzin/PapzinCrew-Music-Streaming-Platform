@@ -336,7 +336,16 @@ export const usePlayer = (catalog: Song[] = []) => {
     if (!song || !('mediaSession' in navigator)) return;
     try {
       navigator.mediaSession.metadata = new MediaMetadata({ title: song.title, artist: song.artist, album: song.album || 'Papzin & Crew', artwork: song.imageUrl ? [{src:song.imageUrl}] : [] });
-      navigator.mediaSession.setActionHandler('play', () => { retried.current = false; requestPlay(); });
+      navigator.mediaSession.setActionHandler('play', () => {
+        const audio = audioRef.current;
+        // After an iOS interruption, the native element can still report playing
+        // while its output is silent. An explicit system Play must perform the
+        // same pause/resume cycle as the working website workaround. Keep the
+        // element, source and position; never auto-resume on notification events.
+        if (audio && audio === nativeAudioRef.current && usesNativeMusicPlayback() && !audio.paused) audio.pause();
+        retried.current = false;
+        requestPlay();
+      });
       navigator.mediaSession.setActionHandler('pause', () => { cancelRecovery(); cancelOverlap(); usage.current.cancel(); timing.endBuffer(); timing.finish('cancelled'); audioRef.current?.pause(); update({isPlaying:false, transitioning:false}); });
       navigator.mediaSession.setActionHandler('nexttrack', () => actions.current.next());
       navigator.mediaSession.setActionHandler('previoustrack', () => actions.current.previous());
