@@ -11,6 +11,35 @@ beforeEach(()=>{localStorage.clear();catalog=[];paused=true;vi.spyOn(HTMLMediaEl
 afterEach(()=>{cleanup();vi.restoreAllMocks();});
 function setup(){render(<Harness/>);audio=player.audioRef.current!;for(const deck of [player.nativeAudioRef.current!,player.firstAudioRef.current!,player.secondAudioRef.current!])Object.defineProperty(deck,'duration',{configurable:true,value:100});}
 describe('playback regressions',()=>{
+  it('reacquires the iPhone audio session on lock-screen resume without reloading or seeking',async()=>{
+    const categories:string[]=[];
+    const handlers=new Map<string,()=>void>();
+    const session={playbackState:'none',setActionHandler:vi.fn((name:string,handler:()=>void)=>handlers.set(name,handler))};
+    const userAgent=vi.spyOn(navigator,'userAgent','get').mockReturnValue('iPhone');
+    const audioSession=Object.getOwnPropertyDescriptor(navigator,'audioSession');
+    const mediaSession=Object.getOwnPropertyDescriptor(navigator,'mediaSession');
+    Object.defineProperty(navigator,'audioSession',{configurable:true,value:{set type(value:string){categories.push(value);}}});
+    Object.defineProperty(navigator,'mediaSession',{configurable:true,value:session});
+    vi.stubGlobal('MediaMetadata',class {constructor(_value:unknown){}});
+    try {
+      setup();await act(async()=>player.playSong(queue[0],queue));
+      expect(categories).toEqual(['playback']);expect(session.playbackState).toBe('playing');
+      audio.currentTime=25;const source=audio.src;const loads=vi.mocked(HTMLMediaElement.prototype.load).mock.calls.length;
+      act(()=>handlers.get('pause')!());expect(session.playbackState).toBe('paused');
+      await act(async()=>handlers.get('play')!());
+      expect(categories).toEqual(['playback','auto','playback']);
+      expect(session.playbackState).toBe('playing');expect(audio.src).toBe(source);expect(audio.currentTime).toBe(25);
+      expect(HTMLMediaElement.prototype.load).toHaveBeenCalledTimes(loads);
+      // A duplicate system Play must not reset a stream already playing.
+      await act(async()=>handlers.get('play')!());expect(categories.slice(-1)).toEqual(['playback']);expect(categories.filter(c=>c==='auto')).toHaveLength(1);
+      act(()=>handlers.get('pause')!());act(()=>player.setVolume(0));await act(async()=>player.togglePlay());
+      expect(audio.muted).toBe(true);expect(audio.currentTime).toBe(25);
+    } finally {
+      if(audioSession)Object.defineProperty(navigator,'audioSession',audioSession);else delete (navigator as Navigator & {audioSession?:unknown}).audioSession;
+      if(mediaSession)Object.defineProperty(navigator,'mediaSession',mediaSession);else Reflect.deleteProperty(navigator,'mediaSession');
+      userAgent.mockRestore();vi.unstubAllGlobals();
+    }
+  });
   it('uses the supplied stream without rewriting it to the proxy',async()=>{setup();await act(async()=>player.playSong(queue[0]));expect(audio.src).toBe(queue[0].audioUrl);});
   it('preserves mute across automatic track changes using current queue state',async()=>{setup();await act(async()=>{player.setVolume(0);player.playSong(queue[0],queue);});expect(audio.volume).toBe(0);expect(audio.muted).toBe(true);await act(async()=>audio.dispatchEvent(new Event('ended')));expect(player.playerState.currentSong?.id).toBe('2');expect(audio.muted).toBe(true);await act(async()=>audio.dispatchEvent(new Event('ended')));expect(player.playerState.currentSong?.id).toBe('3');expect(localStorage.getItem(VOLUME_KEY)).toBe('0');});
   it('repeats one on ended, but Next still changes tracks',async()=>{setup();await act(async()=>{player.playSong(queue[0],queue);player.toggleRepeat();player.toggleRepeat();});audio.currentTime=99;await act(async()=>audio.dispatchEvent(new Event('ended')));expect(player.playerState.currentSong?.id).toBe('1');expect(audio.currentTime).toBe(0);await act(async()=>player.handleNext());expect(player.playerState.currentSong?.id).toBe('2');});
