@@ -30,14 +30,49 @@ describe('playback regressions',()=>{
       expect(categories).toEqual(['playback','auto','playback']);
       expect(session.playbackState).toBe('playing');expect(audio.src).toBe(source);expect(audio.currentTime).toBe(25);
       expect(HTMLMediaElement.prototype.load).toHaveBeenCalledTimes(loads);
-      // A duplicate system Play must not reset a stream already playing.
-      await act(async()=>handlers.get('play')!());expect(categories.slice(-1)).toEqual(['playback']);expect(categories.filter(c=>c==='auto')).toHaveLength(1);
+      // Model a notification leaving the element unpaused but output silent.
+      // System Play must normalize this state, like website Pause then Play.
+      const pauseCalls=vi.mocked(HTMLMediaElement.prototype.pause).mock.calls.length;
+      const playCalls=vi.mocked(HTMLMediaElement.prototype.play).mock.calls.length;
+      await act(async()=>handlers.get('play')!());
+      expect(HTMLMediaElement.prototype.pause).toHaveBeenCalledTimes(pauseCalls+1);
+      expect(HTMLMediaElement.prototype.play).toHaveBeenCalledTimes(playCalls+1);
+      expect(categories.slice(-2)).toEqual(['auto','playback']);
+      expect(audio.paused).toBe(false);expect(audio.currentTime).toBe(25);expect(audio.src).toBe(source);
+      expect(HTMLMediaElement.prototype.load).toHaveBeenCalledTimes(loads);
+      // Repeated commands reuse this element rather than starting another deck.
+      await act(async()=>handlers.get('play')!());expect(audio.currentTime).toBe(25);expect(audio.src).toBe(source);
+      // Delayed pause events from the normalization must not clobber resume.
+      act(()=>audio.dispatchEvent(new Event('pause')));expect(player.playerState.isPlaying).toBe(true);
       act(()=>handlers.get('pause')!());act(()=>player.setVolume(0));await act(async()=>player.togglePlay());
       expect(audio.muted).toBe(true);expect(audio.currentTime).toBe(25);
+      act(()=>handlers.get('pause')!());const stoppedCalls=vi.mocked(HTMLMediaElement.prototype.play).mock.calls.length;
+      act(()=>document.dispatchEvent(new Event('visibilitychange')));
+      expect(audio.paused).toBe(true);expect(HTMLMediaElement.prototype.play).toHaveBeenCalledTimes(stoppedCalls);
     } finally {
       if(audioSession)Object.defineProperty(navigator,'audioSession',audioSession);else delete (navigator as Navigator & {audioSession?:unknown}).audioSession;
       if(mediaSession)Object.defineProperty(navigator,'mediaSession',mediaSession);else Reflect.deleteProperty(navigator,'mediaSession');
       userAgent.mockRestore();vi.unstubAllGlobals();
+    }
+  });
+  it.each([{ua:'iPhone',pauseDelta:1},{ua:'Desktop',pauseDelta:0}])('handles system Play without AudioSession on $ua',async({ua,pauseDelta})=>{
+    const handlers=new Map<string,()=>void>();
+    const mediaSession=Object.getOwnPropertyDescriptor(navigator,'mediaSession');
+    const audioSession=Object.getOwnPropertyDescriptor(navigator,'audioSession');
+    vi.spyOn(navigator,'userAgent','get').mockReturnValue(ua);
+    Object.defineProperty(navigator,'audioSession',{configurable:true,value:undefined});
+    Object.defineProperty(navigator,'mediaSession',{configurable:true,value:{setActionHandler:(name:string,handler:()=>void)=>handlers.set(name,handler)}});
+    vi.stubGlobal('MediaMetadata',class {constructor(_value:unknown){}});
+    try {
+      setup();await act(async()=>player.playSong(queue[0],queue));audio.currentTime=30;
+      const pauseCalls=vi.mocked(HTMLMediaElement.prototype.pause).mock.calls.length;
+      await act(async()=>handlers.get('play')!());
+      expect(HTMLMediaElement.prototype.pause).toHaveBeenCalledTimes(pauseCalls+pauseDelta);
+      expect(audio.currentTime).toBe(30);expect(audio.src).toBe(queue[0].audioUrl);expect(audio.paused).toBe(false);
+    } finally {
+      if(mediaSession)Object.defineProperty(navigator,'mediaSession',mediaSession);else Reflect.deleteProperty(navigator,'mediaSession');
+      if(audioSession)Object.defineProperty(navigator,'audioSession',audioSession);else Reflect.deleteProperty(navigator,'audioSession');
+      vi.unstubAllGlobals();
     }
   });
   it('uses the supplied stream without rewriting it to the proxy',async()=>{setup();await act(async()=>player.playSong(queue[0]));expect(audio.src).toBe(queue[0].audioUrl);});
