@@ -1,6 +1,6 @@
 # Notification lock-screen resume — issue #104
 
-Candidate, not yet verified audibly on a physical iPhone. DJ authorized DEV preview publication on 5 November 2026; production promotion is not authorized.
+DJ reported on 5 November 2026 that DEV preview #105 resumes music audibly from the lock screen after a notification and preserves position. DJ explicitly authorized production promotion. The production phone retest remains pending after publication.
 
 Open the DEV TEST SITE preview for PR #105 in Safari on the iPhone and play Guest 48. Lock the screen and allow a real notification with sound to arrive. Once it finishes, press lock-screen Play. Sound must return without opening the website, at the preserved mix position. Repeat with another notification. Also check ordinary Pause/Play, a longer pause, and app switching.
 
