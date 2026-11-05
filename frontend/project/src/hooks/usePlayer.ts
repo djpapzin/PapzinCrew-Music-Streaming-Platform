@@ -4,7 +4,7 @@ import { Song, PlayerState } from '../types/music';
 import { usePlaybackTiming } from './usePlaybackTiming';
 import { canRecoverPlayback, recoverPlaybackUrl } from '../lib/recoverPlayback';
 import { MixAudio } from '../lib/mixAudio';
-import { mixPlaybackUrl } from '../lib/mixPlaybackUrl';
+import { mixPlaybackUrl, usesNativeMusicPlayback } from '../lib/mixPlaybackUrl';
 export const CROSSFADE_SECONDS = 10;
 const CROSSFADE_PRELOAD_SECONDS = 45;
 // Allow for timeupdate cadence and the buffered deck's play startup.
@@ -45,6 +45,10 @@ export const usePlayer = (catalog: Song[] = []) => {
   const update = (change: Partial<PlayerState>) => {
     stateRef.current = { ...stateRef.current, ...change };
     setPlayerState(stateRef.current);
+    try {
+      if (navigator.mediaSession) navigator.mediaSession.playbackState = !stateRef.current.currentSong
+        ? 'none' : stateRef.current.isPlaying ? 'playing' : 'paused';
+    } catch { /* Lock-screen integration is optional. */ }
   };
   const notify = (message: string) => window.dispatchEvent(new CustomEvent('app:toast', { detail: { message } }));
   const mixDecks = () => [firstAudioRef.current, secondAudioRef.current].filter((audio): audio is HTMLAudioElement => !!audio);
@@ -73,7 +77,15 @@ export const usePlayer = (catalog: Song[] = []) => {
     // iOS uses this session category when the browser is backgrounded or locked.
     try {
       const session = (navigator as Navigator & { audioSession?: { type: string } }).audioSession;
-      if (session) session.type = 'playback';
+      if (session) {
+        // A paused iOS native stream can retain its timeline while losing its
+        // audible session. Reacquire the category in the explicit resume action,
+        // before play(), without replacing the element or losing its position.
+        // Device validation is required: play/timeupdate cannot prove audibility.
+        if (attemptId === undefined && audio === nativeAudioRef.current
+          && usesNativeMusicPlayback() && audio.paused) session.type = 'auto';
+        session.type = 'playback';
+      }
     } catch { /* AudioSession is optional on older browsers. */ }
     if (audio !== nativeAudioRef.current) { mixer.current.enable(mixDecks(), audio, stateRef.current.volume); mixer.current.level(audio, 1); }
     applyVolume();
