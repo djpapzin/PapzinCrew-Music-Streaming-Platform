@@ -104,3 +104,29 @@ def test_corrupt_review_fails_closed(setup):
     client,_,tmp=setup
     (tmp/'reviews').mkdir(mode=0o700);(tmp/'reviews/1.json').write_text('[')
     assert client.get('/admin/releases/1',headers=KEY).status_code==503
+
+@pytest.mark.parametrize('digest', [
+    '5c85b30bec12fba7a4d8df03892e9f21025fb66225c947aef8dd9a6481a80c1a',
+    '15459a591de45769730c0ab70e0488e07d209e193148bb94deec8d6e603bc54f',
+    '133bd18bc7b8bc54ea1c0e9db930cbe23e1f8007ff912aaa86dd6e5ef527a46f',
+])
+def test_renamed_legacy_synthetic_hashes_cannot_be_approved(setup,digest):
+    client,factory,tmp=setup
+    with factory() as db:
+        mix=db.get(Mix,1);mix.file_hash=digest;mix.title='Approved-looking release';mix.original_filename='guest.mp3';db.commit()
+    detail=client.get('/admin/releases/1',headers=KEY).json()
+    assert detail['test_only'] and not detail['final_approved']
+    response=client.put('/admin/releases/1',headers=KEY,json=body(detail,True))
+    assert response.status_code==409 and 'Test uploads' in response.json()['detail']
+    assert not (tmp/'reviews/1.json').exists()
+    with factory() as db: assert db.get(Mix,1).availability=='unlisted'
+
+
+def test_plural_test_names_are_recognized_without_substring_matches(setup):
+    client,factory,_=setup
+    with factory() as db:
+        artist=db.get(Artist,1);artist.name='Papzin Crew Upload Tests';db.commit()
+    assert client.get('/admin/releases/1',headers=KEY).json()['test_only']
+    with factory() as db:
+        artist=db.get(Artist,1);artist.name='Testament';db.commit()
+    assert not client.get('/admin/releases/1',headers=KEY).json()['test_only']
