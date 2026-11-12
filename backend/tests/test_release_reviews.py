@@ -7,7 +7,6 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 from app.db.database import get_db
 from app.models.models import Base, Mix, Artist
 from app.routers.release_reviews import router
@@ -21,7 +20,7 @@ def setup(tmp_path, monkeypatch):
     monkeypatch.setenv('ADMIN_API_KEY', 'owner-test-secret')
     monkeypatch.setenv('RELEASE_REVIEW_DIR', str(tmp_path/'reviews'))
     monkeypatch.setenv('OWNER_SESSION_DIR', str(tmp_path/'sessions'))
-    engine=create_engine('sqlite://', connect_args={'check_same_thread':False},poolclass=StaticPool)
+    engine=create_engine(f'sqlite:///{tmp_path / "catalog.db"}', connect_args={'check_same_thread':False})
     Base.metadata.create_all(engine); factory=sessionmaker(bind=engine)
     with factory() as db:
         artist=Artist(name='Guest DJ');db.add(artist);db.flush()

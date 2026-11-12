@@ -55,12 +55,21 @@ export default function GuestReleasePanel() {
     if(!release)return;
     const current=++generation.current;setBusy(true);setError('');setMessage('');
     try {
-      const r=await fetch(`${API_BASE}/admin/releases/${release.id}`,{cache:'no-store'});const data=await r.json();
-      if(current!==generation.current)return;
-      if(!r.ok)throw new Error('Owner access is required to copy the current approved draft.');
-      if(!data.final_approved||data.fingerprint!==release.fingerprint||data.revision!==release.revision)
-        throw new Error('This review changed. Reload and approve the current version before copying.');
-      await navigator.clipboard.writeText(data.caption);
+      if(typeof ClipboardItem==='undefined'||!navigator.clipboard?.write)
+        throw new Error('Clipboard copy is unavailable in this browser. Reload the review, then select and copy the approved draft manually.');
+      const validatedText=(async()=>{
+        const r=await fetch(`${API_BASE}/admin/releases/${release.id}`,{cache:'no-store'});const data=await r.json();
+        if(current!==generation.current)throw new Error('The selected review changed.');
+        if(!r.ok)throw new Error('Owner access is required to copy the current approved draft.');
+        if(!data.final_approved||data.fingerprint!==release.fingerprint||data.revision!==release.revision)
+          throw new Error('This review changed. Reload and approve the current version before copying.');
+        return new Blob([data.caption],{type:'text/plain'});
+      })();
+      // The clipboard may reject permissions before validation settles.
+      void validatedText.catch(()=>{});
+      // Start the clipboard operation in this click's user activation. WebKit
+      // awaits the promised content; nothing is copied until validation passes.
+      await navigator.clipboard.write([new ClipboardItem({'text/plain':validatedText})]);
       if(current===generation.current)setMessage('Announcement draft copied. Send only after publication and destination approval.');
     } catch(e){if(current===generation.current)setError(e instanceof Error?e.message:'Copy failed. Reload the review and try again.');}
     finally{if(current===generation.current)setBusy(false);}

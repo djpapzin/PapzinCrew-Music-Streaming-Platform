@@ -14,6 +14,11 @@ links are optional. No supplied metadata or tracklists are edited/generated.
 The draft uses only the selected title, artist and canonical link. The owner can
 edit it before recording final approval; editing a review clears that approval.
 Copy revalidates the current server review to reject stale/withdrawn approvals.
+Clipboard access starts synchronously in the user gesture with a promise-backed
+ClipboardItem; content resolves only after validation. This follows the WebKit
+workaround https://bugs.webkit.org/show_bug.cgi?id=222262. Browsers without this
+API receive a manual-copy/reload instruction. Physical iPhone verification remains
+separate from local unit/browser tests.
 After actual publication, verify the public link before using the copied draft.
 
 Any change to audio URL/hash, title, artist, artwork, duration, original filename,

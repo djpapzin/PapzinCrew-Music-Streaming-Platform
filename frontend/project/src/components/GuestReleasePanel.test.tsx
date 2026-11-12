@@ -11,7 +11,8 @@ async function load() {
 }
 it('records owner checks without publishing and revalidates before copying',async()=>{
  let saved=detail;
- const copy=vi.fn().mockResolvedValue(undefined);vi.stubGlobal('navigator',{clipboard:{writeText:copy}});
+ const copy=vi.fn(async(items:any[])=>{await items[0].data['text/plain'];});
+ vi.stubGlobal('ClipboardItem',class {constructor(public data:any){}});vi.stubGlobal('navigator',{clipboard:{write:copy}});
  const fetch=vi.fn(async(url:string,options?:RequestInit)=>{
   if(url.endsWith('/releases'))return response(queue);
   if(options?.method==='PUT'){
@@ -23,7 +24,7 @@ it('records owner checks without publishing and revalidates before copying',asyn
  expect(screen.getByRole('button',{name:'Record final approval'})).toBeDisabled();expect(screen.getByRole('button',{name:'Copy approved draft'})).toBeDisabled();
  for(const checkbox of screen.getAllByRole('checkbox'))fireEvent.click(checkbox);
  fireEvent.click(screen.getByRole('button',{name:'Record final approval'}));await screen.findByText('Final approval recorded. The mix remains unlisted.');
- fireEvent.click(screen.getByRole('button',{name:'Copy approved draft'}));await waitFor(()=>expect(copy).toHaveBeenCalledWith(detail.caption));
+ fireEvent.click(screen.getByRole('button',{name:'Copy approved draft'}));await screen.findByText('Announcement draft copied. Send only after publication and destination approval.');expect(copy).toHaveBeenCalledTimes(1);
  expect(fetch.mock.calls.filter(([,o])=>o?.method==='PUT')).toHaveLength(1);expect(fetch.mock.calls.every(([url])=>url.includes('/admin/releases'))).toBe(true);
 });
 it('keeps notes on failed save and blocks test approval',async()=>{
@@ -33,12 +34,26 @@ it('keeps notes on failed save and blocks test approval',async()=>{
  fireEvent.click(screen.getByRole('button',{name:'Save private review'}));await screen.findByText('This mix changed. Reload the review.');expect(screen.getByLabelText('Private review notes')).toHaveValue('Keep my notes');
 });
 it('refuses copying an approval invalidated on the server',async()=>{
- let gets=0;const copy=vi.fn();vi.stubGlobal('navigator',{clipboard:{writeText:copy}});
+ let gets=0;const committed=vi.fn();const copy=vi.fn(async(items:any[])=>{await items[0].data['text/plain'];committed();});
+ vi.stubGlobal('ClipboardItem',class {constructor(public data:any){}});vi.stubGlobal('navigator',{clipboard:{write:copy}});
  vi.stubGlobal('fetch',vi.fn(async(url:string)=>url.endsWith('/releases')?response(queue):response({...detail,final_approved:++gets===1,checks:Object.fromEntries(Object.keys(detail.checks).map(key=>[key,true]))})));
  render(<GuestReleasePanel/>);await screen.findByRole('option',{name:/#1/});await load();fireEvent.click(screen.getByRole('button',{name:'Copy approved draft'}));
- await screen.findByText('This review changed. Reload and approve the current version before copying.');expect(copy).not.toHaveBeenCalled();
+ await screen.findByText('This review changed. Reload and approve the current version before copying.');expect(committed).not.toHaveBeenCalled();
 });
 it('retries loading the queue after an error',async()=>{
  let calls=0;vi.stubGlobal('fetch',vi.fn(async()=>++calls===1?response({},false):response(queue)));
  render(<GuestReleasePanel/>);await screen.findByRole('alert');fireEvent.click(screen.getByRole('button',{name:'Refresh release queue'}));await screen.findByRole('option',{name:/#1/});
+});
+
+it('starts clipboard access before delayed validation resolves',async()=>{
+ let resolveValidation!:(v:unknown)=>void;let gets=0;
+ const pending=new Promise(resolve=>{resolveValidation=resolve;});
+ const committed=vi.fn();const copy=vi.fn(async(items:any[])=>{await items[0].data['text/plain'];committed();});
+ vi.stubGlobal('ClipboardItem',class {constructor(public data:any){}});vi.stubGlobal('navigator',{clipboard:{write:copy}});
+ vi.stubGlobal('fetch',vi.fn(async(url:string)=>url.endsWith('/releases')?response(queue):++gets===1?response({...detail,final_approved:true}):pending));
+ render(<GuestReleasePanel/>);await screen.findByRole('option',{name:/#1/});await load();
+ fireEvent.click(screen.getByRole('button',{name:'Copy approved draft'}));
+ expect(copy).toHaveBeenCalledTimes(1);expect(committed).not.toHaveBeenCalled();
+ resolveValidation(response({...detail,final_approved:true}));
+ await waitFor(()=>expect(committed).toHaveBeenCalledTimes(1));
 });
