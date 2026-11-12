@@ -225,3 +225,52 @@ def test_m4a_optimization_failure_never_writes_to_b2(test_app):
         assert response.status_code == 422, response.text
         assert response.json()['detail']['error_code'] == 'm4a_optimization_failed'
         put.assert_not_called()
+
+
+@pytest.mark.parametrize('failure_point', ['create', 'refresh_after_commit'])
+def test_pilot_post_put_db_error_retains_object(test_app, tmp_path, monkeypatch, failure_point):
+    """Exercise the ordinary handler cleanup branch with pilot no-delete policy."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location('pilot_no_delete', BACKEND_DIR / 'tools/owner_browser_pilot.py')
+    pilot = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(pilot)
+    from app.routers import uploads
+    from app.db.database import SessionLocal
+    from app.models.models import Mix
+    objects = {}
+    events = []
+    class FakeStorage:
+        def is_configured(self):
+            return True
+        def put_bytes_safe(self, key, data, content_type):
+            events.append('put')
+            objects[key] = data
+            return {'ok': True, 'key': key, 'url': 'https://test-b2.example/bucket/' + key}
+        def extract_key_from_url(self, url):
+            return url.removeprefix('https://test-b2.example/bucket/')
+        def delete_file(self, key):
+            events.append('delete')
+            objects.pop(key, None)
+            return True
+    pilot.disable_cleanup_deletes(FakeStorage)
+    monkeypatch.setattr(uploads, 'B2Storage', FakeStorage)
+    monkeypatch.setattr(uploads, 'validate_audio_file', lambda _: (True, {'valid': True, 'mime_type': 'audio/mpeg', 'file_extension': '.mp3', 'file_size_bytes': 11}))
+    original_create = uploads.crud.create_mix
+    def failing_create(db, mix):
+        if failure_point == 'create':
+            raise RuntimeError('test database create failed after PUT')
+        row = original_create(db=db, mix=mix)
+        def failed_refresh(*args, **kwargs):
+            raise RuntimeError('test refresh failed after commit')
+        db.refresh = failed_refresh
+        return row
+    monkeypatch.setattr(uploads.crud, 'create_mix', failing_create)
+    data, file_payload = _form_data(file_name='pilot-db-failure.mp3', content=b'pilot-audio')
+    response = TestClient(test_app).post('/upload', data=data, files=file_payload)
+    assert response.status_code == 500
+    assert events == ['put'] and list(objects.values()) == [b'pilot-audio']
+    with SessionLocal() as db:
+        rows = db.query(Mix).filter(Mix.title == 'UnitTest Title').all()
+        assert len(rows) == (1 if failure_point == 'refresh_after_commit' else 0)
+        if rows:
+            assert rows[0].file_path.startswith('https://test-b2.example/bucket/')
