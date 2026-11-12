@@ -51,7 +51,7 @@ describe('UploadPage Paperclip context', () => {
     expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/paperclip/summary/321'));
   });
 
-  it('shows a helper message instead of silently using a fallback Paperclip id', () => {
+  it('keeps internal task setup out of ordinary submissions without fetching a fallback', () => {
     render(
       <MemoryRouter initialEntries={['/upload']}>
         <Routes>
@@ -60,8 +60,8 @@ describe('UploadPage Paperclip context', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByText(/Open this upload page with a/i)).toBeInTheDocument();
-    expect(screen.getByText(/paperclipTaskId/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Paperclip insight/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/paperclipTaskId/i)).not.toBeInTheDocument();
     expect(fetch).not.toHaveBeenCalled();
     expect(screen.getByText('Visibility: Unlisted — pending review')).toBeInTheDocument();
     expect(screen.queryByRole('option', { name: 'Public', exact: true })).not.toBeInTheDocument();

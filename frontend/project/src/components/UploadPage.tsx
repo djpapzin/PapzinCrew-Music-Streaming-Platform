@@ -914,18 +914,8 @@ const UploadPage: React.FC<UploadPageProps> = ({ onPlaySong }) => {
           <h1 className="text-2xl lg:text-3xl font-bold text-white mb-2">Upload single stream</h1>
         </div>
 
-        {activePaperclipTaskId !== null ? (
+        {activePaperclipTaskId !== null && (
           <PaperclipInsightCard taskId={activePaperclipTaskId} className="shadow-xl shadow-fuchsia-950/10" />
-        ) : (
-          <section className="rounded-2xl border border-fuchsia-500/30 bg-gradient-to-br from-fuchsia-500/10 via-slate-950 to-slate-900 p-4 shadow-lg shadow-fuchsia-950/20 shadow-xl shadow-fuchsia-950/10">
-            <div className="flex items-start gap-3">
-              <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-fuchsia-300" />
-              <div className="min-w-0">
-                <h2 className="text-lg font-semibold text-white">Paperclip insight</h2>
-                <p className="mt-1 text-sm text-slate-300">Open this upload page with a <span className="font-mono text-fuchsia-200">?paperclipTaskId=&lt;task_id&gt;</span> query param to preload the matching Paperclip brief, then submit the upload to keep Paperclip following the live publish result.</p>
-              </div>
-            </div>
-          </section>
         )}
 
         <MyUploads />

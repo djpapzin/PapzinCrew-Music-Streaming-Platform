@@ -47,12 +47,14 @@ class TestTrackStreaming:
             yield mock_session
     
     @pytest.fixture
-    def sample_track(self):
+    def sample_track(self, tmp_path):
         """Sample track data for testing."""
         track = MagicMock()
         track.id = 1
         track.title = "Test Track"
-        track.file_path = "/uploads/test_track.mp3"
+        audio = tmp_path / "test_track.mp3"
+        audio.write_bytes(b"test-audio" * 1024)
+        track.file_path = str(audio)
         track.availability = "public"
         track.artist = MagicMock()
         track.artist.name = "Test Artist"
@@ -62,21 +64,11 @@ class TestTrackStreaming:
         """Test successful track streaming."""
         mock_db_session.query().filter().first.return_value = sample_track
         
-        # Mock all file system operations
-        with patch('os.path.exists', return_value=True), \
-             patch('os.path.getsize', return_value=5000000), \
-             patch('os.path.abspath', side_effect=lambda x: f"/abs/{x}"), \
-             patch('os.path.commonpath', return_value="/abs/uploads"), \
-             patch('os.path.relpath', return_value="test.mp3"), \
-             patch('fastapi.responses.RedirectResponse') as mock_redirect:
-            
-            mock_redirect.return_value = MagicMock(status_code=307)
-            
-            response = client.get("/tracks/1/stream")
-            
-            # Should redirect to /uploads/test.mp3 or return success
-            assert response.status_code in [200, 307] or mock_redirect.called
-    
+        response = client.get("/tracks/1/stream")
+        assert response.status_code == 200
+        assert response.content == Path(sample_track.file_path).read_bytes()
+        assert int(response.headers['content-length']) == len(response.content)
+
     def test_stream_track_not_found(self, mock_db_session):
         """Test streaming non-existent track."""
         mock_db_session.query().filter().first.return_value = None
@@ -110,19 +102,25 @@ class TestTrackStreaming:
         """Test HTTP range requests for streaming."""
         mock_db_session.query().filter().first.return_value = sample_track
         
-        with patch('os.path.exists', return_value=True), \
-             patch('os.path.getsize', return_value=5000000), \
-             patch('os.path.abspath', side_effect=lambda x: f"/abs/{x}"), \
-             patch('os.path.commonpath', return_value="/abs/uploads"), \
-             patch('os.path.relpath', return_value="test.mp3"), \
-             patch('app.routers.tracks.RedirectResponse') as mock_redirect:
-            
-            # Request partial content
-            headers = {"Range": "bytes=0-1023"}
-            response = client.get("/tracks/1/stream", headers=headers)
-            
-            # Should support range requests for efficient streaming
-            assert response.status_code in [200, 206]  # OK or Partial Content
+        response = client.get("/tracks/1/stream", headers={"Range": "bytes=10-1033"})
+        assert response.status_code == 206
+        assert response.content == Path(sample_track.file_path).read_bytes()[10:1034]
+        assert response.headers['content-range'] == 'bytes 10-1033/10240'
+        assert response.headers['content-length'] == '1024'
+
+    @pytest.mark.parametrize('header, expected', [('bytes=-10', b'test-audio'), ('bytes=10230-', b'test-audio')])
+    def test_stream_suffix_and_open_ranges(self, mock_db_session, sample_track, header, expected):
+        mock_db_session.query().filter().first.return_value = sample_track
+        response = client.get('/tracks/1/stream', headers={'Range': header})
+        assert response.status_code == 206
+        assert response.content == expected
+
+    @pytest.mark.parametrize('header', ['bytes=99999-', 'bytes=5-2', 'bytes=0-1,4-5'])
+    def test_invalid_ranges_are_rejected(self, mock_db_session, sample_track, header):
+        mock_db_session.query().filter().first.return_value = sample_track
+        response = client.get('/tracks/1/stream', headers={'Range': header})
+        assert response.status_code == 416
+        assert response.headers['content-range'] == 'bytes */10240'
 
     def test_head_stream_track_remote_returns_redirect_without_incrementing_play_count(self, mock_db_session):
         """HEAD /stream should mirror GET redirect behavior but remain side-effect free."""
@@ -296,13 +294,15 @@ class TestTrackDownload:
             yield mock_session
     
     @pytest.fixture
-    def downloadable_track(self):
+    def downloadable_track(self, tmp_path):
         """Track that allows downloads."""
         track = MagicMock()
         track.id = 1
         track.title = "Downloadable Track"
         track.original_filename = "track.mp3"
-        track.file_path = "/uploads/track.mp3"
+        audio = tmp_path / "track.mp3"
+        audio.write_bytes(b"original-audio")
+        track.file_path = str(audio)
         track.allow_downloads = "yes"
         track.availability = "public"
         track.artist = MagicMock()
@@ -348,18 +348,18 @@ class TestPlayCountStatistics:
             mock_get_db.return_value = mock_session
             yield mock_session
     
-    def test_increment_play_count_on_stream(self, mock_db_session):
+    def test_increment_play_count_on_stream(self, mock_db_session, tmp_path):
         """Test that play count increments when track is streamed."""
         track = MagicMock()
         track.id = 1
         track.play_count = 5
-        track.file_path = "/uploads/test.mp3"
+        audio = tmp_path / "test.mp3"
+        audio.write_bytes(b"test-audio")
+        track.file_path = str(audio)
         track.availability = "public"
         mock_db_session.query().filter().first.return_value = track
-        
-        with patch('os.path.exists', return_value=True), \
-             patch('os.path.getsize', return_value=5000000), \
-             patch('builtins.open', create=True):
+
+        with patch('os.path.exists', return_value=True):
             
             client.get("/tracks/1/stream")
             
@@ -596,29 +596,33 @@ class TestTrackQualitySelection:
             mock_get_db.return_value = mock_session
             yield mock_session
     
-    def test_stream_quality_selection(self, mock_db_session):
+    def test_stream_quality_selection(self, mock_db_session, tmp_path):
         """Test streaming with quality parameter."""
         track = MagicMock()
         track.id = 1
-        track.file_path = "/uploads/track.mp3"
+        audio = tmp_path / "track.mp3"
+        audio.write_bytes(b"original-audio")
+        track.file_path = str(audio)
         track.quality_kbps = 320
         track.availability = "public"
         mock_db_session.query().filter().first.return_value = track
         
-        with patch('os.path.exists', return_value=True), \
-             patch('os.path.getsize', return_value=5000000):
+        with patch('os.path.exists', return_value=True):
             
             # Request specific quality
             response = client.get("/tracks/1/stream?quality=128")
             
             # Should handle quality selection (if implemented)
-            assert response.status_code in [200, 400]  # OK or not supported
+            assert response.status_code == 200
+            assert response.content == b"original-audio"
     
-    def test_adaptive_quality_based_on_connection(self, mock_db_session):
+    def test_adaptive_quality_based_on_connection(self, mock_db_session, tmp_path):
         """Test adaptive quality based on connection speed."""
         track = MagicMock()
         track.id = 1
-        track.file_path = "/uploads/track.mp3"
+        audio = tmp_path / "track.mp3"
+        audio.write_bytes(b"original-audio")
+        track.file_path = str(audio)
         track.availability = "public"
         mock_db_session.query().filter().first.return_value = track
         
