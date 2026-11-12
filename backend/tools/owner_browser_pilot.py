@@ -184,6 +184,11 @@ class B2OnlyCover:
         return self.url
 
 
+def disable_cleanup_deletes(storage_type):
+    """Preserve even orphaned/uncertain uploads for inspection in this process."""
+    storage_type.delete_file = lambda self, key: False
+
+
 def require_finalized_cover(row, cover):
     # TestClient waits for Starlette background processing. Its failures are
     # best-effort in the regular handler, so explicitly inspect the committed row.
@@ -222,6 +227,7 @@ def main():
     from app.db.database import SessionLocal
     from app.models.models import Mix
     from app.services.b2_storage import B2Storage
+    disable_cleanup_deletes(B2Storage)
     b2 = B2Storage()
     if b2.mode != 's3' or not b2.check_health().get('ok'):
         raise RuntimeError('B2 unavailable')
