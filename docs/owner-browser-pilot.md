@@ -117,3 +117,10 @@ Codex review follow-up: initial revision had two P2 findings (cover retry overri
 and cover local fallback). Both addressed with isolated failure/timeout/retry and
 finalized-row regression tests. Clean review of the amended revision is required
 before release; the original review is not a pass.
+
+Release-review follow-up (#114): before loading the handler, the pilot replaces
+`B2Storage.delete_file` process-locally with a refusal. Ordinary upload cleanup
+cannot delete B2 objects after an ambiguous database create/refresh failure.
+Integration regressions execute the actual handler's post-PUT error branches,
+including a committed row followed by failed refresh, and assert one PUT, zero
+DELETEs and the retained object/row for inspection. No ordinary app code changes.
