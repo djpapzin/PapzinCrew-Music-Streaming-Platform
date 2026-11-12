@@ -11,7 +11,15 @@ from pathlib import Path
 from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field, StrictBool
 
-SYNTHETIC_HASHES = {'48852a8cc9cb8a37a28d23a4c0f609da481bf7b6ccf8a6c7746990062636aec1', '5dcb8b8c0d5e8cfbc593a28a27f26e2c4d86179ff7389f95345e3ab994056257'}
+# Verified synthetic fixtures: live controlled tests and legacy silent probes.
+# Keep hashes protected even if titles, artist credit or filenames are renamed.
+SYNTHETIC_HASHES = {
+    '48852a8cc9cb8a37a28d23a4c0f609da481bf7b6ccf8a6c7746990062636aec1',
+    '5dcb8b8c0d5e8cfbc593a28a27f26e2c4d86179ff7389f95345e3ab994056257',
+    '5c85b30bec12fba7a4d8df03892e9f21025fb66225c947aef8dd9a6481a80c1a',
+    '15459a591de45769730c0ab70e0488e07d209e193148bb94deec8d6e603bc54f',
+    '133bd18bc7b8bc54ea1c0e9db930cbe23e1f8007ff912aaa86dd6e5ef527a46f',
+}
 CHECKS = ('audio_ready', 'title_credit_approved', 'presentation_approved', 'playback_verified', 'musical_approved')
 
 
@@ -49,7 +57,7 @@ def fingerprint(data):
 
 def is_test(data):
     text = ' '.join(str(data[k]) for k in ('title', 'artist', 'original_filename'))
-    return data['file_hash'] in SYNTHETIC_HASHES or bool(re.search(r'\b(test|synthetic|fixture|qa)\b', text.replace('_', ' '), re.I))
+    return data['file_hash'] in SYNTHETIC_HASHES or bool(re.search(r'\b(tests?|synthetic|fixtures?|qa)\b', text.replace('_', ' '), re.I))
 
 
 def _read(path):
