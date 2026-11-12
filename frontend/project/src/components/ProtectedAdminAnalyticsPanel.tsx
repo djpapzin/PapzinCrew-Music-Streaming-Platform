@@ -1,3 +1,4 @@
+import GuestReleasePanel from './GuestReleasePanel';
 import DownloadStats from './DownloadStats';
 import AnonymousStats from './AnonymousStats';
 import FeedbackInbox from './FeedbackInbox';
@@ -88,6 +89,7 @@ export default function ProtectedAdminAnalyticsPanel() {
         <button disabled={unlocking||!adminKey} className="bg-purple-600 rounded-lg px-4 min-h-11 disabled:opacity-50">{unlocking?'Unlocking…':'Unlock admin'}</button>
       </form>}
       {ownerSession&&<>
+        <GuestReleasePanel />
         <AnonymousStats adminKey="" ownerSession />
         <DownloadStats adminKey="" ownerSession />
         <FeedbackInbox adminKey="" ownerSession />
