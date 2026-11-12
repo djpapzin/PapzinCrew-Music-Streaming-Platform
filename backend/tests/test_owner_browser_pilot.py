@@ -87,3 +87,62 @@ def test_page_no_secret_no_proxy(gateway):
     assert client.get(pilot.PREFIX + '/page.js').status_code == 200
     assert client.post('/upload', headers=HEADERS).status_code == 404
     assert client.get('/docs').status_code == 404
+
+
+def test_inherited_cover_retry_settings_are_overridden(monkeypatch):
+    monkeypatch.setenv('B2_COVER_MAX_RETRIES', '8')
+    monkeypatch.setenv('B2_MAX_RETRIES', '8')
+    monkeypatch.setenv('B2_MAX_ATTEMPTS', '8')
+    # Record all changed environment keys so this isolated test restores them.
+    import os
+    for key in ['UPLOADS_ENABLED', 'ENFORCE_B2_ONLY', 'DB_AUTO_MIGRATE', 'BACKFILL_TRACK_DURATIONS']:
+        monkeypatch.setenv(key, os.environ.get(key, '0'))
+    pilot.configure_process()
+    assert os.environ['B2_COVER_MAX_RETRIES'] == '1'
+    assert os.environ['B2_MAX_RETRIES'] == '1'
+    assert os.environ['B2_MAX_ATTEMPTS'] == '0'
+
+
+@pytest.mark.parametrize('outcome', ['failure', 'timeout', 'success'])
+def test_cover_never_falls_back_or_retries(tmp_path, outcome):
+    import asyncio
+    class Storage:
+        endpoint_url = 'https://storage.example'
+        bucket = 'test'
+        calls = 0
+        def is_configured(self):
+            return True
+        def put_bytes_safe(self, key, data, content_type):
+            self.calls += 1
+            if outcome == 'timeout':
+                raise TimeoutError('ambiguous PUT')
+            return {'ok': outcome == 'success', 'url': f'{self.endpoint_url}/{self.bucket}/{key}'}
+    storage = Storage()
+    writer = pilot.B2OnlyCover(storage)
+    if outcome == 'success':
+        assert asyncio.run(writer(b'cover', 'fixture', str(tmp_path), source='uploaded')).startswith('https://storage.example/test/')
+        assert writer.url
+    else:
+        with pytest.raises((RuntimeError, TimeoutError)):
+            asyncio.run(writer(b'cover', 'fixture', str(tmp_path), source='uploaded'))
+        assert writer.url is None
+    assert not list(tmp_path.iterdir())
+    with pytest.raises(RuntimeError):
+        asyncio.run(writer(b'cover', 'fixture', str(tmp_path), source='uploaded'))
+    assert storage.calls == 1
+
+
+def test_finalized_row_requires_confirmed_b2_cover():
+    from types import SimpleNamespace
+    cover = SimpleNamespace(url=None)
+    row = SimpleNamespace(cover_art_url='/uploads/local.jpg', availability='unlisted', title=pilot.TITLE, file_hash=pilot.AUDIO[0])
+    with pytest.raises(RuntimeError):
+        pilot.require_finalized_cover(row, cover)
+    cover.url = 'https://storage.example/test/covers/confirmed.jpg'
+    with pytest.raises(RuntimeError):
+        pilot.require_finalized_cover(row, cover)
+    row.cover_art_url = cover.url
+    pilot.require_finalized_cover(row, cover)
+    row.availability = 'public'
+    with pytest.raises(RuntimeError):
+        pilot.require_finalized_cover(row, cover)

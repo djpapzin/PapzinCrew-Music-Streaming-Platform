@@ -4,6 +4,7 @@ Run only under the explicit approval and prerequisites in docs/owner-browser-pil
 The gateway has no catalog, admin, arbitrary proxy or credential bootstrap routes.
 """
 import argparse
+import asyncio
 import hashlib
 import hmac
 import json
@@ -154,6 +155,44 @@ def create_gateway(secret, expires, latch, uploader, origin=ORIGIN):
     return app
 
 
+def configure_process():
+    # Worker configuration must never expand this process's write budget.
+    os.environ.update(UPLOADS_ENABLED='1', ENFORCE_B2_ONLY='1',
+                      B2_MAX_RETRIES='1', B2_COVER_MAX_RETRIES='1', B2_MAX_ATTEMPTS='0',
+                      DB_AUTO_MIGRATE='0', BACKFILL_TRACK_DURATIONS='0')
+
+
+class B2OnlyCover:
+    """Process-local replacement: one cover PUT, no local or AI fallback."""
+    def __init__(self, b2):
+        self.b2 = b2
+        self.attempted = False
+        self.url = None
+
+    async def __call__(self, cover_bytes, base_name, upload_dir, source='unknown'):
+        if self.attempted:
+            raise RuntimeError('Cover attempt already consumed')
+        self.attempted = True
+        if source != 'uploaded' or not self.b2.is_configured():
+            raise RuntimeError('B2 cover required')
+        key = f'covers/{base_name}-cover.jpg'
+        result = await asyncio.to_thread(self.b2.put_bytes_safe, key, cover_bytes, 'image/jpeg')
+        expected = f'{self.b2.endpoint_url}/{self.b2.bucket}/{key}'
+        if not result.get('ok') or result.get('url') != expected:
+            raise RuntimeError('B2 cover not confirmed; do not retry')
+        self.url = expected
+        return self.url
+
+
+def require_finalized_cover(row, cover):
+    # TestClient waits for Starlette background processing. Its failures are
+    # best-effort in the regular handler, so explicitly inspect the committed row.
+    if row is None or not cover.url or row.cover_art_url != cover.url:
+        raise RuntimeError('Finalized B2 cover not confirmed; do not retry')
+    if row.availability != 'unlisted' or row.title != TITLE or row.file_hash != AUDIO[0]:
+        raise RuntimeError('Finalized pilot row does not match policy')
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--serve-approved', action='store_true')
@@ -177,7 +216,7 @@ def main():
     if env.get(b'UPLOADS_ENABLED') != b'0':
         raise RuntimeError('Public worker must remain paused')
     os.environ.update({k.decode(): v.decode() for k, v in env.items()})
-    os.environ.update(UPLOADS_ENABLED='1', ENFORCE_B2_ONLY='1', B2_MAX_RETRIES='1', B2_MAX_ATTEMPTS='0', DB_AUTO_MIGRATE='0', BACKFILL_TRACK_DURATIONS='0')
+    configure_process()
     logging.disable(logging.CRITICAL)
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     from app.db.database import SessionLocal
@@ -190,6 +229,9 @@ def main():
         if db.query(Mix.id).filter((Mix.file_hash == AUDIO[0]) | (Mix.title == TITLE)).first():
             raise RuntimeError('Fixture already exists; do not repeat')
     from app.main import app
+    from app.routers import uploads
+    cover_writer = B2OnlyCover(b2)
+    uploads._save_cover_art = cover_writer
     from app.services.ai_art_generator import AIArtGenerator
     AIArtGenerator.generate_cover_art_from_metadata = lambda *a, **k: None
     from fastapi.testclient import TestClient
@@ -200,6 +242,8 @@ def main():
         if response.status_code != 201:
             raise RuntimeError('Upload not confirmed')
         result = response.json()
+        with SessionLocal() as db:
+            require_finalized_cover(db.get(Mix, result['id']), cover_writer)
         (root / 'receipt.json').write_text(json.dumps({'id': result['id'], 'availability': result.get('availability'), 'storage': result.get('storage')}))
         (root / 'receipt.json').chmod(0o600)
         return result

@@ -100,9 +100,20 @@ CORS acceptance; do not describe this pilot as public intake ready.
 declared and chunked size limits, exact-file validation, parallel one-attempt
 latch, restart refusal, redacted failures and absence of extra proxy/docs routes.
 Tests use stub storage; none contact B2 or production. No app dependency changes.
+The pilot explicitly overrides B2_COVER_MAX_RETRIES as well as audio/SDK retries.
+Its process-local cover writer allows one B2 PUT, never calls the ordinary local
+fallback, and refuses a second attempt. Before returning HTTP201, the operator
+checks the finalized committed row against the confirmed B2 cover URL. A failed
+or uncertain cover PUT returns STOP/502 even if the audio/row were already saved;
+inspect them without retrying or deleting. Ordinary app code is unchanged.
 
-Prepared validation: 8 isolated tests passed. Candidate validated successfully
+Prepared validation: 13 isolated tests passed. Candidate validated successfully
 with the installed VPS Caddy v2.11.7 via stdin, without activating it. Actual local
 IAB selected both full-size fixtures and reached `LOCAL-STUB-ONLY` HTTP201 with
 the submit button disabled and credential cleared. This used stub storage: zero
 B2/production writes. Screenshot is in the browser-intake output packet.
+
+Codex review follow-up: initial revision had two P2 findings (cover retry override
+and cover local fallback). Both addressed with isolated failure/timeout/retry and
+finalized-row regression tests. Clean review of the amended revision is required
+before release; the original review is not a pass.
