@@ -139,6 +139,7 @@ def search_tracks(
                 # If only q provided, continue; Artist.name like will be ignored below if join failed
                 pass
     if filters:
+        filters.append((Mix.availability == 'public') | (Mix.availability.is_(None)))
         query = query.filter(and_(*filters))
     else:
         # No filters supplied; return empty result per tests' permissive expectation
@@ -188,7 +189,10 @@ def read_tracks(skip: int = 0, limit: int = 100, db: Session = Depends(_get_db_d
     """
     Retrieve all tracks with pagination.
     """
-    tracks = crud.get_mixes(db, skip=skip, limit=limit)
+    # Apply visibility before pagination; unlisted links are for direct review only.
+    tracks = (db.query(Mix)
+              .filter((Mix.availability == 'public') | (Mix.availability.is_(None)))
+              .order_by(Mix.id.desc()).offset(skip).limit(limit).all())
     return tracks
 
 @router.get('/catalog')
@@ -346,15 +350,33 @@ async def stream_track(track_id: int, request: Request, db: Session = Depends(_g
         logger.warning("track stream local resolve failed", extra={"action": "track_stream_resolve_failed", "track_id": track_id, "path": file_path})
         raise HTTPException(status_code=404, detail="Audio file not found")
     
-    # Serve via StreamingResponse without reading the real file to avoid hangs
-    # when builtins.open is patched to a MagicMock in tests.
+    # Unlisted/local submissions need real, seekable audio for owner review.
+    from pathlib import Path
+    from .cached_audio import byte_range
     media_type = mimetypes.guess_type(resolved_path)[0] or "audio/mpeg"
-    headers = {}
+    size = os.path.getsize(resolved_path)
+    start, end, response_status = byte_range(request.headers.get('range'), size)
+    length = max(0, end - start + 1)
+    headers = {'Accept-Ranges': 'bytes', 'Content-Length': str(length),
+               'Cache-Control': 'private, no-store'}
+    if response_status == 206:
+        headers['Content-Range'] = f'bytes {start}-{end}/{size}'
     logger.info("track stream serve local", extra={"action": "track_stream_local", "track_id": track_id, "resolved_path": resolved_path, "media_type": media_type})
     if request.method.upper() == "HEAD":
-        return Response(status_code=200, media_type=media_type, headers=headers)
-    empty_iter = iter([b""])
-    return StreamingResponse(empty_iter, media_type=media_type, headers=headers)
+        return Response(status_code=response_status, media_type=media_type, headers=headers)
+    # Delivery can outlive the request's metadata work by hours.
+    db.close()
+    def chunks():
+        with Path(resolved_path).open('rb') as audio:
+            audio.seek(start)
+            remaining = length
+            while remaining:
+                chunk = audio.read(min(65536, remaining))
+                if not chunk:
+                    break
+                remaining -= len(chunk)
+                yield chunk
+    return StreamingResponse(chunks(), status_code=response_status, media_type=media_type, headers=headers)
 
 
 @router.post("/admin/repair-b2-urls", dependencies=[Depends(require_admin)])
