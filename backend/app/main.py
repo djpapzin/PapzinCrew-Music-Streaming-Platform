@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from .db.database import engine, get_db_diagnostics
 from .models import models
-from .routers import auth, tracks, categories, artists, uploads, storage, cleanup, file_management, paperclip, admin, feedback, usage, cached_audio, release_reviews
+from .routers import auth, tracks, categories, artists, uploads, storage, cleanup, file_management, paperclip, admin, feedback, usage, cached_audio, release_reviews, sharing_packs
 from .services.duration_backfill import maybe_backfill_missing_track_durations
 from .logging_utils import (
     setup_logging,
@@ -268,6 +268,7 @@ app.include_router(file_management.router)
 app.include_router(paperclip.router)
 app.include_router(admin.router)
 app.include_router(release_reviews.router)
+app.include_router(sharing_packs.router)
 app.include_router(feedback.router)
 app.include_router(usage.router)
 app.include_router(cached_audio.router)
