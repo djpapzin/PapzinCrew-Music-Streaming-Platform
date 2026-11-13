@@ -1,3 +1,4 @@
+import SharingPackPanel from './SharingPackPanel';
 import GuestReleasePanel from './GuestReleasePanel';
 import DownloadStats from './DownloadStats';
 import AnonymousStats from './AnonymousStats';
@@ -90,6 +91,7 @@ export default function ProtectedAdminAnalyticsPanel() {
       </form>}
       {ownerSession&&<>
         <GuestReleasePanel />
+        <SharingPackPanel />
         <AnonymousStats adminKey="" ownerSession />
         <DownloadStats adminKey="" ownerSession />
         <FeedbackInbox adminKey="" ownerSession />
