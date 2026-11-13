@@ -11,7 +11,8 @@ export default function SharingPackPanel() {
   useEffect(()=>{let active=true;
     void fetch(`${API_BASE}/admin/sharing`,{cache:'no-store'}).then(async r=>{
       if(!r.ok)throw new Error('Unable to load sharing mixes. Refresh owner access.');
-      const data=await r.json();if(active)setMixes(data.mixes);
+      const data=await r.json();if(!Array.isArray(data.mixes))throw new Error('Unable to load sharing mixes. Refresh owner access.');
+      if(active)setMixes(data.mixes);
     }).catch(e=>{if(active)setError(e.message);});
     return ()=>{active=false;generation.current++;};
   },[]);
