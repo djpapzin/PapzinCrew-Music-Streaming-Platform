@@ -6,7 +6,7 @@ A WhatsApp transport must be separately approved and verified before connecting.
 import re
 import unicodedata
 
-SITE = 'https://crew.djpapzin.com'
+SITE = 'https://mixes.djpapzin.com'
 STOP = set('a an and any are available by can could dj do find for from get give got have hello hey hi how howzit i is it link listen listening me mix mixes music of on play please pls send share song songs stream thanks the there this to want where with you your'.split())
 
 

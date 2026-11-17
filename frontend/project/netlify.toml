@@ -15,7 +15,7 @@
 # Keep old API clients working; redirect public pages to the primary domain.
 [[redirects]]
   from = "https://papzincrew.netlify.app/*"
-  to = "https://crew.djpapzin.com/:splat"
+  to = "https://mixes.djpapzin.com/:splat"
   status = 301
   force = true
 

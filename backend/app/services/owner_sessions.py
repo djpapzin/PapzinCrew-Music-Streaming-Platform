@@ -13,7 +13,7 @@ COOKIE='__Host-papzin-owner'
 def directory(): return Path(os.getenv('OWNER_SESSION_DIR','/var/lib/papzincrew/owner-sessions'))
 
 def require_origin(request:Request):
-    allowed={'https://crew.djpapzin.com','https://papzincrew.netlify.app'}
+    allowed={'https://mixes.djpapzin.com','https://crew.djpapzin.com','https://papzincrew.netlify.app'}
     allowed.update(origin.strip() for origin in os.getenv('OWNER_SESSION_ORIGINS','').split(',') if origin.strip())
     if request.headers.get('origin') not in allowed:
         raise HTTPException(403,'Owner session requests must come from the site itself.')

@@ -11,14 +11,15 @@ def client(tmp_path,monkeypatch):
     monkeypatch.setenv('ADMIN_API_KEY','owner-test-secret')
     monkeypatch.setenv('OWNER_SESSION_DIR',str(tmp_path/'sessions'))
     app=FastAPI();app.include_router(router)
-    return TestClient(app,base_url='https://crew.djpapzin.com')
+    return TestClient(app,base_url='https://mixes.djpapzin.com')
 
-def login(client,remember=True):
-    return client.post('/admin/session',params={'remember':str(remember).lower()},headers={'Origin':'https://crew.djpapzin.com','X-Admin-Api-Key':'owner-test-secret'})
+def login(client,remember=True,origin='https://mixes.djpapzin.com'):
+    return client.post('/admin/session',params={'remember':str(remember).lower()},headers={'Origin':origin,'X-Admin-Api-Key':'owner-test-secret'})
 
-def test_remembered_session_is_secure_private_and_revoked(client):
+@pytest.mark.parametrize('origin', ['https://mixes.djpapzin.com', 'https://crew.djpapzin.com'])
+def test_remembered_session_is_secure_private_and_revoked(client, origin):
     assert not client.get('/admin/session').json()['authenticated']
-    response=login(client)
+    response=login(client,origin=origin)
     assert response.status_code==200
     cookie=response.headers['set-cookie']
     assert 'HttpOnly' in cookie and 'Secure' in cookie and 'SameSite=strict' in cookie and 'Max-Age=2592000' in cookie
@@ -28,7 +29,7 @@ def test_remembered_session_is_secure_private_and_revoked(client):
     raw=next(sessions.directory().glob('*.json')).read_text()
     assert token not in raw and 'owner-test-secret' not in raw
     assert client.delete('/admin/session',headers={'Origin':'https://evil.example'}).status_code==403
-    assert client.delete('/admin/session',headers={'Origin':'https://crew.djpapzin.com'}).status_code==200
+    assert client.delete('/admin/session',headers={'Origin':origin}).status_code==200
     assert not client.get('/admin/session').json()['authenticated']
     client.cookies.set(sessions.COOKIE,token)
     assert not client.get('/admin/session').json()['authenticated']

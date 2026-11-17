@@ -15,7 +15,7 @@ Each record expires and is bound to a hash of the current owner key; rotating th
 key invalidates all sessions. Maximum 100 active devices. No database/paid service.
 
 Session creation requires exact owner key plus approved Origin. Cookie-authenticated
-writes and logout require approved Origin (crew.djpapzin.com or old Netlify origin;
+writes and logout require approved Origin (mixes.djpapzin.com, crew.djpapzin.com or the original Netlify origin;
 additional exact developer origins only through OWNER_SESSION_ORIGINS). Read
 endpoints are private/no-store. Legacy header-key clients remain supported.
 The same-origin /api Netlify proxy must forward Set-Cookie/Cookie; verify on the

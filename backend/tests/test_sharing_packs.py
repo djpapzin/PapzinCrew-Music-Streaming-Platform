@@ -24,7 +24,7 @@ def setup(tmp_path, monkeypatch):
     def get_test_db():
         with factory() as db: yield db
     app=FastAPI();app.include_router(router);app.include_router(admin_router);app.dependency_overrides[get_db]=get_test_db
-    yield TestClient(app,base_url='https://crew.djpapzin.com'),factory,tmp_path
+    yield TestClient(app,base_url='https://mixes.djpapzin.com'),factory,tmp_path
     engine.dispose()
 
 def test_owner_only_public_queue_and_pack(setup):
@@ -33,7 +33,7 @@ def test_owner_only_public_queue_and_pack(setup):
     assert client.get('/admin/sharing/2').status_code==403
     assert [m['id'] for m in client.get('/admin/sharing',headers=KEY).json()['mixes']]==[2]
     pack=client.get('/admin/sharing/2',headers=KEY).json()
-    assert pack['url']=='https://crew.djpapzin.com/track/2'
+    assert pack['url']=='https://mixes.djpapzin.com/track/2'
     assert 'storage.example' not in str(pack)
     for id in (1,3,4,99):assert client.get(f'/admin/sharing/{id}',headers=KEY).status_code==404
     with factory() as db:

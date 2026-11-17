@@ -76,7 +76,7 @@ def present(data, saved):
     current = fingerprint(data)
     stale = bool(saved and saved.get('fingerprint') != current)
     effective = {} if stale else saved
-    link = f"https://crew.djpapzin.com/track/{data['id']}"
+    link = f"https://mixes.djpapzin.com/track/{data['id']}"
     caption = f"Let’s Cruize!\n{data['title']}\nMixed by {data['artist']}\nListen: {link}"
     blocked = is_test(data)
     checks = {key: bool(effective.get(key, False)) for key in CHECKS}
