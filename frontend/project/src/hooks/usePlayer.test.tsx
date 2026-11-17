@@ -142,7 +142,7 @@ describe('recovering cached playback without refreshing',()=>{
  it('does not count the silent metadata wait as listening time',async()=>{
   vi.stubGlobal('matchMedia',()=>({matches:true}));
   const events:Array<{kind:string;value:number}>=[];let resolve!:(v:ReturnType<typeof fresh>)=>void;
-  vi.stubGlobal('location',{hostname:'crew.djpapzin.com',origin:'https://crew.djpapzin.com',pathname:'/'});
+  vi.stubGlobal('location',{hostname:'mixes.djpapzin.com',origin:'https://mixes.djpapzin.com',pathname:'/'});
   vi.spyOn(performance,'now').mockReturnValue(1000);
   vi.stubGlobal('fetch',vi.fn((input,options)=>{
    if(String(input).endsWith('/usage')){events.push(JSON.parse(options.body));return Promise.resolve({ok:true});}
