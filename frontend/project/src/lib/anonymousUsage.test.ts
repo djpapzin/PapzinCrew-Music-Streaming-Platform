@@ -3,8 +3,9 @@ import { createPlaybackUsage, recordVisit, sendUsage, USAGE_OPT_OUT } from './an
 afterEach(()=>{vi.unstubAllGlobals();vi.restoreAllMocks();localStorage.clear();sessionStorage.clear();});
 function setup(hostname='mixes.djpapzin.com'){vi.stubGlobal('location',{hostname,pathname:'/track/237'});vi.stubGlobal('matchMedia',()=>({matches:true}));const fetch=vi.fn(async()=>({ok:true}));vi.stubGlobal('fetch',fetch);return fetch;}
 it('sends one visit per tab session, without identifiers or URL',()=>{const fetch=setup();recordVisit();recordVisit();expect(fetch).toHaveBeenCalledTimes(1);const body=JSON.parse(fetch.mock.calls[0][1].body);expect(body).toEqual({activity:'listener',kind:'visit',mix:0,value:0,resume:false,device:'mobile'});});
-it('keeps development visits and playback out of listener analytics',()=>{
- const fetch=setup('crew.djpapzin.com');
+it.each(['crew.djpapzin.com', 'papzincrew-dev.netlify.app', 'deploy-preview-128--papzincrew.netlify.app', 'localhost'])(
+ 'keeps visits and playback on %s out of listener analytics', hostname => {
+ const fetch=setup(hostname);
  recordVisit();
  createPlaybackUsage().begin('237',false);
  expect(fetch).not.toHaveBeenCalled();
