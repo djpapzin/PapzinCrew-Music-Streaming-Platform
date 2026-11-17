@@ -1,3 +1,4 @@
+import { DEVELOPMENT_HOST, PRODUCTION_URL } from '../lib/site';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { readUploadReceipts, saveUploadReceipt } from '../lib/uploadReceipts';
@@ -16,7 +17,10 @@ export default function MyUploads() {
         const url = new URL(link);
         const match = url.pathname.match(/^\/track\/(\d+)\/?$/);
         const validQuery = [...url.searchParams].every(([key, value]) => key === 'uploaded' && ['saved', 'bookmark'].includes(value));
-        if (url.origin !== window.location.origin || !match || !validQuery || url.hash) throw new Error('Paste a mix link from this site, such as crew.djpapzin.com/track/241.');
+        const isPreviousProductionLink = window.location.origin === PRODUCTION_URL && url.origin === `https://${DEVELOPMENT_HOST}`;
+        if ((url.origin !== window.location.origin && !isPreviousProductionLink) || !match || !validQuery || url.hash) {
+          throw new Error(`Paste a mix link from this site, such as ${window.location.origin}/track/241.`);
+        }
         if (!saveUploadReceipt(match[1], `Saved mix ${match[1]}`)) throw new Error('This browser cannot save links. Please bookmark the mix instead.');
         setItems(readUploadReceipts()); setLink('');
       } catch (err) { setError(err instanceof Error ? err.message : 'Please check the mix link.'); }

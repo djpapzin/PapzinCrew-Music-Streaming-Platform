@@ -1,10 +1,10 @@
-# Papzin & Crew public domain
+# Papzin & Crew domains
 
-Primary frontend: https://crew.djpapzin.com
-Netlify project: papzincrew (3e62c377-3464-4dd3-b260-54c1c001b2d5)
-Cloudflare DNS: crew CNAME papzincrew.netlify.app, DNS only, automatic TTL.
-Netlify issues the free HTTPS certificate. The root djpapzin.com and www personal portfolio are unchanged.
+- Production: https://mixes.djpapzin.com, built from `main` on the `papzincrew` Netlify project.
+- Development: https://crew.djpapzin.com, built from `dev` on a separate Netlify project.
 
-API requests use the existing same-origin /api proxy to papzincrew-api.djpapzin.com. Keep the API rule ahead of the host redirect so older open clients remain functional. Public Netlify page links redirect to the matching crew.djpapzin.com path; deploy previews are unaffected. The backend must allow the new exact HTTPS origin for direct catalog recovery.
+Cloudflare manages the DNS-only CNAMEs. Netlify issues the HTTPS certificates. Both frontends proxy `/api/*` to `papzincrew-api.djpapzin.com`, so use an isolated backend for development tests that write data.
 
-Music remains in Backblaze, catalog in Neon and backend on the existing VPS. No paid hosting or new storage service is required.
+The existing `papzincrew.netlify.app` public URLs redirect to the matching path on `mixes.djpapzin.com`. Keep the API proxy ahead of the redirect so older clients can still reach the API. Both named HTTPS origins are supported for direct API recovery and owner sessions. If the backend defines an explicit `ALLOWED_ORIGINS` list, include both domains in it.
+
+Before repointing `crew.djpapzin.com`, verify the production domain over HTTPS, including catalog loading, mix playback and owner access. The root and `www` domains serve the personal portfolio.

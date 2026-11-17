@@ -22,7 +22,7 @@ def pack(mix_id: int, db: Session = Depends(get_db)):
     if not mix or not eligible(mix):
         raise HTTPException(404, 'This mix is not available for public sharing.')
     data = snapshot(mix)
-    link = f'https://crew.djpapzin.com/track/{mix.id}'
+    link = f'https://mixes.djpapzin.com/track/{mix.id}'
     title = data['title'] or 'MISSING: catalog title'
     artist = data['artist'] or 'MISSING: artist credit'
     return {'id': mix.id, 'title': title, 'artist': artist, 'fingerprint': fingerprint(data),

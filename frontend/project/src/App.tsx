@@ -1,3 +1,4 @@
+import { PRODUCTION_HOST, PRODUCTION_URL } from './lib/site';
 import { usesNativeMusicPlayback } from './lib/mixPlaybackUrl';
 import { useLocation } from 'react-router-dom';
 import { recordVisit } from './lib/anonymousUsage';
@@ -33,6 +34,7 @@ const isPublicTrack = (mix: any): boolean => {
 
 function App() {
   const location=useLocation();
+  const isProduction = window.location.hostname === PRODUCTION_HOST;
   useEffect(()=>{recordVisit();},[]);
   const [playerOpenRequest, setPlayerOpenRequest] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
@@ -154,12 +156,12 @@ function App() {
     <LibraryProvider songs={songs}><div className="app-shell bg-black text-white flex flex-col">
       {/* Global toast notifications */}
       <Toast />
-      <div className={window.location.hostname === 'crew.djpapzin.com'
+      <div className={isProduction
         ? 'shrink-0 bg-gray-900 px-3 py-1 text-center text-xs text-gray-300'
         : 'shrink-0 bg-amber-300 px-3 py-2 text-center text-sm font-bold text-black'}>
-        {window.location.hostname === 'crew.djpapzin.com'
-          ? 'PRODUCTION · crew.djpapzin.com'
-          : <>DEV TEST SITE · Changes here are being tested. <a className="underline" href="https://crew.djpapzin.com/">Open production site</a></>}
+        {isProduction
+          ? `PRODUCTION · ${PRODUCTION_HOST}`
+          : <>DEV TEST SITE · Changes here are being tested. <a className="underline" href={PRODUCTION_URL}>Open production site</a></>}
       </div>
       {/* Hidden audio element */}
       <audio ref={nativeAudioRef} preload="none" playsInline />
