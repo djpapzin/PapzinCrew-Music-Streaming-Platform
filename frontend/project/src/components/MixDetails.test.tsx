@@ -7,12 +7,22 @@ vi.mock('./SongActions', () => ({ default: () => null }));
 vi.mock('./LibraryPages', () => ({ TrackList: () => null }));
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 const mix = { id: 236, title: 'Unlisted test', artist: { name: 'Upload Tests' }, availability: 'unlisted', file_path: 'https://storage/test.wav' };
-function show() {
+function show(id = 236) {
  const play = vi.fn();
- render(<MemoryRouter initialEntries={['/track/236']}><Routes><Route path="/track/:id" element={<MixDetails songs={[]} loading={false} error={null} currentSong={null} isPlaying={false} onPlaySong={play} onTogglePlay={vi.fn()} />} /></Routes></MemoryRouter>);
+ render(<MemoryRouter initialEntries={[`/track/${id}`]}><Routes><Route path="/track/:id" element={<MixDetails songs={[]} loading={false} error={null} currentSong={null} isPlaying={false} onPlaySong={play} onTogglePlay={vi.fn()} />} /></Routes></MemoryRouter>);
  return play;
 }
 describe('Direct mix links', () => {
+ it('shows the approved replacement on a direct public link before the catalog loads', async () => {
+  const title = 'Many More @ It Aagain';
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+   ok: true, json: async () => ({ ...mix, id: 237, title, availability: 'public', cover_art_url: null }),
+  }));
+  show(237);
+  expect(await screen.findByRole('img', { name: `${title} cover` }))
+   .toHaveAttribute('src', '/artwork/replacements/many-more-it-aagain.png');
+ });
+
  it('loads unlisted audio absent from discovery with an isolated queue', async () => {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => mix }));
   const play = show();
