@@ -21,13 +21,20 @@ export const durationFilters = [
   { value: 'long', label: '60 minutes or more', min: 3600, max: Infinity },
 ];
 
+const mixSearchWords = (text: string) => text.match(/[\p{L}\p{M}\p{N}]+/gu) ?? [];
+
 export const filterMixes = (songs: Song[], query: string, genre: string, duration = '') => {
   const range = durationFilters.find(filter => filter.value === duration);
   const search = query.trim().toLowerCase();
+  const words = mixSearchWords(search);
   return songs.filter(song =>
     (!genre || genreOf(song) === genre)
     && (!range || (song.duration > 0 && song.duration >= range.min && song.duration < range.max))
-    && [song.title, song.artist, song.album, song.genre, getMixSeries(song)].join(' ').toLowerCase().includes(search));
+  ).filter(song => {
+    const metadata = [song.title, song.artist, song.album, song.genre, getMixSeries(song)]
+      .join(' ').toLowerCase();
+    return metadata.includes(search) || (words.length > 0 && words.every(word => metadata.includes(word)));
+  });
 };
 export const durationLabel = (seconds: number) => seconds > 0
   ? `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}` : 'Duration unavailable';
