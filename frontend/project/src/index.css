@@ -2,8 +2,8 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Panoramic replacement artwork needs its full width in square cover slots. */
-img[src="/artwork/replacements/many-more-it-aagain.png"] {
+/* Keep replacement artwork fully visible in square cover slots. */
+img[src^="/artwork/replacements/"] {
   object-fit: contain;
   background-color: #000;
 }
