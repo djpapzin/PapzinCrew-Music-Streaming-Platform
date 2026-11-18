@@ -33,6 +33,14 @@ describe('replacement covers', () => {
     expect(artworkForMix(238, title)).toBe(safeArtworkUrl());
   });
 
+  it('uses the birthday flyer for the exact Cruize Friday 10 release', () => {
+    const title = 'Cruize Friday 10 (Special Edition) (13 January 2017)';
+    const cover = '/artwork/replacements/cruize-friday-10.jpg';
+    expect(existsSync(resolve('public', cover.slice(1)))).toBe(true);
+    expect(artworkForMix(31, title)).toBe(cover);
+    expect(artworkForMix(31, 'Cruize Friday 10')).toBe(safeArtworkUrl());
+  });
+
   it('preserves the Evolution Mix 60 cover fallback', () => {
     expect(artworkForMix(224, 'Evolution Mix 60')).toBe('/artwork/generated/evolution-mix-60.png');
   });
