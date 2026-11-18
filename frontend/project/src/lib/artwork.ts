@@ -1,7 +1,10 @@
 import originalArtwork from '../data/originalArtwork.json';
-import generatedArtwork from '../data/generatedArtwork.json';
+import fallbackArtwork from '../data/fallbackArtwork.json';
+import { toAbsoluteApiUrl } from './api';
 
-const originals: Record<string, { title: string; url: string }> = originalArtwork;
+type CoverMap = Record<string, { title: string; url: string }>;
+const originals: CoverMap = originalArtwork;
+const fallbacks: CoverMap = fallbackArtwork;
 
 /** Reviewed originals are scoped to both catalog ID and title to avoid cross-matching. */
 export function originalArtworkForTrack(id: string | number, title: string): string | undefined {
@@ -9,11 +12,15 @@ export function originalArtworkForTrack(id: string | number, title: string): str
   return original?.title === title ? original.url : undefined;
 }
 
-/** Generated replacements apply only when no original or catalog cover is available. */
-export function generatedArtworkForTrack(id: string | number, title: string): string | undefined {
-  const covers: Record<string, { title: string; url: string }> = generatedArtwork;
-  const cover = covers[String(id)];
-  return cover?.title === title ? cover.url : undefined;
+export function artworkForMix(id: string | number, title: string, catalogCover?: string | null): string {
+  const original = originalArtworkForTrack(id, title);
+  if (original) return original;
+
+  const coverUrl = catalogCover?.trim();
+  if (coverUrl) return toAbsoluteApiUrl(coverUrl);
+
+  const fallback = fallbacks[String(id)];
+  return safeArtworkUrl(fallback?.title === title ? fallback.url : undefined);
 }
 
 export const DEFAULT_ARTWORK_DATA_URL =

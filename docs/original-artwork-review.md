@@ -17,3 +17,7 @@ The frontend registry checks both catalog ID and exact title before choosing an 
 - `DJ Papzin - TPW.jpg` explicitly deferred.
 
 No generative artwork was created during this restoration.
+
+## Owner-approved replacement — 18 November 2026
+
+DJ supplied the blue DJ Papzin logo crop for **Many More @ It Aagain** (track 237). This is an approved replacement for this mix. Its original reddish cover remains unverified. The supplied PNG is stored verbatim at `/artwork/replacements/many-more-it-aagain.png`. A reviewed original or a catalog cover takes precedence.

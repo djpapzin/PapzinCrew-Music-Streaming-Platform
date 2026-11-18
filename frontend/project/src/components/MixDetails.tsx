@@ -6,7 +6,7 @@ import { Play, Pause, Headphones, ListMusic, Download } from 'lucide-react';
 import { Song } from '../types/music';
 import { getMixSeries, sortCollectionTracks } from '../lib/catalog';
 import { relatedMixes, durationLabel, similarMixReason } from '../lib/discovery';
-import { safeArtworkUrl, DEFAULT_ARTWORK_URL } from '../lib/artwork';
+import { artworkForMix, safeArtworkUrl, DEFAULT_ARTWORK_URL } from '../lib/artwork';
 import { TrackList } from './LibraryPages';
 import SongActions from './SongActions';
 import { API_BASE, toAbsoluteApiUrl } from '../lib/api';
@@ -40,7 +40,10 @@ export default function MixDetails({ songs, loading, error, currentSong, isPlayi
         setDirectSong({
           id: String(mix.id), title: mix.title || 'Untitled',
           artist: mix.artist?.name || 'Unknown Artist', album: mix.album || '',
-          duration: mix.duration_seconds || 0, imageUrl: safeArtworkUrl(toAbsoluteApiUrl(mix.cover_art_url)),
+          duration: mix.duration_seconds || 0,
+          imageUrl: (mix.availability || 'public') === 'public'
+            ? artworkForMix(mix.id, mix.title, mix.cover_art_url)
+            : safeArtworkUrl(toAbsoluteApiUrl(mix.cover_art_url)),
           audioUrl: playbackUrl(mix),
           downloadUrl: downloadUrl(mix),
           downloadAllowed: (mix.availability || 'public') === 'public' && mix.allow_downloads === 'yes',
