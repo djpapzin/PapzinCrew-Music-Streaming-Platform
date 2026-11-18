@@ -21,3 +21,7 @@ No generative artwork was created during this restoration.
 ## Owner-approved replacement — 18 November 2026
 
 DJ supplied the blue DJ Papzin logo crop for **Many More @ It Aagain** (track 237). This is an approved replacement for this mix. Its original reddish cover remains unverified. The supplied PNG is stored verbatim at `/artwork/replacements/many-more-it-aagain.png`. A reviewed original or a catalog cover takes precedence.
+
+## Cruize Friday 10 replacement preview — 18 November 2026
+
+DJ selected the vintage birthday-mix flyer as a replacement for **Cruize Friday 10 (Special Edition)** (track 31). The JPEG was copied without re-encoding from the attached image in the cached MP3 and matches the flyer shown in the [official upload](https://youtu.be/kQnjpPtlICs). The episode-specific cover remains unverified.
