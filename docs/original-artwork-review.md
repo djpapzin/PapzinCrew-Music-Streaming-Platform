@@ -25,3 +25,7 @@ DJ supplied the blue DJ Papzin logo crop for **Many More @ It Aagain** (track 23
 ## Cruize Friday 10 replacement preview — 18 November 2026
 
 DJ selected the vintage birthday-mix flyer as a replacement for **Cruize Friday 10 (Special Edition)** (track 31). The JPEG was copied without re-encoding from the attached image in the cached MP3 and matches the flyer shown in the [official upload](https://youtu.be/kQnjpPtlICs). The episode-specific cover remains unverified.
+
+## 2022 Sghubu Sa Pitori birthday flyer preview — 18 November 2026
+
+DJ selected the same vintage birthday-mix flyer for **Papzin's Birthday Mix (Sghubu Sa Pitori)** (track 125, 31 July 2022). The fallback reuses the existing JPEG. The original 2022 cover remains unverified, and a catalog cover takes precedence.

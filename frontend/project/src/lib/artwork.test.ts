@@ -41,6 +41,16 @@ describe('replacement covers', () => {
     expect(artworkForMix(31, 'Cruize Friday 10')).toBe(safeArtworkUrl());
   });
 
+  it('reuses the birthday flyer for the 2022 Sghubu Sa Pitori mix when its cover is missing', () => {
+    const title = "Papzin's Birthday Mix (Sghubu Sa Pitori) (31 July 2022)";
+    const cover = '/artwork/replacements/cruize-friday-10.jpg';
+    const original = 'https://example.com/original.jpg';
+    expect(artworkForMix(125, title)).toBe(cover);
+    expect(artworkForMix(125, title, original)).toBe(original);
+    expect(artworkForMix(125, 'Another birthday mix')).toBe(safeArtworkUrl());
+    expect(artworkForMix(12, title)).toBe(safeArtworkUrl());
+  });
+
   it('preserves the Evolution Mix 60 cover fallback', () => {
     expect(artworkForMix(224, 'Evolution Mix 60')).toBe('/artwork/generated/evolution-mix-60.png');
   });
