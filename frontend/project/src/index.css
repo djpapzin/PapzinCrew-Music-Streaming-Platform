@@ -2,6 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Panoramic replacement artwork needs its full width in square cover slots. */
+img[src="/artwork/replacements/many-more-it-aagain.png"] {
+  object-fit: contain;
+  background-color: #000;
+}
+
 :root {
   --mobile-nav-height: calc(4rem + max(0.5rem, env(safe-area-inset-bottom, 0px)) + 1px);
   background: #09090b;

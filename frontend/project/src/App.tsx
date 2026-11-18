@@ -14,8 +14,8 @@ import MobileNav from './components/MobileNav';
 import { usePlayer } from './hooks/usePlayer';
 import { Song, Playlist, Album, Artist } from './types/music';
 import Toast from './components/Toast';
-import { API_BASE, toAbsoluteApiUrl } from './lib/api';
-import { originalArtworkForTrack, generatedArtworkForTrack, safeArtworkUrl } from './lib/artwork';
+import { API_BASE } from './lib/api';
+import { artworkForMix } from './lib/artwork';
 import { LibraryProvider } from './state/LibraryContext';
 
 const INTERNAL_PROBE_TRACK_PATTERNS = [
@@ -84,7 +84,7 @@ function App() {
         artist: (mix.artist && mix.artist.name) || 'Unknown Artist',
         album: mix.album || '',
         duration: mix.duration_seconds || 0,
-        imageUrl: safeArtworkUrl(originalArtworkForTrack(mix.id, mix.title) ?? (mix.cover_art_url?.trim() ? toAbsoluteApiUrl(mix.cover_art_url) : generatedArtworkForTrack(mix.id, mix.title))),
+        imageUrl: artworkForMix(mix.id, mix.title, mix.cover_art_url),
         audioUrl: playbackUrl(mix),
         downloadUrl: downloadUrl(mix),
         downloadAllowed: mix.allow_downloads === 'yes',
