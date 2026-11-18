@@ -29,3 +29,7 @@ DJ selected the vintage birthday-mix flyer as a replacement for **Cruize Friday 
 ## 2022 Sghubu Sa Pitori birthday flyer preview — 18 November 2026
 
 DJ selected the same vintage birthday-mix flyer for **Papzin's Birthday Mix (Sghubu Sa Pitori)** (track 125, 31 July 2022). The fallback reuses the existing JPEG. The original 2022 cover remains unverified, and a catalog cover takes precedence.
+
+## Appreciation Mix 3 replacement preview — 18 November 2026
+
+DJ selected the 960 × 960 RealProDJ portrait embedded as the front cover in the cached MP3 for **Appreciation Mix 3** (track 139). The preview uses the original JPEG bytes as replacement artwork. The MP3 title tag says 09 July 2018 and the catalog says 09 August 2018. The fallback matches the existing catalog title and gives any catalog cover precedence.
