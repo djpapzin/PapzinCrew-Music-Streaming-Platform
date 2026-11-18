@@ -23,5 +23,16 @@ describe('mix details and discovery',()=>{
    expect(screen.getByRole('link', { name: 'TPW 1', exact: true })).toBeInTheDocument();
    expect(screen.queryByRole('link', { name: 'TPW 10', exact: true })).toBeNull();
  });
+ it('finds mix and artist words across fields while honoring browse filters', async () => {
+   const title = 'Supreme Masters Lab Mix 01';
+   const mix = { ...base, id: '142', title, artist: "Itshu'Prince & RealProDJ", duration: 1870 };
+   const catalog = [...songs, mix, { ...mix, id: '143', title: 'Supreme Masters Lab Mix 02', duration: 900 }];
+   render(wrap(<BrowseMixes songs={catalog} query="Itshu Prince Supreme Masters" loading={false} error={null}
+     currentSong={null} isPlaying={false} onPlaySong={vi.fn()}/>, '/search?genre=House&duration=medium'));
+   expect(screen.getByRole('link', { name: title, exact: true })).toHaveAttribute('href', '/track/142');
+   expect(screen.getByRole('status')).toHaveTextContent(/^1 mix in House/);
+   await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Filter by genre' }), 'Soul');
+   expect(screen.getByText(/No mixes match/)).toBeInTheDocument();
+ });
  it('keeps matching mix order natural and excludes unavailable related tracks',()=>{expect(relatedMixes(base,[...songs,{...base,id:'bad',title:'TPW 3',playable:false}]).map(s=>s.id)).toEqual(['2','3']);});
 });
