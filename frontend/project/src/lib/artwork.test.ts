@@ -51,6 +51,17 @@ describe('replacement covers', () => {
     expect(artworkForMix(12, title)).toBe(safeArtworkUrl());
   });
 
+  it('uses the embedded RealProDJ portrait when Appreciation Mix 3 has no catalog cover', () => {
+    const title = 'Appreciation Mix 3 (Papzin & Crew Promo Mix) (09-August-2018)';
+    const cover = '/artwork/replacements/appreciation-mix-3.jpg';
+    const original = 'https://example.com/original.jpg';
+    expect(existsSync(resolve('public', cover.slice(1)))).toBe(true);
+    expect(artworkForMix(139, title)).toBe(cover);
+    expect(artworkForMix(139, title, original)).toBe(original);
+    expect(artworkForMix(139, title.replace('August', 'July'))).toBe(safeArtworkUrl());
+    expect(artworkForMix(143, title)).toBe(safeArtworkUrl());
+  });
+
   it('preserves the Evolution Mix 60 cover fallback', () => {
     expect(artworkForMix(224, 'Evolution Mix 60')).toBe('/artwork/generated/evolution-mix-60.png');
   });
