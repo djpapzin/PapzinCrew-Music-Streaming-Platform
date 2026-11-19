@@ -1,6 +1,6 @@
 import { PRODUCTION_HOST, PRODUCTION_URL } from './lib/site';
 import { usesNativeMusicPlayback } from './lib/mixPlaybackUrl';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useSearchParams } from 'react-router-dom';
 import { recordVisit } from './lib/anonymousUsage';
 import { fetchCatalog } from './lib/fetchCatalog';
 import { playbackUrl, downloadUrl } from './lib/playbackUrl';
@@ -37,7 +37,15 @@ function App() {
   const isProduction = window.location.hostname === PRODUCTION_HOST;
   useEffect(()=>{recordVisit();},[]);
   const [playerOpenRequest, setPlayerOpenRequest] = useState(0);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const searchQuery = location.pathname === '/search' ? searchParams.get('q') ?? '' : '';
+  const setSearchQuery = (query: string) => {
+    const next = new URLSearchParams(searchParams);
+    if (query) next.set('q', query);
+    else next.delete('q');
+    // Filter and page navigation should remain reachable without stepping through each keystroke.
+    setSearchParams(next, { replace: true });
+  };
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [songs, setSongs] = useState<Song[]>([]);
   const [playlists] = useState<Playlist[]>([]);
