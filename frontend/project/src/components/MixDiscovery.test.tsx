@@ -35,4 +35,24 @@ describe('mix details and discovery',()=>{
    expect(screen.getByText(/No mixes match/)).toBeInTheDocument();
  });
  it('keeps matching mix order natural and excludes unavailable related tracks',()=>{expect(relatedMixes(base,[...songs,{...base,id:'bad',title:'TPW 3',playable:false}]).map(s=>s.id)).toEqual(['2','3']);});
+
+ it('copies only the current query, filters and sort as a shareable search link', async () => {
+   const user = userEvent.setup();
+   const write = vi.spyOn(navigator.clipboard, 'writeText');
+   try {
+     render(wrap(<BrowseMixes songs={songs} query="Papzin & Crew" loading={false} error={null}
+       currentSong={null} isPlaying={false} onPlaySong={vi.fn()}/>, '/search?genre=House&duration=medium&sort=title&extra=ignored'));
+     await user.click(screen.getByRole('button', { name: 'Copy search link' }));
+     expect(await screen.findByText('Search link copied.')).toBeInTheDocument();
+     const link = new URL(write.mock.calls[0][0]);
+     expect(link.origin).toBe(window.location.origin);
+     expect(link.pathname).toBe('/search');
+     expect(Object.fromEntries(link.searchParams)).toEqual({ q: 'Papzin & Crew', genre: 'House', duration: 'medium', sort: 'title' });
+     write.mockRejectedValueOnce(new Error('Clipboard denied'));
+     await user.click(screen.getByRole('button', { name: 'Copy search link' }));
+     expect(await screen.findByRole('textbox', { name: 'Search link' })).toHaveValue(link.href);
+   } finally {
+     write.mockRestore();
+   }
+ });
 });
